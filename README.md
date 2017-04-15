@@ -10,6 +10,8 @@
 
   https://github.com/arut/nginx-rtmp-module/wiki/Directives
 
+  [auto pull module](./ngx_rtmp_auto_pull_module.md)
+
 ### Google group
 
   https://groups.google.com/group/nginx-rtmp
