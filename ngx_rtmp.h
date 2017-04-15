@@ -209,6 +209,9 @@ typedef struct {
     uint32_t                buflen;
     uint32_t                ack_size;
 
+    /* stream name in publish or play*/
+    ngx_str_t               name;
+
     /* connection parameters */
     ngx_str_t               app;
     ngx_str_t               args;
@@ -238,6 +241,7 @@ typedef struct {
 
     /* auto-pushed? */
     unsigned                auto_pushed:1;
+    unsigned                auto_pulled:1;
     unsigned                relay:1;
     unsigned                static_relay:1;
 

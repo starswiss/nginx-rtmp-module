@@ -1404,6 +1404,10 @@ ngx_rtmp_notify_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
+    if (s->auto_pulled) {
+        goto next;
+    }
+
     nacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_notify_module);
     if (nacf == NULL) {
         goto next;

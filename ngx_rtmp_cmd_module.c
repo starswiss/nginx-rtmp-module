@@ -506,6 +506,10 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   "publish: name='%s' args='%s' type=%s silent=%d",
                   v.name, v.args, v.type, v.silent);
 
+    s->name.len = ngx_strlen(v.name);
+    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
+    ngx_memcpy(s->name.data, v.name, s->name.len);
+
     return ngx_rtmp_publish(s, &v);
 }
 
@@ -566,6 +570,10 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   v.name, v.args, (ngx_int_t) v.start,
                   (ngx_int_t) v.duration, (ngx_int_t) v.reset,
                   (ngx_int_t) v.silent);
+
+    s->name.len = ngx_strlen(v.name);
+    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
+    ngx_memcpy(s->name.data, v.name, s->name.len);
 
     return ngx_rtmp_play(s, &v);
 }

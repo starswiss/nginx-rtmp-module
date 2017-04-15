@@ -718,6 +718,10 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
+    if (s->auto_pulled) {
+        goto next;
+    }
+
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
     if (racf == NULL || racf->pulls.nelts == 0) {
         goto next;
@@ -1314,6 +1318,13 @@ ngx_rtmp_relay_handshake_done(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     if (ctx == NULL || !s->relay) {
         return NGX_OK;
     }
+
+    s->name = ctx->name;
+    s->app = ctx->app;
+    s->tc_url = ctx->tc_url;
+    s->page_url = ctx->page_url;
+    s->swf_url = ctx->swf_url;
+    s->flashver = ctx->flash_ver;
 
     return ngx_rtmp_relay_send_connect(s);
 }
