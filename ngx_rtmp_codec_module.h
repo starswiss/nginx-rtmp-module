@@ -73,10 +73,10 @@ typedef struct {
     u_char                      profile[32];
     u_char                      level[32];
 
-    ngx_chain_t                *avc_header;
-    ngx_chain_t                *aac_header;
+    ngx_rtmp_frame_t           *avc_header;
+    ngx_rtmp_frame_t           *aac_header;
 
-    ngx_chain_t                *meta;
+    ngx_rtmp_frame_t           *meta;
     ngx_uint_t                  meta_version;
 } ngx_rtmp_codec_ctx_t;
 

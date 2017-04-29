@@ -178,6 +178,18 @@ typedef struct {
 } ngx_rtmp_stream_t;
 
 
+typedef struct ngx_rtmp_frame_s     ngx_rtmp_frame_t;
+
+struct ngx_rtmp_frame_s {
+    ngx_rtmp_header_t       hdr;
+    ngx_flag_t              av_header;
+    ngx_flag_t              keyframe;
+    ngx_uint_t              ref;
+
+    ngx_rtmp_frame_t       *next;
+    ngx_chain_t            *chain;
+};
+
 /* disable zero-sized array warning by msvc */
 
 #if (NGX_WIN32)
@@ -265,11 +277,10 @@ typedef struct {
     uint32_t                out_bytes;
     size_t                  out_pos, out_last;
     ngx_chain_t            *out_chain;
-    u_char                 *out_bpos;
     unsigned                out_buffer:1;
     size_t                  out_queue;
     size_t                  out_cork;
-    ngx_chain_t            *out[0];
+    ngx_rtmp_frame_t       *out[0];
 } ngx_rtmp_session_t;
 
 
@@ -464,37 +475,16 @@ ngx_int_t ngx_rtmp_amf_shared_object_handler(ngx_rtmp_session_t *s,
 
 /* Shared output buffers */
 
-/* Store refcount in negative bytes of shared buffer */
+void ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
+        ngx_chain_t *cl, ngx_flag_t mandatory);
+ngx_rtmp_frame_t *ngx_rtmp_shared_alloc_frame(size_t size, ngx_chain_t *cl,
+        ngx_flag_t mandatory);
+void ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame);
 
-#define NGX_RTMP_REFCOUNT_TYPE              uint32_t
-#define NGX_RTMP_REFCOUNT_BYTES             sizeof(NGX_RTMP_REFCOUNT_TYPE)
-
-#define ngx_rtmp_ref(b)                     \
-    *((NGX_RTMP_REFCOUNT_TYPE*)(b) - 1)
-
-#define ngx_rtmp_ref_set(b, v)              \
-    ngx_rtmp_ref(b) = v
-
-#define ngx_rtmp_ref_get(b)                 \
-    ++ngx_rtmp_ref(b)
-
-#define ngx_rtmp_ref_put(b)                 \
-    --ngx_rtmp_ref(b)
-
-ngx_chain_t * ngx_rtmp_alloc_shared_buf(ngx_rtmp_core_srv_conf_t *cscf);
-void ngx_rtmp_free_shared_chain(ngx_rtmp_core_srv_conf_t *cscf,
-        ngx_chain_t *in);
-ngx_chain_t * ngx_rtmp_append_shared_bufs(ngx_rtmp_core_srv_conf_t *cscf,
-        ngx_chain_t *head, ngx_chain_t *in);
-
-#define ngx_rtmp_acquire_shared_chain(in)   \
-    ngx_rtmp_ref_get(in);                   \
-
+#define ngx_rtmp_shared_acquire_frame(frame) --frame->ref;
 
 /* Sending messages */
-void ngx_rtmp_prepare_message(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
-        ngx_rtmp_header_t *lh, ngx_chain_t *out);
-ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_chain_t *out,
+ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,
         ngx_uint_t priority);
 
 /* Note on priorities:
@@ -507,15 +497,15 @@ ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_chain_t *out,
 #define NGX_RTMP_LIMIT_DYNAMIC      2
 
 /* Protocol control messages */
-ngx_chain_t * ngx_rtmp_create_chunk_size(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_chunk_size(ngx_rtmp_session_t *s,
         uint32_t chunk_size);
-ngx_chain_t * ngx_rtmp_create_abort(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_abort(ngx_rtmp_session_t *s,
         uint32_t csid);
-ngx_chain_t * ngx_rtmp_create_ack(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_ack(ngx_rtmp_session_t *s,
         uint32_t seq);
-ngx_chain_t * ngx_rtmp_create_ack_size(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_ack_size(ngx_rtmp_session_t *s,
         uint32_t ack_size);
-ngx_chain_t * ngx_rtmp_create_bandwidth(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_bandwidth(ngx_rtmp_session_t *s,
         uint32_t ack_size, uint8_t limit_type);
 
 ngx_int_t ngx_rtmp_send_chunk_size(ngx_rtmp_session_t *s,
@@ -530,19 +520,19 @@ ngx_int_t ngx_rtmp_send_bandwidth(ngx_rtmp_session_t *s,
         uint32_t ack_size, uint8_t limit_type);
 
 /* User control messages */
-ngx_chain_t * ngx_rtmp_create_stream_begin(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_stream_begin(ngx_rtmp_session_t *s,
         uint32_t msid);
-ngx_chain_t * ngx_rtmp_create_stream_eof(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_stream_eof(ngx_rtmp_session_t *s,
         uint32_t msid);
-ngx_chain_t * ngx_rtmp_create_stream_dry(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_stream_dry(ngx_rtmp_session_t *s,
         uint32_t msid);
-ngx_chain_t * ngx_rtmp_create_set_buflen(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_set_buflen(ngx_rtmp_session_t *s,
         uint32_t msid, uint32_t buflen_msec);
-ngx_chain_t * ngx_rtmp_create_recorded(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_recorded(ngx_rtmp_session_t *s,
         uint32_t msid);
-ngx_chain_t * ngx_rtmp_create_ping_request(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_ping_request(ngx_rtmp_session_t *s,
         uint32_t timestamp);
-ngx_chain_t * ngx_rtmp_create_ping_response(ngx_rtmp_session_t *s,
+ngx_rtmp_frame_t *ngx_rtmp_create_ping_response(ngx_rtmp_session_t *s,
         uint32_t timestamp);
 
 ngx_int_t ngx_rtmp_send_stream_begin(ngx_rtmp_session_t *s,
@@ -567,17 +557,17 @@ ngx_int_t ngx_rtmp_append_amf(ngx_rtmp_session_t *s,
 ngx_int_t ngx_rtmp_receive_amf(ngx_rtmp_session_t *s, ngx_chain_t *in,
         ngx_rtmp_amf_elt_t *elts, size_t nelts);
 
-ngx_chain_t * ngx_rtmp_create_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
+ngx_rtmp_frame_t *ngx_rtmp_create_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_rtmp_amf_elt_t *elts, size_t nelts);
 ngx_int_t ngx_rtmp_send_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_rtmp_amf_elt_t *elts, size_t nelts);
 
 /* AMF status sender */
-ngx_chain_t * ngx_rtmp_create_status(ngx_rtmp_session_t *s, char *code,
+ngx_rtmp_frame_t *ngx_rtmp_create_status(ngx_rtmp_session_t *s, char *code,
         char* level, char *desc);
-ngx_chain_t * ngx_rtmp_create_play_status(ngx_rtmp_session_t *s, char *code,
+ngx_rtmp_frame_t *ngx_rtmp_create_play_status(ngx_rtmp_session_t *s, char *code,
         char* level, ngx_uint_t duration, ngx_uint_t bytes);
-ngx_chain_t * ngx_rtmp_create_sample_access(ngx_rtmp_session_t *s);
+ngx_rtmp_frame_t *ngx_rtmp_create_sample_access(ngx_rtmp_session_t *s);
 
 ngx_int_t ngx_rtmp_send_status(ngx_rtmp_session_t *s, char *code,
         char* level, char *desc);

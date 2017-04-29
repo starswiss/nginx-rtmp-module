@@ -699,7 +699,7 @@ ngx_rtmp_hls_append_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
         return NGX_ERROR;
     }
 
-    in = codec_ctx->avc_header;
+    in = codec_ctx->avc_header->chain;
     if (in == NULL) {
         return NGX_ERROR;
     }
@@ -1508,7 +1508,7 @@ ngx_rtmp_hls_parse_aac_header(ngx_rtmp_session_t *s, ngx_uint_t *objtype,
 
     codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
-    cl = codec_ctx->aac_header;
+    cl = codec_ctx->aac_header->chain;
 
     p = cl->buf->pos;
 

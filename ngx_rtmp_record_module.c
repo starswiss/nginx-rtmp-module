@@ -1111,10 +1111,11 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
                            "record: %V writing AAC header", &rracf->id);
 
             ch.type = NGX_RTMP_MSG_AUDIO;
-            ch.mlen = ngx_rtmp_record_get_chain_mlen(codec_ctx->aac_header);
+            ch.mlen = ngx_rtmp_record_get_chain_mlen(
+                    codec_ctx->aac_header->chain);
 
             if (ngx_rtmp_record_write_frame(s, rctx, &ch,
-                                            codec_ctx->aac_header, 0)
+                                            codec_ctx->aac_header->chain, 0)
                 != NGX_OK)
             {
                 return NGX_OK;
@@ -1132,10 +1133,11 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
                            "record: %V writing AVC header", &rracf->id);
 
             ch.type = NGX_RTMP_MSG_VIDEO;
-            ch.mlen = ngx_rtmp_record_get_chain_mlen(codec_ctx->avc_header);
+            ch.mlen = ngx_rtmp_record_get_chain_mlen(
+                    codec_ctx->avc_header->chain);
 
             if (ngx_rtmp_record_write_frame(s, rctx, &ch,
-                                            codec_ctx->avc_header, 0)
+                                            codec_ctx->avc_header->chain, 0)
                 != NGX_OK)
             {
                 return NGX_OK;

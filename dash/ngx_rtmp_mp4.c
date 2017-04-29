@@ -502,7 +502,7 @@ ngx_rtmp_mp4_write_avcc(ngx_rtmp_session_t *s, ngx_buf_t *b)
         return NGX_ERROR;
     }
 
-    in = codec_ctx->avc_header;
+    in = codec_ctx->avc_header->chain;
     if (in == NULL) {
         return NGX_ERROR;
     }
@@ -611,7 +611,7 @@ ngx_rtmp_mp4_write_esds(ngx_rtmp_session_t *s, ngx_buf_t *b)
         return NGX_ERROR;
     }
 
-    db = codec_ctx->aac_header->buf;
+    db = codec_ctx->aac_header->chain->buf;
     if (db == NULL) {
         return NGX_ERROR;
     }

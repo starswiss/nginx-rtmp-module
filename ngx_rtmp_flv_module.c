@@ -314,7 +314,8 @@ ngx_rtmp_flv_read_meta(ngx_rtmp_session_t *s, ngx_file_t *f)
     ngx_rtmp_flv_ctx_t             *ctx;
     ssize_t                         n;
     ngx_rtmp_header_t               h;
-    ngx_chain_t                    *out, in;
+    ngx_chain_t                     in;
+    ngx_rtmp_frame_t               *out;
     ngx_buf_t                       in_buf;
     ngx_rtmp_core_srv_conf_t       *cscf;
     uint32_t                        size;
@@ -386,11 +387,11 @@ ngx_rtmp_flv_read_meta(ngx_rtmp_session_t *s, ngx_file_t *f)
     ngx_rtmp_flv_init_index(s, &in);
 
     /* output chain */
-    out = ngx_rtmp_append_shared_bufs(cscf, NULL, &in);
+    out = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, &in, 0);
+    out->hdr = h;
 
-    ngx_rtmp_prepare_message(s, &h, NULL, out);
     ngx_rtmp_send_message(s, out, 0);
-    ngx_rtmp_free_shared_chain(cscf, out);
+    ngx_rtmp_shared_free_frame(out);
 }
 
 
@@ -399,9 +400,10 @@ ngx_rtmp_flv_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
 {
     ngx_rtmp_flv_ctx_t             *ctx;
     uint32_t                        last_timestamp;
-    ngx_rtmp_header_t               h, lh;
+    ngx_rtmp_header_t               h;
     ngx_rtmp_core_srv_conf_t       *cscf;
-    ngx_chain_t                    *out, in;
+    ngx_chain_t                     in;
+    ngx_rtmp_frame_t               *out;
     ngx_buf_t                       in_buf;
     ngx_int_t                       rc;
     ssize_t                         n;
@@ -474,9 +476,6 @@ ngx_rtmp_flv_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
                   "last_timestamp=%uD",
                   (ngx_int_t) h.type,size, h.timestamp, last_timestamp);
 
-    lh = h;
-    lh.timestamp = last_timestamp;
-
     if (size > sizeof(ngx_rtmp_flv_buffer)) {
         ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
                      "flv: too big message: %D>%uz", size,
@@ -503,12 +502,11 @@ ngx_rtmp_flv_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
     in_buf.last = ngx_rtmp_flv_buffer + size;
 
     /* output chain */
-    out = ngx_rtmp_append_shared_bufs(cscf, NULL, &in);
+    out = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, &in, 0);
+    out->hdr = h;
 
-    ngx_rtmp_prepare_message(s, &h, ctx->msg_mask & (1 << h.type) ?
-                             &lh : NULL, out);
     rc = ngx_rtmp_send_message(s, out, 0);
-    ngx_rtmp_free_shared_chain(cscf, out);
+    ngx_rtmp_shared_free_frame(out);
 
     if (rc == NGX_AGAIN) {
         return NGX_AGAIN;

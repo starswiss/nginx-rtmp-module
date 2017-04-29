@@ -10,6 +10,7 @@
 #include "ngx_rtmp_live_module.h"
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_bitop.h"
+#include "ngx_rbuf.h"
 
 
 #define NGX_RTMP_CODEC_META_OFF     0
@@ -162,27 +163,24 @@ ngx_rtmp_codec_disconnect(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
     ngx_rtmp_codec_ctx_t               *ctx;
-    ngx_rtmp_core_srv_conf_t           *cscf;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
     if (ctx == NULL) {
         return NGX_OK;
     }
 
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
     if (ctx->avc_header) {
-        ngx_rtmp_free_shared_chain(cscf, ctx->avc_header);
+        ngx_rtmp_shared_free_frame(ctx->avc_header);
         ctx->avc_header = NULL;
     }
 
     if (ctx->aac_header) {
-        ngx_rtmp_free_shared_chain(cscf, ctx->aac_header);
+        ngx_rtmp_shared_free_frame(ctx->aac_header);
         ctx->aac_header = NULL;
     }
 
     if (ctx->meta) {
-        ngx_rtmp_free_shared_chain(cscf, ctx->meta);
+        ngx_rtmp_shared_free_frame(ctx->meta);
         ctx->meta = NULL;
     }
 
@@ -196,7 +194,7 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 {
     ngx_rtmp_core_srv_conf_t           *cscf;
     ngx_rtmp_codec_ctx_t               *ctx;
-    ngx_chain_t                       **header;
+    ngx_rtmp_frame_t                  **header;
     uint8_t                             fmt;
     static ngx_uint_t                   sample_rates[] =
                                         { 5512, 11025, 22050, 44100 };
@@ -259,10 +257,10 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     if (*header) {
-        ngx_rtmp_free_shared_chain(cscf, *header);
+        ngx_rtmp_shared_free_frame(*header);
     }
 
-    *header = ngx_rtmp_append_shared_bufs(cscf, NULL, in);
+    *header = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, in, 0);
 
     return NGX_OK;
 }
@@ -652,12 +650,13 @@ ngx_rtmp_codec_reconstruct_meta(ngx_rtmp_session_t *s)
         return NGX_OK;
     }
 
+    if (ctx->meta) {
+        ngx_rtmp_shared_free_frame(ctx->meta);
+    }
+
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
-    if (ctx->meta) {
-        ngx_rtmp_free_shared_chain(cscf, ctx->meta);
-        ctx->meta = NULL;
-    }
+    ctx->meta = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, NULL, 1);
 
     v.width = ctx->width;
     v.height = ctx->height;
@@ -670,7 +669,7 @@ ngx_rtmp_codec_reconstruct_meta(ngx_rtmp_session_t *s)
     ngx_memcpy(v.profile, ctx->profile, sizeof(ctx->profile));
     ngx_memcpy(v.level, ctx->level, sizeof(ctx->level));
 
-    rc = ngx_rtmp_append_amf(s, &ctx->meta, NULL, out_elts,
+    rc = ngx_rtmp_append_amf(s, &ctx->meta->chain, &ctx->meta->chain, out_elts,
                              sizeof(out_elts) / sizeof(out_elts[0]));
     if (rc != NGX_OK || ctx->meta == NULL) {
         return NGX_ERROR;
@@ -692,10 +691,10 @@ ngx_rtmp_codec_copy_meta(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     if (ctx->meta) {
-        ngx_rtmp_free_shared_chain(cscf, ctx->meta);
+        ngx_rtmp_shared_free_frame(ctx->meta);
     }
 
-    ctx->meta = ngx_rtmp_append_shared_bufs(cscf, NULL, in);
+    ctx->meta = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, in, 0);
 
     if (ctx->meta == NULL) {
         return NGX_ERROR;
@@ -708,17 +707,14 @@ ngx_rtmp_codec_copy_meta(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_codec_prepare_meta(ngx_rtmp_session_t *s, uint32_t timestamp)
 {
-    ngx_rtmp_header_t      h;
     ngx_rtmp_codec_ctx_t  *ctx;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
-    ngx_memzero(&h, sizeof(h));
-    h.csid = NGX_RTMP_CSID_AMF;
-    h.msid = NGX_RTMP_MSID;
-    h.type = NGX_RTMP_MSG_AMF_META;
-    h.timestamp = timestamp;
-    ngx_rtmp_prepare_message(s, &h, NULL, ctx->meta);
+    ctx->meta->hdr.csid = NGX_RTMP_CSID_AMF;
+    ctx->meta->hdr.msid = NGX_RTMP_MSID;
+    ctx->meta->hdr.type = NGX_RTMP_MSG_AMF_META;
+    ctx->meta->hdr.timestamp = timestamp;
 
     ctx->meta_version = ngx_rtmp_codec_get_next_version();
 

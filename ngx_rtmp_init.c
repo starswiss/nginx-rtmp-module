@@ -148,7 +148,7 @@ ngx_rtmp_init_session(ngx_connection_t *c, ngx_rtmp_addr_conf_t *addr_conf)
     ngx_rtmp_error_log_ctx_t       *ctx;
 
     s = ngx_pcalloc(c->pool, sizeof(ngx_rtmp_session_t) +
-            sizeof(ngx_chain_t *) * ((ngx_rtmp_core_srv_conf_t *)
+            sizeof(ngx_rtmp_frame_t *) * ((ngx_rtmp_core_srv_conf_t *)
                 addr_conf->ctx-> srv_conf[ngx_rtmp_core_module
                     .ctx_index])->out_queue);
     if (s == NULL) {
@@ -271,12 +271,9 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
 {
     ngx_rtmp_session_t                 *s;
     ngx_connection_t                   *c;
-    ngx_rtmp_core_srv_conf_t           *cscf;
 
     s = e->data;
     c = s->connection;
-
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     ngx_log_debug0(NGX_LOG_DEBUG_RTMP, c->log, 0, "close session");
 
@@ -297,7 +294,7 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
     ngx_rtmp_free_handshake_buffers(s);
 
     while (s->out_pos != s->out_last) {
-        ngx_rtmp_free_shared_chain(cscf, s->out[s->out_pos++]);
+        ngx_rtmp_shared_free_frame(s->out[s->out_pos++]);
         s->out_pos %= s->out_queue;
     }
 

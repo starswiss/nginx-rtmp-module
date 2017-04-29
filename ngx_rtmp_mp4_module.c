@@ -1950,8 +1950,7 @@ ngx_rtmp_mp4_send_meta(ngx_rtmp_session_t *s)
     ngx_rtmp_core_srv_conf_t       *cscf;
     ngx_int_t                       rc;
     ngx_uint_t                      n;
-    ngx_rtmp_header_t               h;
-    ngx_chain_t                    *out;
+    ngx_rtmp_frame_t               *out;
     ngx_rtmp_mp4_track_t           *t;
     double                          d;
 
@@ -2041,22 +2040,19 @@ ngx_rtmp_mp4_send_meta(ngx_rtmp_session_t *s)
         }
     }
 
-    out = NULL;
-    rc = ngx_rtmp_append_amf(s, &out, NULL, out_elts,
+    out = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, NULL, 1);
+    rc = ngx_rtmp_append_amf(s, &out->chain, &out->chain, out_elts,
                              sizeof(out_elts) / sizeof(out_elts[0]));
     if (rc != NGX_OK || out == NULL) {
         return NGX_ERROR;
     }
 
-    ngx_memzero(&h, sizeof(h));
+    out->hdr.csid = NGX_RTMP_CSID_AMF;
+    out->hdr.msid = NGX_RTMP_MSID;
+    out->hdr.type = NGX_RTMP_MSG_AMF_META;
 
-    h.csid = NGX_RTMP_CSID_AMF;
-    h.msid = NGX_RTMP_MSID;
-    h.type = NGX_RTMP_MSG_AMF_META;
-
-    ngx_rtmp_prepare_message(s, &h, NULL, out);
     rc = ngx_rtmp_send_message(s, out, 0);
-    ngx_rtmp_free_shared_chain(cscf, out);
+    ngx_rtmp_shared_free_frame(out);
 
     return rc;
 }
@@ -2091,9 +2087,10 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
 {
     ngx_rtmp_mp4_ctx_t             *ctx;
     ngx_buf_t                       in_buf;
-    ngx_rtmp_header_t               h, lh;
+    ngx_rtmp_header_t               h;
     ngx_rtmp_core_srv_conf_t       *cscf;
-    ngx_chain_t                    *out, in;
+    ngx_chain_t                     in;
+    ngx_rtmp_frame_t               *out;
     ngx_rtmp_mp4_track_t           *t, *cur_t;
     ngx_rtmp_mp4_cursor_t          *cr, *cur_cr;
     uint32_t                        buflen, end_timestamp,
@@ -2184,10 +2181,7 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
         h.type = (uint8_t) t->type;
         h.csid = t->csid;
 
-        lh = h;
-
         h.timestamp  = timestamp;
-        lh.timestamp = last_timestamp;
 
         ngx_memzero(&in, sizeof(in));
         ngx_memzero(&in_buf, sizeof(in_buf));
@@ -2212,17 +2206,17 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
             in_buf.pos  = fhdr;
             in_buf.last = fhdr + fhdr_size;
 
-            out = ngx_rtmp_append_shared_bufs(cscf, NULL, &in);
+            out = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, &in, 0);
 
             in.buf = &in_buf;
             in_buf.pos  = t->header;
             in_buf.last = t->header + t->header_size;
 
-            ngx_rtmp_append_shared_bufs(cscf, out, &in);
+            ngx_rtmp_shared_append_chain(out, cscf->chunk_size, &in, 0);
 
-            ngx_rtmp_prepare_message(s, &h, NULL, out);
+            out->hdr = h;
             rc = ngx_rtmp_send_message(s, out, 0);
-            ngx_rtmp_free_shared_chain(cscf, out);
+            ngx_rtmp_shared_free_frame(out);
 
             if (rc == NGX_AGAIN) {
                 return NGX_AGAIN;
@@ -2287,11 +2281,11 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
         in_buf.pos  = ngx_rtmp_mp4_buffer;
         in_buf.last = ngx_rtmp_mp4_buffer + cr->size + fhdr_size;
 
-        out = ngx_rtmp_append_shared_bufs(cscf, NULL, &in);
+        out = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, &in, 0);
 
-        ngx_rtmp_prepare_message(s, &h, cr->not_first ? &lh : NULL, out);
+        out->hdr = h;
         rc = ngx_rtmp_send_message(s, out, 0);
-        ngx_rtmp_free_shared_chain(cscf, out);
+        ngx_rtmp_shared_free_frame(out);
 
         if (rc == NGX_AGAIN) {
             return NGX_AGAIN;

@@ -23,6 +23,7 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_limit_module                       \
                 ngx_rtmp_hls_module                         \
                 ngx_rtmp_dash_module                        \
+                ngx_rtmp_shared_module                      \
                 "
 
 
@@ -57,6 +58,7 @@ RTMP_DEPS="                                                 \
                 $ngx_addon_dir/dash/ngx_rtmp_mp4.h          \
                 $ngx_addon_dir/ngx_stream_zone_module.h     \
                 $ngx_addon_dir/ngx_event_multiport_module.h \
+                $ngx_addon_dir/ngx_rbuf.h                   \
                 "
 
 
@@ -67,7 +69,6 @@ RTMP_CORE_SRCS="                                            \
                 $ngx_addon_dir/ngx_rtmp_handler.c           \
                 $ngx_addon_dir/ngx_rtmp_amf.c               \
                 $ngx_addon_dir/ngx_rtmp_send.c              \
-                $ngx_addon_dir/ngx_rtmp_shared.c            \
                 $ngx_addon_dir/ngx_rtmp_eval.c              \
                 $ngx_addon_dir/ngx_rtmp_receive.c           \
                 $ngx_addon_dir/ngx_rtmp_core_module.c       \
@@ -96,6 +97,8 @@ RTMP_CORE_SRCS="                                            \
                 $ngx_addon_dir/ngx_rtmp_auto_pull_module.c  \
                 $ngx_addon_dir/ngx_stream_zone_module.c     \
                 $ngx_addon_dir/ngx_event_multiport_module.c \
+                $ngx_addon_dir/ngx_rbuf.c                   \
+                $ngx_addon_dir/ngx_rtmp_shared_module.c     \
                 "
 
 

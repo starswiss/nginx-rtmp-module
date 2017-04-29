@@ -9,20 +9,22 @@
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_amf.h"
 #include "ngx_rtmp_streams.h"
+#include "ngx_rbuf.h"
 
 
 #define NGX_RTMP_USER_START(s, tp)                                          \
-    ngx_rtmp_header_t               __h;                                    \
     ngx_chain_t                    *__l;                                    \
     ngx_buf_t                      *__b;                                    \
     ngx_rtmp_core_srv_conf_t       *__cscf;                                 \
+    ngx_rtmp_frame_t               *__f;                                    \
                                                                             \
     __cscf = ngx_rtmp_get_module_srv_conf(                                  \
             s, ngx_rtmp_core_module);                                       \
-    memset(&__h, 0, sizeof(__h));                                           \
-    __h.type = tp;                                                          \
-    __h.csid = 2;                                                           \
-    __l = ngx_rtmp_alloc_shared_buf(__cscf);                                \
+                                                                            \
+    __f = ngx_rtmp_shared_alloc_frame(__cscf->chunk_size, NULL, 1);         \
+    __f->hdr.type = tp;                                                     \
+    __f->hdr.csid = 2;                                                      \
+    __l = __f->chain;                                                       \
     if (__l == NULL) {                                                      \
         return NULL;                                                        \
     }                                                                       \
@@ -43,25 +45,21 @@
     *(__b->last++) = ((u_char*)&v)[0];
 
 #define NGX_RTMP_USER_END(s)                                                \
-    ngx_rtmp_prepare_message(s, &__h, NULL, __l);                           \
-    return __l;
+    return __f;
 
 
 static ngx_int_t
-ngx_rtmp_send_shared_packet(ngx_rtmp_session_t *s, ngx_chain_t *cl)
+ngx_rtmp_send_shared_packet(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 {
-    ngx_rtmp_core_srv_conf_t       *cscf;
     ngx_int_t                       rc;
 
-    if (cl == NULL) {
+    if (frame == NULL) {
         return NGX_ERROR;
     }
 
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+    rc = ngx_rtmp_send_message(s, frame, 0);
 
-    rc = ngx_rtmp_send_message(s, cl, 0);
-
-    ngx_rtmp_free_shared_chain(cscf, cl);
+    ngx_rtmp_shared_free_frame(frame);
 
     return rc;
 }
@@ -69,7 +67,7 @@ ngx_rtmp_send_shared_packet(ngx_rtmp_session_t *s, ngx_chain_t *cl)
 
 /* Protocol control messages */
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_chunk_size(ngx_rtmp_session_t *s, uint32_t chunk_size)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -93,7 +91,7 @@ ngx_rtmp_send_chunk_size(ngx_rtmp_session_t *s, uint32_t chunk_size)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_abort(ngx_rtmp_session_t *s, uint32_t csid)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -117,7 +115,7 @@ ngx_rtmp_send_abort(ngx_rtmp_session_t *s, uint32_t csid)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_ack(ngx_rtmp_session_t *s, uint32_t seq)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -141,7 +139,7 @@ ngx_rtmp_send_ack(ngx_rtmp_session_t *s, uint32_t seq)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_ack_size(ngx_rtmp_session_t *s, uint32_t ack_size)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -165,7 +163,7 @@ ngx_rtmp_send_ack_size(ngx_rtmp_session_t *s, uint32_t ack_size)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_bandwidth(ngx_rtmp_session_t *s, uint32_t ack_size,
                           uint8_t limit_type)
 {
@@ -195,7 +193,7 @@ ngx_rtmp_send_bandwidth(ngx_rtmp_session_t *s, uint32_t ack_size,
 
 /* User control messages */
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_begin(ngx_rtmp_session_t *s, uint32_t msid)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -219,7 +217,7 @@ ngx_rtmp_send_stream_begin(ngx_rtmp_session_t *s, uint32_t msid)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_eof(ngx_rtmp_session_t *s, uint32_t msid)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -243,7 +241,7 @@ ngx_rtmp_send_stream_eof(ngx_rtmp_session_t *s, uint32_t msid)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_dry(ngx_rtmp_session_t *s, uint32_t msid)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -267,7 +265,7 @@ ngx_rtmp_send_stream_dry(ngx_rtmp_session_t *s, uint32_t msid)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_set_buflen(ngx_rtmp_session_t *s, uint32_t msid,
                            uint32_t buflen_msec)
 {
@@ -295,7 +293,7 @@ ngx_rtmp_send_set_buflen(ngx_rtmp_session_t *s, uint32_t msid,
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_recorded(ngx_rtmp_session_t *s, uint32_t msid)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -319,7 +317,7 @@ ngx_rtmp_send_recorded(ngx_rtmp_session_t *s, uint32_t msid)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_ping_request(ngx_rtmp_session_t *s, uint32_t timestamp)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -343,7 +341,7 @@ ngx_rtmp_send_ping_request(ngx_rtmp_session_t *s, uint32_t timestamp)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_ping_response(ngx_rtmp_session_t *s, uint32_t timestamp)
 {
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
@@ -370,7 +368,7 @@ ngx_rtmp_send_ping_response(ngx_rtmp_session_t *s, uint32_t timestamp)
 static ngx_chain_t *
 ngx_rtmp_alloc_amf_buf(void *arg)
 {
-    return ngx_rtmp_alloc_shared_buf((ngx_rtmp_core_srv_conf_t *)arg);
+    return ngx_get_chainbuf(((ngx_rtmp_core_srv_conf_t *)arg)->chunk_size, 1);
 }
 
 
@@ -415,33 +413,30 @@ ngx_rtmp_append_amf(ngx_rtmp_session_t *s,
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                     ngx_rtmp_amf_elt_t *elts, size_t nelts)
 {
-    ngx_chain_t                *first;
     ngx_int_t                   rc;
     ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_rtmp_frame_t           *frame;
 
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
                    "create: amf nelts=%ui", nelts);
 
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
-    first = NULL;
+    frame = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, NULL, 1);
+    frame->hdr = *h;
 
-    rc = ngx_rtmp_append_amf(s, &first, NULL, elts, nelts);
+    rc = ngx_rtmp_append_amf(s, &frame->chain, &frame->chain, elts, nelts);
 
-    if (rc != NGX_OK && first) {
-        ngx_rtmp_free_shared_chain(cscf, first);
-        first = NULL;
+    if (rc != NGX_OK) {
+        ngx_rtmp_shared_free_frame(frame);
+        return NULL;
     }
 
-    if (first) {
-        ngx_rtmp_prepare_message(s, h, NULL, first);
-    }
-
-    return first;
+    return frame;
 }
 
 
@@ -454,7 +449,7 @@ ngx_rtmp_send_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_status(ngx_rtmp_session_t *s, char *code, char* level,
                        char *desc)
 {
@@ -523,7 +518,7 @@ ngx_rtmp_send_status(ngx_rtmp_session_t *s, char *code, char* level, char *desc)
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_play_status(ngx_rtmp_session_t *s, char *code, char* level,
                             ngx_uint_t duration, ngx_uint_t bytes)
 {
@@ -594,7 +589,7 @@ ngx_rtmp_send_play_status(ngx_rtmp_session_t *s, char *code, char* level,
 }
 
 
-ngx_chain_t *
+ngx_rtmp_frame_t *
 ngx_rtmp_create_sample_access(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_header_t               h;

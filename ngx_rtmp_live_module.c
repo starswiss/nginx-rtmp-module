@@ -278,13 +278,13 @@ ngx_rtmp_live_idle(ngx_event_t *pev)
 
 
 static void
-ngx_rtmp_live_set_status(ngx_rtmp_session_t *s, ngx_chain_t *control,
-                         ngx_chain_t **status, size_t nstatus,
+ngx_rtmp_live_set_status(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *control,
+                         ngx_rtmp_frame_t **status, size_t nstatus,
                          unsigned active)
 {
     ngx_rtmp_live_app_conf_t   *lacf;
     ngx_rtmp_live_ctx_t        *ctx, *pctx;
-    ngx_chain_t               **cl;
+    ngx_rtmp_frame_t          **frame;
     ngx_event_t                *e;
     size_t                      n;
 
@@ -342,10 +342,10 @@ ngx_rtmp_live_set_status(ngx_rtmp_session_t *s, ngx_chain_t *control,
     }
 
     if (!ctx->silent) {
-        cl = status;
+        frame = status;
 
-        for (n = 0; n < nstatus; ++n, ++cl) {
-            if (*cl && ngx_rtmp_send_message(s, *cl, 0) != NGX_OK) {
+        for (n = 0; n < nstatus; ++n, ++frame) {
+            if (*frame && ngx_rtmp_send_message(s, *frame, 0) != NGX_OK) {
                 ngx_rtmp_finalize_session(s);
                 return;
             }
@@ -363,13 +363,10 @@ ngx_rtmp_live_set_status(ngx_rtmp_session_t *s, ngx_chain_t *control,
 static void
 ngx_rtmp_live_start(ngx_rtmp_session_t *s)
 {
-    ngx_rtmp_core_srv_conf_t   *cscf;
     ngx_rtmp_live_app_conf_t   *lacf;
-    ngx_chain_t                *control;
-    ngx_chain_t                *status[3];
+    ngx_rtmp_frame_t           *control;
+    ngx_rtmp_frame_t           *status[3];
     size_t                      n, nstatus;
-
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
@@ -392,11 +389,11 @@ ngx_rtmp_live_start(ngx_rtmp_session_t *s)
     ngx_rtmp_live_set_status(s, control, status, nstatus, 1);
 
     if (control) {
-        ngx_rtmp_free_shared_chain(cscf, control);
+        ngx_rtmp_shared_free_frame(control);
     }
 
     for (n = 0; n < nstatus; ++n) {
-        ngx_rtmp_free_shared_chain(cscf, status[n]);
+        ngx_rtmp_shared_free_frame(status[n]);
     }
 }
 
@@ -404,13 +401,10 @@ ngx_rtmp_live_start(ngx_rtmp_session_t *s)
 static void
 ngx_rtmp_live_stop(ngx_rtmp_session_t *s)
 {
-    ngx_rtmp_core_srv_conf_t   *cscf;
     ngx_rtmp_live_app_conf_t   *lacf;
-    ngx_chain_t                *control;
-    ngx_chain_t                *status[3];
+    ngx_rtmp_frame_t           *control;
+    ngx_rtmp_frame_t           *status[3];
     size_t                      n, nstatus;
-
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
@@ -432,11 +426,11 @@ ngx_rtmp_live_stop(ngx_rtmp_session_t *s)
     ngx_rtmp_live_set_status(s, control, status, nstatus, 0);
 
     if (control) {
-        ngx_rtmp_free_shared_chain(cscf, control);
+        ngx_rtmp_shared_free_frame(control);
     }
 
     for (n = 0; n < nstatus; ++n) {
-        ngx_rtmp_free_shared_chain(cscf, status[n]);
+        ngx_rtmp_shared_free_frame(status[n]);
     }
 }
 
@@ -698,8 +692,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 {
     ngx_rtmp_live_ctx_t            *ctx, *pctx;
     ngx_rtmp_codec_ctx_t           *codec_ctx;
-    ngx_chain_t                    *header, *coheader, *meta,
-                                   *apkt, *aapkt, *acopkt, *rpkt;
+    ngx_rtmp_frame_t               *header, *coheader, *meta, *avframe, *dummy;
     ngx_rtmp_core_srv_conf_t       *cscf;
     ngx_rtmp_live_app_conf_t       *lacf;
     ngx_rtmp_session_t             *ss;
@@ -752,12 +745,10 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     s->current_time = h->timestamp;
 
     peers = 0;
-    apkt = NULL;
-    aapkt = NULL;
-    acopkt = NULL;
     header = NULL;
     coheader = NULL;
     meta = NULL;
+    dummy = NULL;
     meta_version = 0;
     mandatory = 0;
 
@@ -802,9 +793,8 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ch.timestamp = lh.timestamp;
     }
 */
-    rpkt = ngx_rtmp_append_shared_bufs(cscf, NULL, in);
-
-    ngx_rtmp_prepare_message(s, &ch, &lh, rpkt);
+    avframe = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, in, 0);
+    avframe->hdr = ch;
 
     codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
@@ -907,9 +897,10 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                 !pctx->cs[1].active)
             {
                 dummy_audio = 1;
-                if (aapkt == NULL) {
-                    aapkt = ngx_rtmp_alloc_shared_buf(cscf);
-                    ngx_rtmp_prepare_message(s, &clh, NULL, aapkt);
+                if (dummy == NULL) {
+                    dummy = ngx_rtmp_shared_alloc_frame(cscf->chunk_size,
+                                                        NULL, 1);
+                    dummy->hdr = clh;
                 }
             }
 
@@ -922,75 +913,38 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                                type_s, lh.timestamp);
 
                 if (header) {
-                    if (apkt == NULL) {
-                        apkt = ngx_rtmp_append_shared_bufs(cscf, NULL, header);
-                        ngx_rtmp_prepare_message(s, &lh, NULL, apkt);
-                    }
-
-                    rc = ngx_rtmp_send_message(ss, apkt, 0);
+                    header->hdr = lh;
+                    rc = ngx_rtmp_send_message(ss, header, 0);
                     if (rc != NGX_OK) {
                         continue;
                     }
                 }
 
                 if (coheader) {
-                    if (acopkt == NULL) {
-                        acopkt = ngx_rtmp_append_shared_bufs(cscf, NULL, coheader);
-                        ngx_rtmp_prepare_message(s, &clh, NULL, acopkt);
-                    }
-
-                    rc = ngx_rtmp_send_message(ss, acopkt, 0);
+                    coheader->hdr = clh;
+                    rc = ngx_rtmp_send_message(ss, coheader, 0);
                     if (rc != NGX_OK) {
                         continue;
                     }
 
                 } else if (dummy_audio) {
-                    ngx_rtmp_send_message(ss, aapkt, 0);
+                    ngx_rtmp_send_message(ss, dummy, 0);
                 }
 
                 cs->timestamp = lh.timestamp;
                 cs->active = 1;
                 ss->current_time = cs->timestamp;
 
-            } else {
-
-                /* send absolute packet */
-
-                ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ss->connection->log, 0,
-                               "live: abs %s packet timestamp=%uD",
-                               type_s, ch.timestamp);
-
-                if (apkt == NULL) {
-                    apkt = ngx_rtmp_append_shared_bufs(cscf, NULL, in);
-                    ngx_rtmp_prepare_message(s, &ch, NULL, apkt);
-                }
-
-                rc = ngx_rtmp_send_message(ss, apkt, prio);
-                if (rc != NGX_OK) {
-                    continue;
-                }
-
-                cs->timestamp = ch.timestamp;
-                cs->active = 1;
-                ss->current_time = cs->timestamp;
-
-                ++peers;
-
-                if (dummy_audio) {
-                    ngx_rtmp_send_message(ss, aapkt, 0);
-                }
-
-                continue;
             }
         }
 
-        /* send relative packet */
+        /* send av packet */
 
         ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ss->connection->log, 0,
                        "live: rel %s packet delta=%uD",
                        type_s, delta);
 
-        if (ngx_rtmp_send_message(ss, rpkt, prio) != NGX_OK) {
+        if (ngx_rtmp_send_message(ss, avframe, prio) != NGX_OK) {
             ++pctx->ndropped;
 
             cs->dropped += delta;
@@ -1009,20 +963,12 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ss->current_time = cs->timestamp;
     }
 
-    if (rpkt) {
-        ngx_rtmp_free_shared_chain(cscf, rpkt);
+    if (avframe) {
+        ngx_rtmp_shared_free_frame(avframe);
     }
 
-    if (apkt) {
-        ngx_rtmp_free_shared_chain(cscf, apkt);
-    }
-
-    if (aapkt) {
-        ngx_rtmp_free_shared_chain(cscf, aapkt);
-    }
-
-    if (acopkt) {
-        ngx_rtmp_free_shared_chain(cscf, acopkt);
+    if (dummy) {
+        ngx_rtmp_shared_free_frame(dummy);
     }
 
     ngx_rtmp_update_bandwidth(&ctx->stream->bw_in, h->mlen);
