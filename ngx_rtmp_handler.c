@@ -537,12 +537,10 @@ ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 
     hsize = hdrsize[fmt];
 
-#if (NGX_DEBUG)
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+    ngx_log_debug7(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
             "RTMP prep %s (%d) fmt=%d csid=%uD timestamp=%uD mlen=%uD msid=%uD",
             ngx_rtmp_message_type(frame->hdr.type), (int)frame->hdr.type,
             (int)fmt, frame->hdr.csid, timestamp, mlen, frame->hdr.msid);
-#endif
 
     ext_timestamp = 0;
     if (timestamp >= 0x00ffffff) {
