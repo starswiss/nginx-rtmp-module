@@ -84,7 +84,7 @@ ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
     u_char                     *p;
     size_t                      len;
 
-    for (ll = &frame->chain; *ll; ll = &(*ll)->next);
+    for (ll = &frame->chain; (*ll) && (*ll)->next; ll = &(*ll)->next);
 
     if (cl == NULL) {
         if (mandatory) {
@@ -96,6 +96,10 @@ ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
     p = cl->buf->pos;
 
     for (;;) {
+        if ((*ll) && (*ll)->buf->last == (*ll)->buf->end) {
+            ll = &(*ll)->next;
+        }
+
         if (*ll == NULL) {
             *ll = ngx_get_chainbuf(size, 1);
         }
@@ -113,10 +117,6 @@ ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
         len = (*ll)->buf->end - (*ll)->buf->last;
         (*ll)->buf->last = ngx_cpymem((*ll)->buf->last, p, len);
         p += len;
-
-        if ((*ll)->buf->last == (*ll)->buf->end) {
-            ll = &(*ll)->next;
-        }
     }
 }
 

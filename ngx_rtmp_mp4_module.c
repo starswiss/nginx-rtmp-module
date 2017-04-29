@@ -2094,8 +2094,7 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
     ngx_rtmp_mp4_track_t           *t, *cur_t;
     ngx_rtmp_mp4_cursor_t          *cr, *cur_cr;
     uint32_t                        buflen, end_timestamp,
-                                    timestamp, last_timestamp, rdelay,
-                                    cur_timestamp;
+                                    timestamp, rdelay, cur_timestamp;
     ssize_t                         ret;
     u_char                          fhdr[5];
     size_t                          fhdr_size;
@@ -2123,7 +2122,6 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
     buflen = s->buflen + NGX_RTMP_MP4_BUFLEN_ADDON;
 
     counter = 0;
-    last_timestamp = 0;
     end_timestamp = ctx->start_timestamp +
                     (ngx_current_msec - ctx->epoch) + buflen;
 
@@ -2164,16 +2162,10 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
                     "mp4: track#%ui ahead %uD > %uD",
                     t->id, timestamp, end_timestamp);
 
-            if (ts) {
-                *ts = last_timestamp;
-            }
-
             return (uint32_t) (timestamp - end_timestamp);
         }
 
         cr = &t->cursor;
-
-        last_timestamp = ngx_rtmp_mp4_to_rtmp_timestamp(t, cr->last_timestamp);
 
         ngx_memzero(&h, sizeof(h));
 
@@ -2225,11 +2217,9 @@ ngx_rtmp_mp4_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
             t->header_sent = 1;
         }
 
-        ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug4(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
                        "mp4: track#%ui read frame offset=%O, size=%uz, "
-                       "timestamp=%uD, last_timestamp=%uD",
-                       t->id, cr->offset, cr->size, timestamp,
-                       last_timestamp);
+                       "timestamp=%uD", t->id, cr->offset, cr->size, timestamp);
 
         ngx_rtmp_mp4_buffer[0] = t->fhdr;
         fhdr_size = 1;
