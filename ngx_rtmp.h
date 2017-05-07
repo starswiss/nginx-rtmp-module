@@ -184,6 +184,7 @@ struct ngx_rtmp_frame_s {
     ngx_rtmp_header_t       hdr;
     ngx_flag_t              av_header;
     ngx_flag_t              keyframe;
+    ngx_flag_t              mandatory;
     ngx_uint_t              ref;
 
     ngx_rtmp_frame_t       *next;
@@ -481,11 +482,15 @@ ngx_rtmp_frame_t *ngx_rtmp_shared_alloc_frame(size_t size, ngx_chain_t *cl,
         ngx_flag_t mandatory);
 void ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame);
 
-#define ngx_rtmp_shared_acquire_frame(frame) --frame->ref;
+#define ngx_rtmp_shared_acquire_frame(frame) ++frame->ref;
 
 /* Sending messages */
 ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,
         ngx_uint_t priority);
+
+/* GOP */
+ngx_int_t ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame);
+ngx_int_t ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss);
 
 /* Note on priorities:
  * the bigger value the lower the priority.

@@ -835,6 +835,10 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         }
     }
 
+    if (ngx_rtmp_gop_cache(s, avframe) == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+
     /* broadcast to all subscribers */
 
     for (pctx = ctx->stream->ctx; pctx; pctx = pctx->next) {
@@ -844,6 +848,17 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
         ss = pctx->session;
         cs = &pctx->cs[csidx];
+
+        /* send gop cache is set */
+        switch (ngx_rtmp_gop_send(s, ss)) {
+        case NGX_DECLINED:
+            break;
+        case NGX_ERROR:
+            ngx_rtmp_finalize_session(ss);
+            continue;
+        default:
+            continue;
+        }
 
         /* send metadata */
 

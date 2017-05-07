@@ -24,6 +24,7 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_hls_module                         \
                 ngx_rtmp_dash_module                        \
                 ngx_rtmp_shared_module                      \
+                ngx_rtmp_gop_module                         \
                 "
 
 
@@ -99,6 +100,7 @@ RTMP_CORE_SRCS="                                            \
                 $ngx_addon_dir/ngx_event_multiport_module.c \
                 $ngx_addon_dir/ngx_rbuf.c                   \
                 $ngx_addon_dir/ngx_rtmp_shared_module.c     \
+                $ngx_addon_dir/ngx_rtmp_gop_module.c        \
                 "
 
 
