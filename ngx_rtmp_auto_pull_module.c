@@ -147,6 +147,10 @@ ngx_rtmp_auto_pull_print(ngx_rtmp_session_t *s)
 
     apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
 
+    if (apcf == NULL) {
+        return;
+    }
+
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "auto pull debug, "
             "auto_pull_port: %V, nbuckets: %ui, free_count: %ui",
             &apcf->auto_pull_port, apcf->nbuckets, apcf->free_count);
@@ -426,7 +430,7 @@ ngx_rtmp_auto_pull_close_stream(ngx_rtmp_session_t *s,
 
     apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
 
-    if (!apcf->auto_pull || s->relay) {
+    if ((apcf && !apcf->auto_pull) || s->relay) {
         goto next;
     }
 
