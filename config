@@ -36,6 +36,7 @@ EVENT_MODULES="$EVENT_MODULES                               \
 RTMP_HTTP_MODULES="                                         \
                 ngx_rtmp_stat_module                        \
                 ngx_rtmp_control_module                     \
+                ngx_http_flv_live_module                    \
                 "
 
 
@@ -60,6 +61,7 @@ RTMP_DEPS="                                                 \
                 $ngx_addon_dir/ngx_stream_zone_module.h     \
                 $ngx_addon_dir/ngx_event_multiport_module.h \
                 $ngx_addon_dir/ngx_rbuf.h                   \
+                $ngx_addon_dir/http/ngx_http_set_header.h   \
                 "
 
 
@@ -104,9 +106,11 @@ RTMP_CORE_SRCS="                                            \
                 "
 
 
-RTMP_HTTP_SRCS="                                            \
-                $ngx_addon_dir/ngx_rtmp_stat_module.c       \
-                $ngx_addon_dir/ngx_rtmp_control_module.c    \
+RTMP_HTTP_SRCS="                                                \
+                $ngx_addon_dir/ngx_rtmp_stat_module.c           \
+                $ngx_addon_dir/ngx_rtmp_control_module.c        \
+                $ngx_addon_dir/http/ngx_http_flv_live_module.c  \
+                $ngx_addon_dir/http/ngx_http_set_header.c       \
                 "
 
 if [ -f auto/module ] ; then

@@ -13,6 +13,7 @@
 #include <ngx_event.h>
 #include <ngx_event_connect.h>
 #include <nginx.h>
+#include <ngx_http.h>
 
 #include "ngx_rtmp_amf.h"
 #include "ngx_rtmp_bandwidth.h"
@@ -198,6 +199,9 @@ struct ngx_rtmp_frame_s {
 #pragma warning(disable:4200)
 #endif
 
+#define NGX_RTMP_LIVE       0
+#define NGX_HTTP_FLV_LIVE   1
+#define NGX_HLS_LIVE        2
 
 typedef struct {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
@@ -257,6 +261,11 @@ typedef struct {
     unsigned                auto_pulled:1;
     unsigned                relay:1;
     unsigned                static_relay:1;
+
+    /* live type: 0- RTMP 1- http-flv 2- hls */
+    unsigned                live_type:2;
+    ngx_http_request_t     *request;
+    ngx_event_handler_pt    handler;
 
     /* input stream 0 (reserved by RTMP spec)
      * is used as free chain link */
@@ -426,6 +435,9 @@ void ngx_rtmp_reset_ping(ngx_rtmp_session_t *s);
 ngx_int_t ngx_rtmp_fire_event(ngx_rtmp_session_t *s, ngx_uint_t evt,
         ngx_rtmp_header_t *h, ngx_chain_t *in);
 
+void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);
+ngx_rtmp_session_t *ngx_rtmp_init_fake_session(ngx_connection_t *c,
+     ngx_rtmp_addr_conf_t *addr_conf);
 
 ngx_int_t ngx_rtmp_set_chunk_size(ngx_rtmp_session_t *s, ngx_uint_t size);
 
@@ -491,6 +503,12 @@ ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,
 /* GOP */
 ngx_int_t ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame);
 ngx_int_t ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss);
+
+/* RTMP Relation server */
+ngx_rtmp_addr_conf_t *ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls,
+        ngx_connection_t *c);
+ngx_listening_t *ngx_rtmp_find_relation_port(ngx_cycle_t *cycle,
+        ngx_str_t *url);
 
 /* Note on priorities:
  * the bigger value the lower the priority.
