@@ -543,6 +543,10 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         return NGX_HTTP_BAD_REQUEST;
     }
 
+    s->name.len = ngx_strlen(v.name);
+    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
+    ngx_memcpy(s->name.data, v.name, s->name.len);
+
     if (ngx_rtmp_play(s, &v) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
