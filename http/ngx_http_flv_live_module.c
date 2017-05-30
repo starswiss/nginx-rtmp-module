@@ -522,6 +522,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     if (rc != NGX_OK) {
         return rc;
     }
+    v.silent = 1;
 
     /* find application & set app_conf */
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
