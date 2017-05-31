@@ -192,6 +192,21 @@ struct ngx_rtmp_frame_s {
     ngx_chain_t            *chain;
 };
 
+typedef struct ngx_mpegts_frame_s   ngx_mpegts_frame_t;
+
+struct ngx_mpegts_frame_s {
+    uint64_t                    pts;
+    uint64_t                    dts;
+    ngx_uint_t                  pid;
+    ngx_uint_t                  sid;
+    ngx_uint_t                  cc;
+    unsigned                    key:1;
+    ngx_uint_t                  ref;
+
+    ngx_mpegts_frame_t         *next;
+    ngx_chain_t                *chain;
+};
+
 /* disable zero-sized array warning by msvc */
 
 #if (NGX_WIN32)
@@ -495,6 +510,15 @@ ngx_rtmp_frame_t *ngx_rtmp_shared_alloc_frame(size_t size, ngx_chain_t *cl,
 void ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame);
 
 #define ngx_rtmp_shared_acquire_frame(frame) ++frame->ref;
+
+
+void ngx_mpegts_shared_append_chain(ngx_mpegts_frame_t *frame, ngx_chain_t *cl,
+        ngx_flag_t mandatory);
+ngx_mpegts_frame_t *ngx_rtmp_shared_alloc_mpegts_frame(ngx_chain_t *cl,
+        ngx_flag_t mandatory);
+void ngx_rtmp_shared_free_mpegts_frame(ngx_mpegts_frame_t *frame);
+
+#define ngx_rtmp_shared_acquire_mpegts_frame(frame) ++frame->ref;
 
 /* Sending messages */
 ngx_int_t ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,

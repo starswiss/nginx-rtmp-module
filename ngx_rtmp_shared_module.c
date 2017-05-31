@@ -13,8 +13,12 @@ static void *ngx_rtmp_shared_create_conf(ngx_cycle_t *cycle);
 static char *ngx_rtmp_shared_init_conf(ngx_cycle_t *cycle, void *conf);
 
 
+/* 1316 == 188 * 7 RTP pack 7 MPEG-TS packets as a RTP package */
+#define NGX_MPEGTS_BUF_SIZE   1316
+
 typedef struct {
     ngx_rtmp_frame_t           *free_frame;
+    ngx_mpegts_frame_t         *free_mpegts_frame;
     ngx_pool_t                 *pool;
 } ngx_rtmp_shared_conf_t;
 
@@ -171,4 +175,101 @@ ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame)
     /* recycle frame */
     frame->next = rscf->free_frame;
     rscf->free_frame = frame;
+}
+
+void
+ngx_mpegts_shared_append_chain(ngx_mpegts_frame_t *frame, ngx_chain_t *cl,
+        ngx_flag_t mandatory)
+{
+    ngx_chain_t               **ll;
+    u_char                     *p;
+    size_t                      len;
+
+    for (ll = &frame->chain; (*ll) && (*ll)->next; ll = &(*ll)->next);
+
+    if (cl == NULL) {
+        if (mandatory) {
+            *ll = ngx_get_chainbuf(NGX_MPEGTS_BUF_SIZE, 1);
+        }
+        return;
+    }
+
+    p = cl->buf->pos;
+
+    for (;;) {
+        if ((*ll) && (*ll)->buf->last == (*ll)->buf->end) {
+            ll = &(*ll)->next;
+        }
+
+        if (*ll == NULL) {
+            *ll = ngx_get_chainbuf(NGX_MPEGTS_BUF_SIZE, 1);
+        }
+
+        while ((*ll)->buf->end - (*ll)->buf->last >= cl->buf->last - p) {
+            len = cl->buf->last - p;
+            (*ll)->buf->last = ngx_cpymem((*ll)->buf->last, p, len);
+            cl = cl->next;
+            if (cl == NULL) {
+                return;
+            }
+            p = cl->buf->pos;
+        }
+
+        len = (*ll)->buf->end - (*ll)->buf->last;
+        (*ll)->buf->last = ngx_cpymem((*ll)->buf->last, p, len);
+        p += len;
+    }
+}
+
+ngx_mpegts_frame_t *
+ngx_rtmp_shared_alloc_mpegts_frame(ngx_chain_t *cl, ngx_flag_t mandatory)
+{
+    ngx_rtmp_shared_conf_t     *rscf;
+    ngx_mpegts_frame_t         *frame;
+
+    rscf = (ngx_rtmp_shared_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                                   ngx_rtmp_shared_module);
+
+    frame = rscf->free_mpegts_frame;
+    if (frame) {
+        rscf->free_mpegts_frame = frame->next;
+    } else {
+        frame = ngx_pcalloc(rscf->pool, sizeof(ngx_mpegts_frame_t));
+        if (frame == NULL) {
+            return NULL;
+        }
+    }
+
+    frame->ref = 1;
+    frame->next = NULL;
+
+    ngx_mpegts_shared_append_chain(frame, cl, mandatory);
+
+    return frame;
+}
+
+void
+ngx_rtmp_shared_free_mpegts_frame(ngx_mpegts_frame_t *frame)
+{
+    ngx_rtmp_shared_conf_t     *rscf;
+    ngx_chain_t                *cl;
+
+    rscf = (ngx_rtmp_shared_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                                   ngx_rtmp_shared_module);
+
+    if (frame == NULL || --frame->ref) {
+        return;
+    }
+
+    /* recycle chainbuf */
+    cl = frame->chain;
+    while (cl) {
+        frame->chain = cl->next;
+        ngx_put_chainbuf(cl);
+        cl = frame->chain;
+    }
+
+    /* recycle frame */
+    frame->next = rscf->free_mpegts_frame;
+    rscf->free_mpegts_frame = frame;
 }
