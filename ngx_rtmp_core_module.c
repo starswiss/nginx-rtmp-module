@@ -772,12 +772,12 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
     port = ls->servers;
     addr_conf = NULL;
 
-    if (port->naddrs > 1) {
-        len = sizeof(struct sockaddr);
-        if (getsockname(c->fd, &sa, &len) != 0) {
-            return NULL;
-        }
+    len = sizeof(struct sockaddr);
+    if (getsockname(c->fd, &sa, &len) != 0) {
+        return NULL;
+    }
 
+    if (port->naddrs > 1) {
         switch (sa.sa_family) {
 #if (NGX_HAVE_INET6)
         case AF_INET6:
@@ -788,7 +788,7 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
             /* the last address is "*" */
 
             for (i = 0; i < port->naddrs - 1; ++i) {
-                if (ngx_memcmp(&addr6[i].addr6, &sin6->sin_addr, 16) == 0) {
+                if (ngx_memcmp(&addr6[i].addr6, &sin6->sin6_addr, 16) == 0) {
                     break;
                 }
             }
@@ -862,7 +862,8 @@ ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
 
         if (ls[i].handler == ngx_rtmp_init_connection
             && ls[i].socklen == u.socklen
-                && ngx_memcmp(ls[i].sockaddr, u.sockaddr, u.socklen) == 0)
+                && ngx_memcmp(ls[i].sockaddr, (u_char *) &u.sockaddr,
+                    u.socklen) == 0)
         {
             return &ls[i];
         }

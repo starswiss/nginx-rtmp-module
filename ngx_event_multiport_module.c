@@ -236,7 +236,7 @@ ngx_event_multiport_get_inet6_url(struct sockaddr *sa,
                       "multiport, invalid port");
         return 0;
     }
-    sin6->sin6_port = htons((int_port_t) (n + pslot));
+    sin6->sin6_port = htons((in_port_t) (n + pslot));
 
     len = p - host;
     if (len == 0) {
@@ -245,7 +245,7 @@ ngx_event_multiport_get_inet6_url(struct sockaddr *sa,
         return 0;
     }
 
-    if (ngx_inet6_addr(host, len, sin6->sin_addr.s6_addr) != NGX_OK) {
+    if (ngx_inet6_addr(host, len, sin6->sin6_addr.s6_addr) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                       "multiport, invalid IPv6 address");
         return 0;
@@ -986,7 +986,8 @@ ngx_event_multiport_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *str)
     for (i = 0; i < cycle->listening.nelts; ++i) {
 
         if (ls[i].socklen == u.socklen
-                && ngx_memcmp(ls[i].sockaddr, u.sockaddr, u.socklen) == 0)
+                && ngx_memcmp(ls[i].sockaddr, (u_char *) &u.sockaddr,
+                    u.socklen) == 0)
         {
             return &ls[i];
         }
