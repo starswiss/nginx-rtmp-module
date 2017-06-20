@@ -1,6 +1,7 @@
 ngx_addon_name="ngx_rtmp_module"
 
 RTMP_CORE_MODULES="                                         \
+                ngx_live_module                             \
                 ngx_rtmp_module                             \
                 ngx_rtmp_core_module                        \
                 ngx_rtmp_cmd_module                         \
@@ -61,6 +62,7 @@ RTMP_DEPS="                                                 \
                 $ngx_addon_dir/ngx_stream_zone_module.h     \
                 $ngx_addon_dir/ngx_event_multiport_module.h \
                 $ngx_addon_dir/ngx_rbuf.h                   \
+                $ngx_addon_dir/ngx_live.h                   \
                 $ngx_addon_dir/http/ngx_http_set_header.h   \
                 "
 
@@ -101,6 +103,7 @@ RTMP_CORE_SRCS="                                            \
                 $ngx_addon_dir/ngx_stream_zone_module.c     \
                 $ngx_addon_dir/ngx_event_multiport_module.c \
                 $ngx_addon_dir/ngx_rbuf.c                   \
+                $ngx_addon_dir/ngx_live.c                   \
                 $ngx_addon_dir/ngx_rtmp_shared_module.c     \
                 $ngx_addon_dir/ngx_rtmp_gop_module.c        \
                 "
