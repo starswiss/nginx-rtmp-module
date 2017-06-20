@@ -465,7 +465,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     }
 
     ssctx->gop_pos = pos;
-    ngx_rtmp_send_message(s, NULL, 0);
+    ngx_rtmp_send_message(ss, NULL, 0);
 
     if (ssctx->send_gop == 1) {
         return NGX_AGAIN;
@@ -512,7 +512,7 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         ssctx->gop_pos = pos;
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
-            ssctx->gop_pos = ssctx->gop_pos;
+            ssctx->gop_pos = sctx->gop_pos;
         }
     }
 
