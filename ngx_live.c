@@ -171,6 +171,16 @@ ngx_live_get_server(ngx_str_t *serverid)
     srv = lcf->free_server;
     if (srv == NULL) {
         srv = ngx_pcalloc(lcf->pool, sizeof(ngx_live_server_t));
+        if (srv == NULL) {
+            return NULL;
+        }
+
+        srv->streams = ngx_pcalloc(lcf->pool,
+                sizeof(ngx_live_stream_t *) * lcf->stream_buckets);
+        if (srv->streams == NULL) {
+            return NULL;
+        }
+
         ++lcf->alloc_server_count;
     } else {
         lcf->free_server = srv->next;
@@ -306,6 +316,8 @@ ngx_live_create_stream(ngx_str_t *serverid, ngx_str_t *stream)
 
     psrv = ngx_live_find_server(serverid);
     if (*psrv == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "server %V does not exist when create stream", serverid);
         return NULL;
     }
 
@@ -316,6 +328,7 @@ ngx_live_create_stream(ngx_str_t *serverid, ngx_str_t *stream)
     }
 
     *pst = ngx_live_get_stream(stream);
+    ++(*psrv)->n_stream;
 
     return *pst;
 }
@@ -328,6 +341,8 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
 
     psrv = ngx_live_find_server(serverid);
     if (*psrv == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "server %V does not exist when delete stream", serverid);
         return;
     }
 
@@ -339,8 +354,71 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
     st = *pst;
     *pst = st->next;
     ngx_live_put_stream(st);
+    --(*psrv)->n_stream;
 
     if ((*psrv)->deleted && (*psrv)->n_stream == 0) {
         ngx_live_delete_server(serverid);
     }
+}
+
+
+#if (NGX_DEBUG)
+static void
+ngx_live_print_stream(ngx_live_stream_t *st, size_t idx)
+{
+    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+            "\t\t%z Stream(%p %s), next:%p", idx, st, st->name, st->next);
+}
+
+static void
+ngx_live_print_server(ngx_live_server_t *srv, size_t idx)
+{
+    ngx_live_conf_t            *lcf;
+    ngx_live_stream_t          *st;
+    size_t                      i;
+
+    lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_live_module);
+
+    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+            "\t%z Server(%p %s) n_stream:%ui, deleted:%d, next:%p",
+            idx, srv, srv->serverid, srv->n_stream, srv->deleted, srv->next);
+
+    for (i = 0; i < lcf->stream_buckets; ++i) {
+        st = srv->streams[i];
+        while (st) {
+            ngx_live_print_stream(st, i);
+            st = st->next;
+        }
+    }
+}
+#endif
+
+void
+ngx_live_print()
+{
+#if (NGX_DEBUG)
+    ngx_live_conf_t            *lcf;
+    ngx_live_server_t          *srv;
+    size_t                      i;
+
+    lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_live_module);
+
+    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+            "free server, alloc %ui, free %ui",
+            lcf->alloc_server_count, lcf->free_server_count);
+
+    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+            "free stream, alloc %ui, free %ui",
+            lcf->alloc_stream_count, lcf->free_stream_count);
+
+    for (i = 0; i < lcf->server_buckets; ++i) {
+        srv = lcf->servers[i];
+        while (srv) {
+            ngx_live_print_server(srv, i);
+            srv = srv->next;
+        }
+    }
+#endif
 }

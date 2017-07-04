@@ -10,13 +10,10 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
-#include "ngx_rtmp.h"
-#include "ngx_rtmp_cmd_module.h"
 
 
 typedef struct ngx_live_stream_s    ngx_live_stream_t;
 typedef struct ngx_live_server_s    ngx_live_server_t;
-
 
 
 ngx_live_server_t *ngx_live_create_server(ngx_str_t *serverid);
@@ -26,5 +23,6 @@ ngx_live_stream_t *ngx_live_create_stream(ngx_str_t *serverid,
         ngx_str_t *stream);
 void ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream);
 
+void ngx_live_print();
 
 #endif
