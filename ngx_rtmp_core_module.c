@@ -22,9 +22,13 @@ static char *ngx_rtmp_core_server(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
 static char *ngx_rtmp_core_listen(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
+static char *ngx_rtmp_core_serverid(ngx_conf_t *cf, ngx_command_t *cmd,
+    void *conf);
 static char *ngx_rtmp_core_application(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
 
+
+static ngx_str_t default_serverid = ngx_string("default");
 
 ngx_rtmp_core_main_conf_t      *ngx_rtmp_core_main_conf;
 
@@ -47,6 +51,13 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
     { ngx_string("listen"),
       NGX_RTMP_SRV_CONF|NGX_CONF_TAKE12,
       ngx_rtmp_core_listen,
+      NGX_RTMP_SRV_CONF_OFFSET,
+      0,
+      NULL },
+
+    { ngx_string("serverid"),
+      NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
+      ngx_rtmp_core_serverid,
       NGX_RTMP_SRV_CONF_OFFSET,
       0,
       NULL },
@@ -277,6 +288,16 @@ ngx_rtmp_core_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->publish_time_fix, prev->publish_time_fix, 1);
     ngx_conf_merge_msec_value(conf->buflen, prev->buflen, 1000);
     ngx_conf_merge_value(conf->busy, prev->busy, 0);
+
+    if (conf->live_server == NULL) {
+        conf->live_server = ngx_live_create_server(&default_serverid);
+
+        if (conf->live_server == NULL) {
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "create default serverid failed");
+            return NGX_CONF_ERROR;
+        }
+    }
 
     if (prev->pool == NULL) {
         prev->pool = ngx_create_pool(4096, &cf->cycle->new_log);
@@ -749,6 +770,25 @@ ngx_rtmp_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                            "the invalid \"%V\" parameter", &value[i]);
         return NGX_CONF_ERROR;
+    }
+
+    return NGX_CONF_OK;
+}
+
+static char *
+ngx_rtmp_core_serverid(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_rtmp_core_srv_conf_t   *rcsf;
+    ngx_str_t                  *value, serverid;
+
+    rcsf = conf;
+    value = cf->args->elts;
+    serverid = value[1];
+
+    rcsf->live_server = ngx_live_create_server(&serverid);
+    if (rcsf->live_server == NULL) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "create serverid %V failed", &serverid);
     }
 
     return NGX_CONF_OK;
