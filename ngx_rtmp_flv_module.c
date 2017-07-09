@@ -471,6 +471,8 @@ ngx_rtmp_flv_send(ngx_rtmp_session_t *s, ngx_file_t *f, ngx_uint_t *ts)
             return NGX_OK;
     }
 
+    (void)last_timestamp;
+
     ngx_log_debug4(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
                   "flv: read tag type=%i size=%uD timestamp=%uD "
                   "last_timestamp=%uD",
