@@ -229,6 +229,8 @@ typedef struct {
     void                  **srv_conf;
     void                  **app_conf;
 
+    ngx_live_server_t      *live_server;
+
     ngx_str_t              *addr_text;
     int                     connected;
 
@@ -349,7 +351,7 @@ extern ngx_rtmp_core_main_conf_t   *ngx_rtmp_core_main_conf;
 typedef struct ngx_rtmp_core_srv_conf_s {
     ngx_array_t             applications; /* ngx_rtmp_core_app_conf_t */
 
-    ngx_live_server_t      *live_server;
+    ngx_str_t               serverid;
 
     ngx_msec_t              timeout;
     ngx_msec_t              ping;

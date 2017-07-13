@@ -476,6 +476,7 @@ static ngx_int_t
 ngx_http_flv_live_handler(ngx_http_request_t *r)
 {
     ngx_http_flv_live_loc_conf_t       *hflcf;
+    ngx_rtmp_core_srv_conf_t           *rcsf;
     ngx_http_flv_live_ctx_t            *ctx;
     ngx_rtmp_session_t                 *s;
     ngx_rtmp_play_t                     v;
@@ -498,7 +499,11 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     if (s == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
+    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
     s->live_type = NGX_HTTP_FLV_LIVE;
+    s->live_server = ngx_live_create_server(&rcsf->serverid);
     s->handler = ngx_http_flv_live_send;
 
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_flv_live_ctx_t));

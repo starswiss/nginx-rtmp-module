@@ -114,6 +114,7 @@ static ngx_int_t
 ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
+    ngx_rtmp_core_srv_conf_t   *rcsf;
     size_t                      len;
 
     static ngx_rtmp_connect_t   v;
@@ -187,6 +188,9 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             v.app, v.args, v.flashver, v.swf_url, v.tc_url, v.page_url,
             (uint32_t)v.acodecs, (uint32_t)v.vcodecs,
             (ngx_int_t)v.object_encoding);
+
+    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+    s->live_server = ngx_live_create_server(&rcsf->serverid);
 
     return ngx_rtmp_connect(s, &v);
 }
