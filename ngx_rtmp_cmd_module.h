@@ -99,6 +99,8 @@ typedef struct {
 
 void ngx_rtmp_cmd_fill_args(u_char name[NGX_RTMP_MAX_NAME],
         u_char args[NGX_RTMP_MAX_ARGS]);
+void ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
+        unsigned publishing);
 
 
 typedef ngx_int_t (*ngx_rtmp_connect_pt)(ngx_rtmp_session_t *s,

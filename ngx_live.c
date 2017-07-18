@@ -3,22 +3,15 @@
  */
 
 
-#include "ngx_live.h"
+#include "ngx_rtmp.h"
 
 
 static void *ngx_live_create_conf(ngx_cycle_t *cf);
 static char *ngx_live_init_conf(ngx_cycle_t *cycle, void *conf);
 
 
-#define NGX_LIVE_STREAM_LEN     512
 #define NGX_LIVE_SERVERID_LEN   512
 
-
-struct ngx_live_stream_s {
-    u_char                      name[NGX_LIVE_STREAM_LEN];
-
-    ngx_live_stream_t          *next;
-};
 
 struct ngx_live_server_s {
     u_char                      serverid[NGX_LIVE_SERVERID_LEN];
@@ -254,6 +247,7 @@ ngx_live_get_stream(ngx_str_t *stream)
     }
 
     *ngx_cpymem(st->name, stream->data, stream->len) = 0;
+    st->pslot = -1;
 
     return st;
 }
@@ -361,6 +355,56 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
     }
 }
 
+void
+ngx_live_create_ctx(ngx_rtmp_session_t *s, unsigned publishing)
+{
+    ngx_rtmp_core_ctx_t        *ctx, **pctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_core_module);
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_core_ctx_t));
+        if (ctx == NULL) {
+            return;
+        }
+
+        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_core_module);
+    }
+
+    ctx->publishing = publishing;
+    ctx->session = s;
+    if (publishing) {
+        pctx = &s->live_stream->publish_ctx;
+    } else {
+        pctx = &s->live_stream->play_ctx;
+    }
+
+    ctx->next = (*pctx);
+    *pctx = ctx;
+}
+
+void
+ngx_live_delete_ctx(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_core_ctx_t        *ctx, **pctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_core_module);
+    if (ctx == NULL) {
+        return;
+    }
+
+    if (ctx->publishing) {
+        pctx = &s->live_stream->publish_ctx;
+    } else {
+        pctx = &s->live_stream->play_ctx;
+    }
+
+    for (/* void */; *pctx; pctx = &(*pctx)->next) {
+        if (*pctx == ctx) {
+            *pctx = ctx->next;
+            return;
+        }
+    }
+}
 
 #if (NGX_DEBUG)
 static void

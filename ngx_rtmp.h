@@ -17,7 +17,6 @@
 
 #include "ngx_rtmp_amf.h"
 #include "ngx_rtmp_bandwidth.h"
-#include "ngx_live.h"
 
 
 #if (NGX_WIN32)
@@ -219,6 +218,9 @@ struct ngx_mpegts_frame_s {
 #define NGX_HTTP_FLV_LIVE   1
 #define NGX_HLS_LIVE        2
 
+typedef struct ngx_live_stream_s    ngx_live_stream_t;
+typedef struct ngx_live_server_s    ngx_live_server_t;
+
 typedef struct {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
 
@@ -230,6 +232,7 @@ typedef struct {
     void                  **app_conf;
 
     ngx_live_server_t      *live_server;
+    ngx_live_stream_t      *live_stream;
 
     ngx_str_t              *addr_text;
     int                     connected;
@@ -243,6 +246,9 @@ typedef struct {
     /* client buffer time in msec */
     uint32_t                buflen;
     uint32_t                ack_size;
+
+    /* app/name */
+    ngx_str_t               stream;
 
     /* stream name in publish or play*/
     ngx_str_t               name;
@@ -311,6 +317,40 @@ typedef struct {
     ngx_rtmp_frame_t       *out[0];
 } ngx_rtmp_session_t;
 
+/* live stream manage */
+#define NGX_LIVE_STREAM_LEN     512
+
+typedef struct ngx_rtmp_core_ctx_s  ngx_rtmp_core_ctx_t;
+
+struct ngx_rtmp_core_ctx_s {
+    ngx_rtmp_core_ctx_t    *next;
+    ngx_rtmp_session_t     *session;
+
+    unsigned                publishing:1;
+};
+
+struct ngx_live_stream_s {
+    u_char                      name[NGX_LIVE_STREAM_LEN];
+
+    ngx_int_t                   pslot;
+
+    ngx_rtmp_core_ctx_t        *publish_ctx;
+    ngx_rtmp_core_ctx_t        *play_ctx;
+
+    ngx_live_stream_t          *next;
+};
+
+ngx_live_server_t *ngx_live_create_server(ngx_str_t *serverid);
+void ngx_live_delete_server(ngx_str_t *serverid);
+
+ngx_live_stream_t *ngx_live_create_stream(ngx_str_t *serverid,
+        ngx_str_t *stream);
+void ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream);
+
+void ngx_live_create_ctx(ngx_rtmp_session_t *s, unsigned publishing);
+void ngx_live_delete_ctx(ngx_rtmp_session_t *s);
+
+void ngx_live_print();
 
 #if (NGX_WIN32)
 #pragma warning(pop)

@@ -109,6 +109,30 @@ ngx_rtmp_cmd_fill_args(u_char name[NGX_RTMP_MAX_NAME],
     ngx_cpystrn(args, p, NGX_RTMP_MAX_ARGS);
 }
 
+void
+ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
+        unsigned publishing)
+{
+    u_char                     *p;
+    ngx_rtmp_core_srv_conf_t   *rcsf;
+
+    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+    s->name.len = ngx_strlen(name);
+    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
+    ngx_memcpy(s->name.data, name, s->name.len);
+
+    s->stream.len = s->app.len + 1 + s->name.len; /* app/name */
+    s->stream.data = ngx_palloc(s->connection->pool, s->stream.len);
+    p = s->stream.data;
+    p = ngx_copy(p, s->app.data, s->app.len);
+    *p++ = '/';
+    p = ngx_copy(p, s->name.data, s->name.len);
+
+    s->live_stream = ngx_live_create_stream(&rcsf->serverid, &s->stream);
+
+    ngx_live_create_ctx(s, publishing);
+}
 
 static ngx_int_t
 ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
@@ -422,6 +446,17 @@ ngx_rtmp_cmd_close_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
+    ngx_rtmp_core_srv_conf_t   *rcsf;
+
+    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+    ngx_live_delete_ctx(s);
+    if (s->live_stream && s->live_stream->play_ctx == NULL
+            && s->live_stream->publish_ctx == NULL)
+    {
+        ngx_live_delete_stream(&rcsf->serverid, &s->stream);
+    }
+
     return NGX_OK;
 }
 
@@ -462,7 +497,7 @@ ngx_rtmp_cmd_delete_stream(ngx_rtmp_session_t *s, ngx_rtmp_delete_stream_t *v)
 {
     ngx_rtmp_close_stream_t         cv;
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "deleteStream");
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "deleteStream %p", s);
 
     cv.stream = 0;
 
@@ -510,9 +545,7 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   "publish: name='%s' args='%s' type=%s silent=%d",
                   v.name, v.args, v.type, v.silent);
 
-    s->name.len = ngx_strlen(v.name);
-    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
-    ngx_memcpy(s->name.data, v.name, s->name.len);
+    ngx_rtmp_cmd_stream_init(s, v.name, 1);
 
     return ngx_rtmp_publish(s, &v);
 }
@@ -575,9 +608,7 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   (ngx_int_t) v.duration, (ngx_int_t) v.reset,
                   (ngx_int_t) v.silent);
 
-    s->name.len = ngx_strlen(v.name);
-    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
-    ngx_memcpy(s->name.data, v.name, s->name.len);
+    ngx_rtmp_cmd_stream_init(s, v.name, 0);
 
     return ngx_rtmp_play(s, &v);
 }
@@ -705,7 +736,7 @@ static ngx_int_t
 ngx_rtmp_cmd_disconnect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                         ngx_chain_t *in)
 {
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "disconnect");
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "disconnect %p", s);
 
     return ngx_rtmp_disconnect(s);
 }
