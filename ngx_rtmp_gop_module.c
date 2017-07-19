@@ -491,11 +491,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     ssctx->gop_pos = pos;
     ngx_rtmp_send_message(ss, NULL, 0);
 
-    if (ssctx->send_gop == 1) {
-        return NGX_AGAIN;
-    }
-
-    return NGX_OK;
+    return NGX_AGAIN;
 }
 
 ngx_int_t
