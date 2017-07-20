@@ -509,7 +509,7 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
     ssctx = ngx_rtmp_get_module_ctx(ss, ngx_rtmp_gop_module);
     if (ssctx == NULL) {
-        ssctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_gop_ctx_t));
+        ssctx = ngx_pcalloc(ss->connection->pool, sizeof(ngx_rtmp_gop_ctx_t));
         if (ssctx == NULL) {
             return NGX_ERROR;
         }
