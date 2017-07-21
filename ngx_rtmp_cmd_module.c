@@ -8,6 +8,7 @@
 #include <ngx_core.h>
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_streams.h"
+#include "ngx_stream_zone_module.h"
 
 
 #define NGX_RTMP_FMS_VERSION        "FMS/3,0,1,123"
@@ -454,6 +455,9 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     if (s->live_stream && s->live_stream->play_ctx == NULL
             && s->live_stream->publish_ctx == NULL)
     {
+        if (s->live_stream->pslot == ngx_process_slot) {
+            ngx_stream_zone_delete_stream(&s->stream);
+        }
         ngx_live_delete_stream(&rcsf->serverid, &s->stream);
     }
 
