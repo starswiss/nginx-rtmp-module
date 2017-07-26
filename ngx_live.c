@@ -248,6 +248,7 @@ ngx_live_get_stream(ngx_str_t *stream)
 
     *ngx_cpymem(st->name, stream->data, stream->len) = 0;
     st->pslot = -1;
+    st->next = NULL;
 
     return st;
 }
@@ -341,6 +342,7 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
     }
 
     pst = ngx_live_find_stream(*psrv, stream);
+
     if (*pst == NULL) {
         return;
     }

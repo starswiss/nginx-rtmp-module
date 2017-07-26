@@ -26,7 +26,7 @@ static char * ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd,
 static ngx_int_t ngx_rtmp_relay_publish(ngx_rtmp_session_t *s,
        ngx_rtmp_publish_t *v);
 static ngx_rtmp_relay_ctx_t * ngx_rtmp_relay_create_connection(
-       ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
+       ngx_rtmp_session_t *s, ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
        ngx_rtmp_relay_target_t *target);
 
 
@@ -229,7 +229,7 @@ ngx_rtmp_relay_static_pull_reconnect(ngx_event_t *ev)
     ngx_log_debug0(NGX_LOG_DEBUG_RTMP, racf->log, 0,
                    "relay: reconnecting static pull");
 
-    ctx = ngx_rtmp_relay_create_connection(&rs->cctx, &rs->target->name,
+    ctx = ngx_rtmp_relay_create_connection(NULL, &rs->cctx, &rs->target->name,
                                            rs->target);
     if (ctx) {
         ctx->session->static_relay = 1;
@@ -335,7 +335,8 @@ ngx_rtmp_relay_copy_str(ngx_pool_t *pool, ngx_str_t *dst, ngx_str_t *src)
 
 
 static ngx_rtmp_relay_ctx_t *
-ngx_rtmp_relay_create_connection(ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
+ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
+        ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
         ngx_rtmp_relay_target_t *target)
 {
     ngx_rtmp_relay_app_conf_t      *racf;
@@ -362,6 +363,81 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
         return NULL;
     }
 
+    pc = ngx_pcalloc(pool, sizeof(ngx_peer_connection_t));
+    if (pc == NULL) {
+        goto clear;
+    }
+
+    if (target->url.naddrs == 0) {
+        ngx_log_error(NGX_LOG_ERR, racf->log, 0,
+                      "relay: no address");
+        goto clear;
+    }
+
+    /* get address */
+    addr = &target->url.addrs[target->counter % target->url.naddrs];
+    target->counter++;
+
+    /* copy log to keep shared log unchanged */
+    pc->log = racf->log;
+    pc->get = ngx_rtmp_relay_get_peer;
+    pc->free = ngx_rtmp_relay_free_peer;
+    pc->name = &addr->name;
+    pc->socklen = addr->socklen;
+    pc->sockaddr = (struct sockaddr *)ngx_palloc(pool, pc->socklen);
+    if (pc->sockaddr == NULL) {
+        goto clear;
+    }
+    ngx_memcpy(pc->sockaddr, addr->sockaddr, pc->socklen);
+
+    rc = ngx_event_connect_peer(pc);
+    if (rc != NGX_OK && rc != NGX_AGAIN ) {
+        ngx_log_debug0(NGX_LOG_DEBUG_RTMP, racf->log, 0,
+                "relay: connection failed");
+        goto clear;
+    }
+    c = pc->connection;
+    c->pool = pool;
+    c->addr_text = target->url.url;
+
+    addr_conf = ngx_pcalloc(pool, sizeof(ngx_rtmp_addr_conf_t));
+    if (addr_conf == NULL) {
+        goto clear;
+    }
+    addr_ctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_conf_ctx_t));
+    if (addr_ctx == NULL) {
+        goto clear;
+    }
+    addr_conf->ctx = addr_ctx;
+    addr_ctx->main_conf = cctx->main_conf;
+    addr_ctx->srv_conf  = cctx->srv_conf;
+    ngx_str_set(&addr_conf->addr_text, "ngx-relay");
+
+    rs = ngx_rtmp_init_session(c, addr_conf);
+    if (rs == NULL) {
+        /* no need to destroy pool */
+        return NULL;
+    }
+    rs->app_conf = cctx->app_conf;
+    rs->relay = 1;
+
+#define NGX_RTMP_SESSION_STR_COPY(to, from)                                 \
+    if (s && ngx_rtmp_relay_copy_str(pool, &rs->to, &s->from) != NGX_OK) {  \
+        goto clear;                                                         \
+    }
+
+    NGX_RTMP_SESSION_STR_COPY(stream,   stream);
+    NGX_RTMP_SESSION_STR_COPY(name,     name);
+    NGX_RTMP_SESSION_STR_COPY(app,      app);
+    NGX_RTMP_SESSION_STR_COPY(args,     args);
+    NGX_RTMP_SESSION_STR_COPY(flashver, flashver);
+    NGX_RTMP_SESSION_STR_COPY(swf_url,  swf_url);
+    NGX_RTMP_SESSION_STR_COPY(tc_url,   tc_url);
+    NGX_RTMP_SESSION_STR_COPY(page_url, page_url);
+
+#undef NGX_RTMP_SESSION_STR_COPY
+
+    /* rctx from here */
     rctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_relay_ctx_t));
     if (rctx == NULL) {
         goto clear;
@@ -381,7 +457,7 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
 #define NGX_RTMP_RELAY_STR_COPY(to, from)                                     \
     if (ngx_rtmp_relay_copy_str(pool, &rctx->to, &target->from) != NGX_OK) {  \
         goto clear;                                                           \
-    }
+    }                                                                         \
 
     NGX_RTMP_RELAY_STR_COPY(app,        app);
     NGX_RTMP_RELAY_STR_COPY(tc_url,     tc_url);
@@ -395,6 +471,17 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
     rctx->stop  = target->stop;
 
 #undef NGX_RTMP_RELAY_STR_COPY
+
+#define NGX_RTMP_DEFAULT_STR(to, from)          \
+    if (rctx->to.len == 0) {                    \
+        rctx->to = rs->from;                    \
+    }
+
+    NGX_RTMP_DEFAULT_STR(page_url,  page_url);
+    NGX_RTMP_DEFAULT_STR(swf_url,   swf_url);
+    NGX_RTMP_DEFAULT_STR(flash_ver, flashver);
+
+#undef NGX_RTMP_DEFAULT_STR
 
     if (rctx->app.len == 0 || rctx->play_path.len == 0) {
         /* parse uri */
@@ -438,67 +525,14 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
         }
     }
 
-    pc = ngx_pcalloc(pool, sizeof(ngx_peer_connection_t));
-    if (pc == NULL) {
-        goto clear;
-    }
 
-    if (target->url.naddrs == 0) {
-        ngx_log_error(NGX_LOG_ERR, racf->log, 0,
-                      "relay: no address");
-        goto clear;
-    }
-
-    /* get address */
-    addr = &target->url.addrs[target->counter % target->url.naddrs];
-    target->counter++;
-
-    /* copy log to keep shared log unchanged */
-    rctx->log = *racf->log;
-    pc->log = &rctx->log;
-    pc->get = ngx_rtmp_relay_get_peer;
-    pc->free = ngx_rtmp_relay_free_peer;
-    pc->name = &addr->name;
-    pc->socklen = addr->socklen;
-    pc->sockaddr = (struct sockaddr *)ngx_palloc(pool, pc->socklen);
-    if (pc->sockaddr == NULL) {
-        goto clear;
-    }
-    ngx_memcpy(pc->sockaddr, addr->sockaddr, pc->socklen);
-
-    rc = ngx_event_connect_peer(pc);
-    if (rc != NGX_OK && rc != NGX_AGAIN ) {
-        ngx_log_debug0(NGX_LOG_DEBUG_RTMP, racf->log, 0,
-                "relay: connection failed");
-        goto clear;
-    }
-    c = pc->connection;
-    c->pool = pool;
-    c->addr_text = rctx->url;
-
-    addr_conf = ngx_pcalloc(pool, sizeof(ngx_rtmp_addr_conf_t));
-    if (addr_conf == NULL) {
-        goto clear;
-    }
-    addr_ctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_conf_ctx_t));
-    if (addr_ctx == NULL) {
-        goto clear;
-    }
-    addr_conf->ctx = addr_ctx;
-    addr_ctx->main_conf = cctx->main_conf;
-    addr_ctx->srv_conf  = cctx->srv_conf;
-    ngx_str_set(&addr_conf->addr_text, "ngx-relay");
-
-    rs = ngx_rtmp_init_session(c, addr_conf);
-    if (rs == NULL) {
-        /* no need to destroy pool */
-        return NULL;
-    }
-    rs->app_conf = cctx->app_conf;
-    rs->relay = 1;
     rctx->session = rs;
     ngx_rtmp_set_ctx(rs, rctx, ngx_rtmp_relay_module);
     ngx_str_set(&rs->flashver, "ngx-local-relay");
+
+    rctx->log = *racf->log;
+    pc->log = &rctx->log;
+    c->addr_text = rctx->url;
 
 #if (NGX_STAT_STUB)
     (void) ngx_atomic_fetch_add(ngx_stat_active, 1);
@@ -525,7 +559,7 @@ ngx_rtmp_relay_create_remote_ctx(ngx_rtmp_session_t *s, ngx_str_t* name,
     cctx.srv_conf = s->srv_conf;
     cctx.main_conf = s->main_conf;
 
-    return ngx_rtmp_relay_create_connection(&cctx, name, target);
+    return ngx_rtmp_relay_create_connection(s, &cctx, name, target);
 }
 
 
@@ -772,6 +806,8 @@ ngx_rtmp_relay_play_local(ngx_rtmp_session_t *s)
     *(ngx_cpymem(v.name, ctx->name.data,
             ngx_min(sizeof(v.name) - 1, ctx->name.len))) = 0;
 
+    ngx_rtmp_cmd_stream_init(s, v.name, 0);
+
     return ngx_rtmp_play(s, &v);
 }
 
@@ -791,6 +827,8 @@ ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s)
     v.silent = 1;
     *(ngx_cpymem(v.name, ctx->name.data,
             ngx_min(sizeof(v.name) - 1, ctx->name.len))) = 0;
+
+    ngx_rtmp_cmd_stream_init(s, v.name, 1);
 
     return ngx_rtmp_publish(s, &v);
 }
@@ -1318,13 +1356,6 @@ ngx_rtmp_relay_handshake_done(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     if (ctx == NULL || !s->relay) {
         return NGX_OK;
     }
-
-    s->name = ctx->name;
-    s->app = ctx->app;
-    s->tc_url = ctx->tc_url;
-    s->page_url = ctx->page_url;
-    s->swf_url = ctx->swf_url;
-    s->flashver = ctx->flash_ver;
 
     return ngx_rtmp_relay_send_connect(s);
 }

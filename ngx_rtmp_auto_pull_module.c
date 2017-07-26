@@ -218,7 +218,6 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
                 "auto pull, session %p stream %s already in current process",
                 s, v->name);
-        s->auto_pulled = 1;
         goto next;
     }
 

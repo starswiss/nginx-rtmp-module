@@ -119,16 +119,20 @@ ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
 
     rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
-    s->name.len = ngx_strlen(name);
-    s->name.data = ngx_palloc(s->connection->pool, s->name.len);
-    ngx_memcpy(s->name.data, name, s->name.len);
+    if (s->name.len == 0) {
+        s->name.len = ngx_strlen(name);
+        s->name.data = ngx_palloc(s->connection->pool, s->name.len);
+        ngx_memcpy(s->name.data, name, s->name.len);
+    }
 
-    s->stream.len = s->app.len + 1 + s->name.len; /* app/name */
-    s->stream.data = ngx_palloc(s->connection->pool, s->stream.len);
-    p = s->stream.data;
-    p = ngx_copy(p, s->app.data, s->app.len);
-    *p++ = '/';
-    p = ngx_copy(p, s->name.data, s->name.len);
+    if (s->stream.len == 0) {
+        s->stream.len = s->app.len + 1 + s->name.len; /* app/name */
+        s->stream.data = ngx_palloc(s->connection->pool, s->stream.len);
+        p = s->stream.data;
+        p = ngx_copy(p, s->app.data, s->app.len);
+        *p++ = '/';
+        p = ngx_copy(p, s->name.data, s->name.len);
+    }
 
     s->live_stream = ngx_live_create_stream(&rcsf->serverid, &s->stream);
 
