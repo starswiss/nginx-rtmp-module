@@ -44,10 +44,14 @@ struct ngx_rtmp_relay_ctx_s {
     ngx_rtmp_relay_ctx_t           *next;
 
     ngx_str_t                       app;
+    ngx_str_t                       args;
     ngx_str_t                       tc_url;
     ngx_str_t                       page_url;
     ngx_str_t                       swf_url;
     ngx_str_t                       flash_ver;
+    uint32_t                        acodecs;
+    uint32_t                        vcodecs;
+
     ngx_str_t                       play_path;
     ngx_int_t                       live;
     ngx_int_t                       start;

@@ -435,6 +435,9 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     NGX_RTMP_SESSION_STR_COPY(tc_url,   tc_url);
     NGX_RTMP_SESSION_STR_COPY(page_url, page_url);
 
+    rs->acodecs = s->acodecs;
+    rs->vcodecs = s->vcodecs;
+
 #undef NGX_RTMP_SESSION_STR_COPY
 
     /* rctx from here */
@@ -472,14 +475,26 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
 
 #undef NGX_RTMP_RELAY_STR_COPY
 
+/* if target not set, set rctx default */
 #define NGX_RTMP_DEFAULT_STR(to, from)          \
     if (rctx->to.len == 0) {                    \
         rctx->to = rs->from;                    \
     }
 
+    NGX_RTMP_DEFAULT_STR(app,       app);
+    NGX_RTMP_DEFAULT_STR(args,      args);
+    NGX_RTMP_DEFAULT_STR(tc_url,    tc_url);
     NGX_RTMP_DEFAULT_STR(page_url,  page_url);
     NGX_RTMP_DEFAULT_STR(swf_url,   swf_url);
     NGX_RTMP_DEFAULT_STR(flash_ver, flashver);
+
+    if (rctx->acodecs == 0) {
+        rctx->acodecs = rs->acodecs;
+    }
+
+    if (rctx->vcodecs == 0) {
+        rctx->vcodecs = rs->vcodecs;
+    }
 
 #undef NGX_RTMP_DEFAULT_STR
 
@@ -837,9 +852,8 @@ ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_relay_send_connect(ngx_rtmp_session_t *s)
 {
+    double                      acodecs = 3575, vcodecs = 252;
     static double               trans = NGX_RTMP_RELAY_CONNECT_TRANS;
-    static double               acodecs = 3575;
-    static double               vcodecs = 252;
 
     static ngx_rtmp_amf_elt_t   out_cmd[] = {
 
@@ -865,11 +879,11 @@ ngx_rtmp_relay_send_connect(ngx_rtmp_session_t *s)
 
         { NGX_RTMP_AMF_NUMBER,
           ngx_string("audioCodecs"),
-          &acodecs, 0 },
+          NULL, 0 },
 
         { NGX_RTMP_AMF_NUMBER,
           ngx_string("videoCodecs"),
-          &vcodecs, 0 }
+          NULL, 0 }
     };
 
     static ngx_rtmp_amf_elt_t   out_elts[] = {
@@ -953,6 +967,16 @@ ngx_rtmp_relay_send_connect(ngx_rtmp_session_t *s)
         out_cmd[4].data = NGX_RTMP_RELAY_FLASHVER;
         out_cmd[4].len  = sizeof(NGX_RTMP_RELAY_FLASHVER) - 1;
     }
+
+    if (ctx->acodecs != 0) {
+        acodecs = (double) ctx->acodecs;
+    }
+    out_cmd[5].data = &acodecs;
+
+    if (ctx->vcodecs != 0) {
+        vcodecs = (double) ctx->vcodecs;
+    }
+    out_cmd[6].data = &vcodecs;
 
     ngx_memzero(&h, sizeof(h));
     h.csid = NGX_RTMP_RELAY_CSID_AMF_INI;
