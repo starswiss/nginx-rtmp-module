@@ -28,6 +28,7 @@ static char * ngx_rtmp_log_compile_format(ngx_conf_t *cf, ngx_array_t *ops,
 
 typedef struct ngx_rtmp_log_op_s ngx_rtmp_log_op_t;
 
+#define MAX_ACCESS_LOG_LINE_LEN     4096
 
 typedef size_t (*ngx_rtmp_log_op_getlen_pt)(ngx_rtmp_session_t *s,
         ngx_rtmp_log_op_t *op);
@@ -61,7 +62,8 @@ typedef struct {
     ngx_open_file_t            *file;
     time_t                      disk_full_time;
     time_t                      error_log_time;
-    ngx_rtmp_log_fmt_t *format;
+    ngx_msec_t                  trunc_timer;
+    ngx_rtmp_log_fmt_t         *format;
 } ngx_rtmp_log_t;
 
 
@@ -78,10 +80,17 @@ typedef struct {
 
 
 typedef struct {
+    ngx_rtmp_session_t         *session;
+    ngx_event_t                 event;
+    ngx_rtmp_log_t             *log;
+} ngx_rtmp_log_timer_ctx_t;
+
+typedef struct {
     unsigned                    play:1;
     unsigned                    publish:1;
     u_char                      name[NGX_RTMP_MAX_NAME];
     u_char                      args[NGX_RTMP_MAX_ARGS];
+    ngx_array_t                 timers; /* ngx_rtmp_log_timer_ctx_t */
 } ngx_rtmp_log_ctx_t;
 
 
@@ -91,7 +100,7 @@ static ngx_str_t ngx_rtmp_access_log = ngx_string(NGX_HTTP_LOG_PATH);
 static ngx_command_t  ngx_rtmp_log_commands[] = {
 
     { ngx_string("access_log"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE12,
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE123,
       ngx_rtmp_log_set_log,
       NGX_RTMP_APP_CONF_OFFSET,
       0,
@@ -204,7 +213,7 @@ ngx_rtmp_log_var_msec_getdata(ngx_rtmp_session_t *s, u_char *buf,
     ngx_time_t  *tp;
 
     tp = ngx_timeofday();
-    
+
     return ngx_sprintf(buf, "%T.%03M", tp->sec, tp->msec);
 }
 
@@ -555,6 +564,7 @@ ngx_rtmp_log_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 
     log->disk_full_time = 0;
     log->error_log_time = 0;
+    log->trunc_timer = 0;
 
     lmcf = ngx_rtmp_conf_get_module_main_conf(cf, ngx_rtmp_log_module);
     fmt = lmcf->formats.elts;
@@ -566,6 +576,13 @@ ngx_rtmp_log_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 }
 
 
+/*
+ * access_log off;
+ * access_log file;
+ * access_log file format_name;
+ * access_log file trunc=1m;
+ * access_log file format_name trunc=1m;
+ */
 static char *
 ngx_rtmp_log_set_log(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -574,8 +591,12 @@ ngx_rtmp_log_set_log(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_rtmp_log_main_conf_t   *lmcf;
     ngx_rtmp_log_fmt_t         *fmt;
     ngx_rtmp_log_t             *log;
-    ngx_str_t                  *value, name;
+    ngx_str_t                  *value, name, timer;
     ngx_uint_t                  n;
+    ngx_flag_t                  format_configured;
+
+    name.len = 0;
+    format_configured = 0;
 
     value = cf->args->elts;
 
@@ -605,12 +626,35 @@ ngx_rtmp_log_set_log(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-    if (cf->args->nelts == 2) {
+    for (n = 2; n < cf->args->nelts; ++n) {
+        /* sizeof("trunc=") - 1 = 6 */
+        if (ngx_memcmp("trunc=", value[n].data, 6) == 0) {
+            timer.data = value[n].data + 6;
+            timer.len = value[n].len - 6;
+
+            log->trunc_timer = ngx_parse_time(&timer, 0);
+            if (log->trunc_timer == (ngx_msec_t) NGX_ERROR) {
+                ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
+                        "unknown trunc timer format \"%V\"", &timer);
+                return NGX_CONF_ERROR;
+            }
+        } else {
+            if (format_configured) {
+                ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
+                        "format name has been configured");
+                return NGX_CONF_ERROR;
+            }
+
+            format_configured = 1;
+            name = value[n];
+        }
+    }
+
+    if (name.len == 0) {
         ngx_str_set(&name, "combined");
         lmcf->combined_used = 1;
 
     } else {
-        name = value[2];
         if (ngx_strcmp(name.data, "combined") == 0) {
             lmcf->combined_used = 1;
         }
@@ -810,13 +854,24 @@ invalid:
 static ngx_rtmp_log_ctx_t *
 ngx_rtmp_log_set_names(ngx_rtmp_session_t *s, u_char *name, u_char *args)
 {
-    ngx_rtmp_log_ctx_t *ctx;
+    ngx_rtmp_log_ctx_t         *ctx;
+    ngx_rtmp_log_app_conf_t    *lacf;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_log_module);
     if (ctx == NULL) {
         ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_log_ctx_t));
         if (ctx == NULL) {
             return NULL;
+        }
+
+        lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_log_module);
+
+        if (lacf->logs) {
+            if (ngx_array_init(&ctx->timers, s->connection->pool,
+                lacf->logs->nelts, sizeof(ngx_rtmp_log_timer_ctx_t)) != NGX_OK)
+            {
+                return NULL;
+            }
         }
 
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_log_module);
@@ -826,48 +881,6 @@ ngx_rtmp_log_set_names(ngx_rtmp_session_t *s, u_char *name, u_char *args)
     ngx_memcpy(ctx->args, args, NGX_RTMP_MAX_ARGS);
 
     return ctx;
-}
-
-
-static ngx_int_t
-ngx_rtmp_log_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
-{
-    ngx_rtmp_log_ctx_t *ctx;
-
-    if (s->auto_pushed || s->relay) {
-        goto next;
-    }
-
-    ctx = ngx_rtmp_log_set_names(s, v->name, v->args);
-    if (ctx == NULL) {
-        goto next;
-    }
-
-    ctx->publish = 1;
-
-next:
-    return next_publish(s, v);
-}
-
-
-static ngx_int_t
-ngx_rtmp_log_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
-{
-    ngx_rtmp_log_ctx_t *ctx;
-
-    if (s->auto_pushed || s->relay) {
-        goto next;
-    }
-
-    ctx = ngx_rtmp_log_set_names(s, v->name, v->args);
-    if (ctx == NULL) {
-        goto next;
-    }
-
-    ctx->play = 1;
-
-next:
-    return next_play(s, v);
 }
 
 
@@ -912,17 +925,178 @@ ngx_rtmp_log_write(ngx_rtmp_session_t *s, ngx_rtmp_log_t *log, u_char *buf,
     }
 }
 
+static void
+ngx_rtmp_log_pre_write(ngx_rtmp_session_t *s, ngx_rtmp_log_t *log)
+{
+    ngx_rtmp_log_op_t          *op;
+    u_char                      line[MAX_ACCESS_LOG_LINE_LEN], *p;
+    size_t                      len;
+    ngx_uint_t                  n;
+
+    if (ngx_time() == log->disk_full_time) {
+        /* FreeBSD full disk protection;
+         * nginx http logger does the same */
+        return;
+    }
+
+    len = 0;
+    op = log->format->ops->elts;
+    for (n = 0; n < log->format->ops->nelts; ++n, ++op) {
+        len += op->getlen(s, op);
+    }
+    len += NGX_LINEFEED_SIZE;
+
+    if (len > MAX_ACCESS_LOG_LINE_LEN) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "Access line len %z greater than %d",
+                len, MAX_ACCESS_LOG_LINE_LEN);
+        ngx_rtmp_finalize_session(s);
+
+        return;
+    }
+
+    p = line;
+    op = log->format->ops->elts;
+    for (n = 0; n < log->format->ops->nelts; ++n, ++op) {
+        p = op->getdata(s, p, op);
+    }
+
+    ngx_linefeed(p);
+
+    ngx_rtmp_log_write(s, log, line, p - line);
+}
+
+static void
+ngx_rtmp_log_trunc_timer(ngx_event_t *ev)
+{
+    ngx_rtmp_log_timer_ctx_t   *ltctx;
+    ngx_rtmp_session_t         *s;
+    ngx_rtmp_log_t             *log;
+    ngx_msec_t                  t;
+
+    ltctx = ev->data;
+
+    s = ltctx->session;
+    log = ltctx->log;
+
+    ngx_rtmp_log_pre_write(s, log);
+
+    t = log->trunc_timer - ngx_current_msec % log->trunc_timer;
+    ngx_add_timer(ev, t);
+}
+
+static void
+ngx_rtmp_log_add_trunc_timer(ngx_rtmp_session_t *s, ngx_rtmp_log_ctx_t *ctx,
+        ngx_rtmp_log_t *log)
+{
+    ngx_rtmp_log_timer_ctx_t   *ltctx;
+    ngx_event_t                *e;
+    ngx_msec_t                  t;
+
+    ltctx = ngx_array_push(&ctx->timers);
+    ltctx->session = s;
+    ltctx->log = log;
+    e = &ltctx->event;
+
+    e->data = ltctx;
+    e->log = s->connection->log;
+    e->handler = ngx_rtmp_log_trunc_timer;
+
+    t = log->trunc_timer - ngx_current_msec % log->trunc_timer;
+    ngx_add_timer(e, t);
+}
+
+static ngx_int_t
+ngx_rtmp_log_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
+{
+    ngx_rtmp_log_app_conf_t    *lacf;
+    ngx_rtmp_log_t             *log;
+    ngx_rtmp_log_ctx_t         *ctx;
+    ngx_uint_t                  i;
+
+    if (s->auto_pushed || s->relay) {
+        goto next;
+    }
+
+    ctx = ngx_rtmp_log_set_names(s, v->name, v->args);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->publish) { /* avoid multi push */
+        goto next;
+    }
+
+    ctx->publish = 1;
+
+    lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_log_module);
+
+    if (lacf->logs == NULL) {
+        goto next;
+    }
+
+    log = lacf->logs->elts;
+    for (i = 0; i < lacf->logs->nelts; ++i, ++log) {
+        if (log->trunc_timer != 0) {
+            ngx_rtmp_log_add_trunc_timer(s, ctx, log);
+        }
+    }
+
+next:
+    return next_publish(s, v);
+}
+
+
+static ngx_int_t
+ngx_rtmp_log_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
+{
+    ngx_rtmp_log_app_conf_t    *lacf;
+    ngx_rtmp_log_t             *log;
+    ngx_rtmp_log_ctx_t         *ctx;
+    ngx_uint_t                  i;
+
+    if (s->auto_pushed || s->relay) {
+        goto next;
+    }
+
+    ctx = ngx_rtmp_log_set_names(s, v->name, v->args);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->play) { /* avoid mulit pull */
+        goto next;
+    }
+
+    ctx->play = 1;
+
+    lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_log_module);
+
+    if (lacf->logs == NULL) {
+        goto next;
+    }
+
+    log = lacf->logs->elts;
+    for (i = 0; i < lacf->logs->nelts; ++i, ++log) {
+        if (log->trunc_timer != 0) {
+            ngx_rtmp_log_add_trunc_timer(s, ctx, log);
+        }
+    }
+
+next:
+    return next_play(s, v);
+}
+
 
 static ngx_int_t
 ngx_rtmp_log_disconnect(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                         ngx_chain_t *in)
 {
     ngx_rtmp_log_app_conf_t    *lacf;
+    ngx_rtmp_log_ctx_t         *ctx;
+    ngx_rtmp_log_timer_ctx_t   *ltctx;
     ngx_rtmp_log_t             *log;
-    ngx_rtmp_log_op_t          *op;
-    ngx_uint_t                  n, i;
-    u_char                     *line, *p;
-    size_t                      len;
+    ngx_uint_t                  i;
 
     if (s->auto_pushed || s->relay) {
         return NGX_OK;
@@ -935,35 +1109,13 @@ ngx_rtmp_log_disconnect(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     log = lacf->logs->elts;
     for (i = 0; i < lacf->logs->nelts; ++i, ++log) {
+        ngx_rtmp_log_pre_write(s, log);
+    }
 
-        if (ngx_time() == log->disk_full_time) {
-            /* FreeBSD full disk protection;
-             * nginx http logger does the same */
-            continue;
-        }
-
-        len = 0;
-        op = log->format->ops->elts;
-        for (n = 0; n < log->format->ops->nelts; ++n, ++op) {
-            len += op->getlen(s, op);
-        }
-
-        len += NGX_LINEFEED_SIZE;
-
-        line = ngx_palloc(s->connection->pool, len);
-        if (line == NULL) {
-            return NGX_OK;
-        }
-
-        p = line;
-        op = log->format->ops->elts;
-        for (n = 0; n < log->format->ops->nelts; ++n, ++op) {
-            p = op->getdata(s, p, op);
-        }
-
-        ngx_linefeed(p);
-
-        ngx_rtmp_log_write(s, log, line, p - line);
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_log_module);
+    ltctx = ctx->timers.elts;
+    for (i = 0; i < ctx->timers.nelts; ++i, ++ltctx) {
+        ngx_del_timer(&ltctx->event);
     }
 
     return NGX_OK;
