@@ -62,6 +62,7 @@ RTMP_DEPS="                                                 \
                 $ngx_addon_dir/ngx_event_multiport_module.h \
                 $ngx_addon_dir/ngx_rbuf.h                   \
                 $ngx_addon_dir/http/ngx_http_set_header.h   \
+                $ngx_addon_dir/ngx_live.h                   \
                 "
 
 

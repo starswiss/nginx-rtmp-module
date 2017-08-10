@@ -402,7 +402,7 @@ ngx_rtmp_init_fake_session(ngx_connection_t *c, ngx_rtmp_addr_conf_t *addr_conf)
     s->epoch = ngx_current_msec;
     s->timeout = cscf->timeout;
     s->buflen = cscf->buflen;
-    ngx_rtmp_set_chunk_size(s, NGX_RTMP_DEFAULT_CHUNK_SIZE);
+    ngx_rtmp_set_chunk_size(s, cscf->chunk_size);
 
     if (ngx_rtmp_fire_event(s, NGX_RTMP_CONNECT, NULL, NULL) != NGX_OK) {
         ngx_rtmp_finalize_session(s);

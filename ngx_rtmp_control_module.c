@@ -8,6 +8,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 #include "ngx_rtmp.h"
+#include "ngx_live.h"
 #include "ngx_rtmp_live_module.h"
 #include "ngx_rtmp_record_module.h"
 
@@ -225,36 +226,35 @@ ngx_rtmp_control_redirect_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 
 
 static const char *
-ngx_rtmp_control_walk_session(ngx_http_request_t *r,
-    ngx_rtmp_live_ctx_t *lctx)
+ngx_rtmp_control_walk_session(ngx_http_request_t *r, ngx_rtmp_core_ctx_t *cctx)
 {
     ngx_str_t                addr, *paddr, clientid;
     ngx_rtmp_session_t      *s, **ss;
     ngx_rtmp_control_ctx_t  *ctx;
 
-    s = lctx->session;
+    s = cctx->session;
 
     if (s == NULL || s->connection == NULL) {
         return NGX_CONF_OK;
     }
 
     if (ngx_http_arg(r, (u_char *) "addr", sizeof("addr") - 1, &addr)
-        == NGX_OK)
+            == NGX_OK)
     {
         paddr = &s->connection->addr_text;
         if (paddr->len != addr.len ||
-            ngx_strncmp(paddr->data, addr.data, addr.len))
+                ngx_strncmp(paddr->data, addr.data, addr.len))
         {
             return NGX_CONF_OK;
         }
     }
 
     if (ngx_http_arg(r, (u_char *) "clientid", sizeof("clientid") - 1,
-                     &clientid)
-        == NGX_OK)
+                &clientid)
+            == NGX_OK)
     {
         if (s->connection->number !=
-            (ngx_uint_t) ngx_atoi(clientid.data, clientid.len))
+                (ngx_uint_t) ngx_atoi(clientid.data, clientid.len))
         {
             return NGX_CONF_OK;
         }
@@ -264,13 +264,13 @@ ngx_rtmp_control_walk_session(ngx_http_request_t *r,
 
     switch (ctx->filter) {
         case NGX_RTMP_CONTROL_FILTER_PUBLISHER:
-            if (!lctx->publishing) {
+            if (!cctx->publishing) {
                 return NGX_CONF_OK;
             }
             break;
 
         case NGX_RTMP_CONTROL_FILTER_SUBSCRIBER:
-            if (lctx->publishing) {
+            if (cctx->publishing) {
                 return NGX_CONF_OK;
             }
             break;
@@ -291,59 +291,20 @@ ngx_rtmp_control_walk_session(ngx_http_request_t *r,
 
 
 static const char *
-ngx_rtmp_control_walk_stream(ngx_http_request_t *r,
-    ngx_rtmp_live_stream_t *ls)
+ngx_rtmp_control_walk_stream(ngx_http_request_t *r, ngx_live_stream_t *st)
 {
     const char           *s;
-    ngx_rtmp_live_ctx_t  *lctx;
+    ngx_rtmp_core_ctx_t  *ctx;
 
-    for (lctx = ls->ctx; lctx; lctx = lctx->next) {
-        s = ngx_rtmp_control_walk_session(r, lctx);
+    for (ctx = st->play_ctx; ctx; ctx = ctx->next) {
+        s = ngx_rtmp_control_walk_session(r, ctx);
         if (s != NGX_CONF_OK) {
             return s;
         }
     }
 
-    return NGX_CONF_OK;
-}
-
-
-static const char *
-ngx_rtmp_control_walk_app(ngx_http_request_t *r,
-    ngx_rtmp_core_app_conf_t *cacf)
-{
-    size_t                     len;
-    ngx_str_t                  name;
-    const char                *s;
-    ngx_uint_t                 n;
-    ngx_rtmp_live_stream_t    *ls;
-    ngx_rtmp_live_app_conf_t  *lacf;
-
-    lacf = cacf->app_conf[ngx_rtmp_live_module.ctx_index];
-
-    if (ngx_http_arg(r, (u_char *) "name", sizeof("name") - 1, &name) != NGX_OK)
-    {
-        for (n = 0; n < (ngx_uint_t) lacf->nbuckets; ++n) {
-            for (ls = lacf->streams[n]; ls; ls = ls->next) {
-                s = ngx_rtmp_control_walk_stream(r, ls);
-                if (s != NGX_CONF_OK) {
-                    return s;
-                }
-            }
-        }
-
-        return NGX_CONF_OK;
-    }
-
-    for (ls = lacf->streams[ngx_hash_key(name.data, name.len) % lacf->nbuckets];
-         ls; ls = ls->next) 
-    {
-        len = ngx_strlen(ls->name);
-        if (name.len != len || ngx_strncmp(name.data, ls->name, name.len)) {
-            continue;
-        }
-
-        s = ngx_rtmp_control_walk_stream(r, ls);
+    for (ctx = st->publish_ctx; ctx; ctx = ctx->next) {
+        s = ngx_rtmp_control_walk_session(r, ctx);
         if (s != NGX_CONF_OK) {
             return s;
         }
@@ -355,29 +316,72 @@ ngx_rtmp_control_walk_app(ngx_http_request_t *r,
 
 static const char *
 ngx_rtmp_control_walk_server(ngx_http_request_t *r,
-    ngx_rtmp_core_srv_conf_t *cscf)
+        ngx_rtmp_core_srv_conf_t *cscf)
 {
-    ngx_str_t                   app;
-    ngx_uint_t                  n;
+    ngx_live_conf_t            *lcf;
+    ngx_live_server_t          *srv;
+    ngx_live_stream_t          *st;
+    ngx_str_t                   app, name, stream;
+    size_t                      n;
     const char                 *s;
-    ngx_rtmp_core_app_conf_t  **pcacf;
+    u_char                     *p;
+
+    lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                           ngx_live_module);
+
+    srv = ngx_live_fetch_server(&cscf->serverid);
+    if (srv) {
+        return NGX_CONF_OK;
+    }
 
     if (ngx_http_arg(r, (u_char *) "app", sizeof("app") - 1, &app) != NGX_OK) {
         app.len = 0;
     }
 
-    pcacf = cscf->applications.elts;
-
-    for (n = 0; n < cscf->applications.nelts; ++n, ++pcacf) {
-        if (app.len && ((*pcacf)->name.len != app.len ||
-                        ngx_strncmp((*pcacf)->name.data, app.data, app.len)))
-        {
-            continue;
+    if (app.len == 0) {
+        for (n = 0; n < lcf->stream_buckets; ++n) {
+            for (st = srv->streams[n]; st; st = st->next) {
+                s = ngx_rtmp_control_walk_stream(r, st);
+                if (s != NGX_CONF_OK) {
+                    return s;
+                }
+            }
         }
 
-        s = ngx_rtmp_control_walk_app(r, *pcacf);
-        if (s != NGX_CONF_OK) {
-            return s;
+        return NGX_CONF_OK;
+    }
+
+    if (ngx_http_arg(r, (u_char *) "name", sizeof("name") - 1, &name)
+            != NGX_OK)
+    {
+        name.len = 0;
+    }
+
+    stream.len = app.len + 1 + name.len; /* app/name */
+    stream.data = ngx_pcalloc(r->pool, stream.len);
+    p = stream.data;
+    p = ngx_copy(p, app.data, app.len);
+    *p++ = '/';
+    p = ngx_copy(p, name.data, name.len);
+
+    if (name.len == 0) {
+        for (n = 0; n < lcf->stream_buckets; ++n) {
+            for (st = srv->streams[n]; st; st = st->next) {
+                if (ngx_memcmp(stream.data, st->name, stream.len) == 0) {
+                    s = ngx_rtmp_control_walk_stream(r, st);
+                    if (s != NGX_CONF_OK) {
+                        return s;
+                    }
+                }
+            }
+        }
+    } else {
+        st = ngx_live_fetch_stream(&cscf->serverid, &stream);
+        if (st) {
+            s = ngx_rtmp_control_walk_stream(r, st);
+            if (s != NGX_CONF_OK) {
+                return s;
+            }
         }
     }
 

@@ -16,10 +16,6 @@
 #include "ngx_rtmp_streams.h"
 
 
-typedef struct ngx_rtmp_live_ctx_s ngx_rtmp_live_ctx_t;
-typedef struct ngx_rtmp_live_stream_s ngx_rtmp_live_stream_t;
-
-
 typedef struct {
     unsigned                            active:1;
     uint32_t                            timestamp;
@@ -30,7 +26,7 @@ typedef struct {
 
 struct ngx_rtmp_live_ctx_s {
     ngx_rtmp_session_t                 *session;
-    ngx_rtmp_live_stream_t             *stream;
+    ngx_live_stream_t                  *stream;
     ngx_rtmp_live_ctx_t                *next;
     ngx_uint_t                          ndropped;
     ngx_rtmp_live_chunk_stream_t        cs[2];
@@ -43,23 +39,7 @@ struct ngx_rtmp_live_ctx_s {
 };
 
 
-struct ngx_rtmp_live_stream_s {
-    u_char                              name[NGX_RTMP_MAX_NAME];
-    ngx_rtmp_live_stream_t             *next;
-    ngx_rtmp_live_ctx_t                *ctx;
-    ngx_rtmp_bandwidth_t                bw_in;
-    ngx_rtmp_bandwidth_t                bw_in_audio;
-    ngx_rtmp_bandwidth_t                bw_in_video;
-    ngx_rtmp_bandwidth_t                bw_out;
-    ngx_msec_t                          epoch;
-    unsigned                            active:1;
-    unsigned                            publishing:1;
-};
-
-
 typedef struct {
-    ngx_int_t                           nbuckets;
-    ngx_rtmp_live_stream_t            **streams;
     ngx_flag_t                          live;
     ngx_flag_t                          meta;
     ngx_msec_t                          sync;
@@ -72,8 +52,6 @@ typedef struct {
     ngx_flag_t                          play_restart;
     ngx_flag_t                          idle_streams;
     ngx_msec_t                          buflen;
-    ngx_pool_t                         *pool;
-    ngx_rtmp_live_stream_t             *free_streams;
 } ngx_rtmp_live_app_conf_t;
 
 

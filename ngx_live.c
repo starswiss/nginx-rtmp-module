@@ -3,43 +3,11 @@
  */
 
 
-#include "ngx_rtmp.h"
+#include "ngx_live.h"
 
 
 static void *ngx_live_create_conf(ngx_cycle_t *cf);
 static char *ngx_live_init_conf(ngx_cycle_t *cycle, void *conf);
-
-
-#define NGX_LIVE_SERVERID_LEN   512
-
-
-struct ngx_live_server_s {
-    u_char                      serverid[NGX_LIVE_SERVERID_LEN];
-    ngx_uint_t                  n_stream;
-    ngx_flag_t                  deleted;
-
-    ngx_live_server_t          *next;
-
-    ngx_live_stream_t         **streams;
-};
-
-typedef struct {
-    size_t                      stream_buckets;
-    size_t                      server_buckets;
-
-    ngx_live_server_t         **servers;
-
-    ngx_live_server_t          *free_server;
-    ngx_live_stream_t          *free_stream;
-
-    ngx_uint_t                  alloc_server_count;
-    ngx_uint_t                  free_server_count;
-
-    ngx_uint_t                  alloc_stream_count;
-    ngx_uint_t                  free_stream_count;
-
-    ngx_pool_t                 *pool;
-} ngx_live_conf_t;
 
 
 static ngx_command_t  ngx_live_commands[] = {
@@ -244,11 +212,12 @@ ngx_live_get_stream(ngx_str_t *stream)
     } else {
         lcf->free_stream = st->next;
         --lcf->free_stream_count;
+        ngx_memzero(st, sizeof(ngx_live_stream_t));
     }
 
     *ngx_cpymem(st->name, stream->data, stream->len) = 0;
     st->pslot = -1;
-    st->next = NULL;
+    st->epoch = ngx_current_msec;
 
     return st;
 }
@@ -278,6 +247,16 @@ ngx_live_create_server(ngx_str_t *serverid)
     }
 
     *psrv = ngx_live_get_server(serverid);
+
+    return *psrv;
+}
+
+ngx_live_server_t *
+ngx_live_fetch_server(ngx_str_t *serverid)
+{
+    ngx_live_server_t         **psrv;
+
+    psrv = ngx_live_find_server(serverid);
 
     return *psrv;
 }
@@ -324,6 +303,24 @@ ngx_live_create_stream(ngx_str_t *serverid, ngx_str_t *stream)
 
     *pst = ngx_live_get_stream(stream);
     ++(*psrv)->n_stream;
+
+    return *pst;
+}
+
+ngx_live_stream_t *
+ngx_live_fetch_stream(ngx_str_t *serverid, ngx_str_t *stream)
+{
+    ngx_live_server_t         **psrv;
+    ngx_live_stream_t         **pst;
+
+    psrv = ngx_live_find_server(serverid);
+    if (*psrv == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "server %V does not exist when fetch stream", serverid);
+        return NULL;
+    }
+
+    pst = ngx_live_find_stream(*psrv, stream);
 
     return *pst;
 }

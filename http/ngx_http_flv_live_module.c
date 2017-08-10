@@ -505,6 +505,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     s->live_type = NGX_HTTP_FLV_LIVE;
     s->live_server = ngx_live_create_server(&rcsf->serverid);
     s->handler = ngx_http_flv_live_send;
+    s->request = r;
 
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_flv_live_ctx_t));
     if (ctx == NULL) {

@@ -318,9 +318,11 @@ typedef struct {
 } ngx_rtmp_session_t;
 
 /* live stream manage */
+#define NGX_LIVE_SERVERID_LEN   512
 #define NGX_LIVE_STREAM_LEN     512
 
 typedef struct ngx_rtmp_core_ctx_s  ngx_rtmp_core_ctx_t;
+typedef struct ngx_rtmp_live_ctx_s  ngx_rtmp_live_ctx_t;
 
 struct ngx_rtmp_core_ctx_s {
     ngx_rtmp_core_ctx_t    *next;
@@ -338,12 +340,34 @@ struct ngx_live_stream_s {
     ngx_rtmp_core_ctx_t        *play_ctx;
 
     ngx_live_stream_t          *next;
+
+    ngx_rtmp_live_ctx_t        *ctx;
+    ngx_rtmp_bandwidth_t        bw_in;
+    ngx_rtmp_bandwidth_t        bw_in_audio;
+    ngx_rtmp_bandwidth_t        bw_in_video;
+    ngx_rtmp_bandwidth_t        bw_out;
+    ngx_msec_t                  epoch;
+    unsigned                    active:1;
+    unsigned                    publishing:1;
+};
+
+struct ngx_live_server_s {
+    u_char                      serverid[NGX_LIVE_SERVERID_LEN];
+    ngx_uint_t                  n_stream;
+    ngx_flag_t                  deleted;
+
+    ngx_live_server_t          *next;
+
+    ngx_live_stream_t         **streams;
 };
 
 ngx_live_server_t *ngx_live_create_server(ngx_str_t *serverid);
+ngx_live_server_t *ngx_live_fetch_server(ngx_str_t *serverid);
 void ngx_live_delete_server(ngx_str_t *serverid);
 
 ngx_live_stream_t *ngx_live_create_stream(ngx_str_t *serverid,
+        ngx_str_t *stream);
+ngx_live_stream_t *ngx_live_fetch_stream(ngx_str_t *serverid,
         ngx_str_t *stream);
 void ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream);
 
