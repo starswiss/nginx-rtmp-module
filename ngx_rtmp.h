@@ -281,7 +281,7 @@ typedef struct {
     unsigned                ping_reset:1;
 
     /* auto-pushed? */
-    unsigned                auto_pushed:1;
+    unsigned                interprocess:1;
     unsigned                auto_pulled:1;
     unsigned                relay:1;
     unsigned                static_relay:1;

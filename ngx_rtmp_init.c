@@ -129,7 +129,7 @@ ngx_rtmp_init_connection(ngx_connection_t *c)
     /* only auto-pushed connections are
      * done through unix socket */
 
-    s->auto_pushed = unix_socket;
+    s->interprocess = unix_socket;
 
     if (addr_conf->proxy_protocol) {
         ngx_rtmp_proxy_protocol(s);

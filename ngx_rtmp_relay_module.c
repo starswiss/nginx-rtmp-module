@@ -706,7 +706,7 @@ ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     size_t                          n;
     ngx_rtmp_relay_ctx_t           *ctx;
 
-    if (s->auto_pushed) {
+    if (s->interprocess) {
         goto next;
     }
 
