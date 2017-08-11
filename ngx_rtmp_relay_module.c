@@ -50,12 +50,10 @@ typedef struct {
     ngx_array_t                 static_pulls;  /* ngx_rtmp_relay_target_t * */
     ngx_array_t                 static_events; /* ngx_event_t * */
     ngx_log_t                  *log;
-    ngx_uint_t                  nbuckets;
     ngx_msec_t                  buflen;
     ngx_flag_t                  session_relay;
     ngx_msec_t                  push_reconnect;
     ngx_msec_t                  pull_reconnect;
-    ngx_rtmp_relay_ctx_t        **ctx;
 } ngx_rtmp_relay_app_conf_t;
 
 
@@ -185,7 +183,6 @@ ngx_rtmp_relay_create_app_conf(ngx_conf_t *cf)
         return NULL;
     }
 
-    racf->nbuckets = 1024;
     racf->log = &cf->cycle->new_log;
     racf->buflen = NGX_CONF_UNSET_MSEC;
     racf->session_relay = NGX_CONF_UNSET;
@@ -201,9 +198,6 @@ ngx_rtmp_relay_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 {
     ngx_rtmp_relay_app_conf_t  *prev = parent;
     ngx_rtmp_relay_app_conf_t  *conf = child;
-
-    conf->ctx = ngx_pcalloc(cf->pool, sizeof(ngx_rtmp_relay_ctx_t *)
-            * conf->nbuckets);
 
     ngx_conf_merge_value(conf->session_relay, prev->session_relay, 0);
     ngx_conf_merge_msec_value(conf->buflen, prev->buflen, 5000);
@@ -623,7 +617,6 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
 {
     ngx_rtmp_relay_app_conf_t      *racf;
     ngx_rtmp_relay_ctx_t           *publish_ctx, *play_ctx, **cctx;
-    ngx_uint_t                      hash;
 
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
@@ -636,8 +629,7 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
         return NGX_ERROR;
     }
 
-    hash = ngx_hash_key(name->data, name->len);
-    cctx = &racf->ctx[hash % racf->nbuckets];
+    cctx = &s->live_stream->relay_ctx;
     for (; *cctx; cctx = &(*cctx)->next) {
         if ((*cctx)->name.len == name->len
             && !ngx_memcmp(name->data, (*cctx)->name.data,
@@ -1390,7 +1382,6 @@ ngx_rtmp_relay_close(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_relay_app_conf_t          *racf;
     ngx_rtmp_relay_ctx_t               *ctx, **cctx;
-    ngx_uint_t                          hash;
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
 
@@ -1468,8 +1459,7 @@ ngx_rtmp_relay_close(ngx_rtmp_session_t *s)
     }
     ctx->publish = NULL;
 
-    hash = ngx_hash_key(ctx->name.data, ctx->name.len);
-    cctx = &racf->ctx[hash % racf->nbuckets];
+    cctx = &s->live_stream->relay_ctx;
     for (; *cctx && *cctx != ctx; cctx = &(*cctx)->next);
     if (*cctx) {
         *cctx = ctx->next;
