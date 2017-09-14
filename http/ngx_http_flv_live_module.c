@@ -476,7 +476,6 @@ static ngx_int_t
 ngx_http_flv_live_handler(ngx_http_request_t *r)
 {
     ngx_http_flv_live_loc_conf_t       *hflcf;
-    ngx_rtmp_core_srv_conf_t           *rcsf;
     ngx_http_flv_live_ctx_t            *ctx;
     ngx_rtmp_session_t                 *s;
     ngx_rtmp_play_t                     v;
@@ -500,10 +499,10 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     s->live_type = NGX_HTTP_FLV_LIVE;
-    s->live_server = ngx_live_create_server(&rcsf->serverid);
+    s->live_server = ngx_live_create_server(&cscf->serverid);
     s->handler = ngx_http_flv_live_send;
     s->request = r;
 
@@ -530,9 +529,6 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     }
     v.silent = 1;
 
-    /* find application & set app_conf */
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
     cacfp = cscf->applications.elts;
     for (n = 0; n < cscf->applications.nelts; ++n, ++cacfp) {
         if ((*cacfp)->name.len == s->app.len &&
@@ -545,9 +541,14 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     }
 
     if (s->app_conf == NULL) {
-        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                "http flv live, application not found '%V'", &s->app);
-        return NGX_HTTP_BAD_REQUEST;
+
+        if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
+            ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+                    "http flv live, application not found '%V'", &s->app);
+            return NGX_HTTP_NOT_FOUND;
+        }
+
+        s->app_conf = cscf->default_app->app_conf;
     }
 
     ngx_rtmp_cmd_stream_init(s, v.name, 0);

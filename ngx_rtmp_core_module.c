@@ -483,6 +483,10 @@ ngx_rtmp_core_application(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     cacf->name = value[1];
     cscf = pctx->srv_conf[ngx_rtmp_core_module.ctx_index];
 
+    if (cacf->name.len == 1 && cacf->name.data[0] == '*') {  /* default_app */
+        cscf->default_app = cacf;
+    }
+
     cacfp = ngx_array_push(&cscf->applications);
     if (cacfp == NULL) {
         return NGX_CONF_ERROR;

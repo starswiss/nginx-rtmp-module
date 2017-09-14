@@ -340,9 +340,14 @@ ngx_rtmp_cmd_connect(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
     }
 
     if (s->app_conf == NULL) {
-        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                      "connect: application not found: '%V'", &s->app);
-        return NGX_ERROR;
+
+        if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "connect: application not found: '%V'", &s->app);
+            return NGX_ERROR;
+        }
+
+        s->app_conf = cscf->default_app->app_conf;
     }
 
     object_encoding = v->object_encoding;
