@@ -9,6 +9,8 @@
 #include <ngx_event.h>
 #include <nginx.h>
 #include "ngx_rtmp.h"
+#include "toolkit/ngx_dynamic_conf.h"
+#include "ngx_rtmp_dynamic.h"
 
 
 static void *ngx_rtmp_core_create_main_conf(ngx_conf_t *cf);
@@ -25,6 +27,8 @@ static char *ngx_rtmp_core_listen(ngx_conf_t *cf, ngx_command_t *cmd,
 static char *ngx_rtmp_core_application(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
 
+static void *ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf);
+static char *ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf);
 
 ngx_rtmp_core_main_conf_t      *ngx_rtmp_core_main_conf;
 
@@ -49,13 +53,6 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       ngx_rtmp_core_listen,
       NGX_RTMP_SRV_CONF_OFFSET,
       0,
-      NULL },
-
-    { ngx_string("serverid"),
-      NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      NGX_RTMP_SRV_CONF_OFFSET,
-      offsetof(ngx_rtmp_core_srv_conf_t, serverid),
       NULL },
 
     { ngx_string("application"),
@@ -179,20 +176,46 @@ static ngx_rtmp_module_t  ngx_rtmp_core_module_ctx = {
     ngx_rtmp_core_merge_app_conf            /* merge app configuration */
 };
 
+/* nginx rtmp dynamic */
+static ngx_command_t  ngx_rtmp_core_dcommands[] = {
+
+    { ngx_string("serverid"),
+      NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_RTMP_SRV_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_srv_dconf_t, serverid),
+      NULL },
+
+      ngx_null_command
+};
+
+static ngx_rtmp_dynamic_module_t  ngx_rtmp_core_module_dctx = {
+    NULL,                                   /* create main configuration */
+    NULL,                                   /* init main configuration */
+
+    ngx_rtmp_core_create_srv_dconf,         /* create server configuration */
+    ngx_rtmp_core_init_srv_dconf,           /* merge server configuration */
+
+    NULL,                                   /* create app configuration */
+    NULL                                    /* merge app configuration */
+};
+
 
 ngx_module_t  ngx_rtmp_core_module = {
     NGX_MODULE_V1,
-    &ngx_rtmp_core_module_ctx,             /* module context */
-    ngx_rtmp_core_commands,                /* module directives */
-    NGX_RTMP_MODULE,                       /* module type */
-    NULL,                                  /* init master */
-    NULL,                                  /* init module */
-    NULL,                                  /* init process */
-    NULL,                                  /* init thread */
-    NULL,                                  /* exit thread */
-    NULL,                                  /* exit process */
-    NULL,                                  /* exit master */
-    NGX_MODULE_V1_PADDING
+    &ngx_rtmp_core_module_ctx,              /* module context */
+    ngx_rtmp_core_commands,                 /* module directives */
+    NGX_RTMP_MODULE,                        /* module type */
+    NULL,                                   /* init master */
+    NULL,                                   /* init module */
+    NULL,                                   /* init process */
+    NULL,                                   /* init thread */
+    NULL,                                   /* exit thread */
+    NULL,                                   /* exit process */
+    NULL,                                   /* exit master */
+    (uintptr_t) &ngx_rtmp_core_module_dctx, /* module dynamic context */
+    (uintptr_t) ngx_rtmp_core_dcommands,    /* module dynamic directives */
+    NGX_MODULE_V1_DYNAMIC_PADDING
 };
 
 
@@ -267,7 +290,6 @@ ngx_rtmp_core_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_core_srv_conf_t *prev = parent;
     ngx_rtmp_core_srv_conf_t *conf = child;
 
-    ngx_conf_merge_str_value(conf->serverid, prev->serverid, "default");
     ngx_conf_merge_msec_value(conf->timeout, prev->timeout, 60000);
     ngx_conf_merge_msec_value(conf->ping, prev->ping, 60000);
     ngx_conf_merge_msec_value(conf->ping_timeout, prev->ping_timeout, 30000);
@@ -329,6 +351,26 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     (void)prev;
     (void)conf;
 
+    return NGX_CONF_OK;
+}
+
+/* nginx rtmp dynamic */
+static void *
+ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf)
+{
+    ngx_rtmp_core_srv_dconf_t      *conf;
+
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_rtmp_core_srv_dconf_t));
+    if (conf == NULL) {
+        return NULL;
+    }
+
+    return conf;
+}
+
+static char *
+ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf)
+{
     return NGX_CONF_OK;
 }
 

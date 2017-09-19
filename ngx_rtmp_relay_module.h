@@ -41,6 +41,8 @@ struct ngx_rtmp_relay_ctx_s {
     ngx_rtmp_relay_ctx_t           *play;
     ngx_rtmp_relay_ctx_t           *next;
 
+    ngx_str_t                       pargs; /* play or publish ctx */
+
     ngx_str_t                       app;
     ngx_str_t                       args;
     ngx_str_t                       tc_url;

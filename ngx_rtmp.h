@@ -252,6 +252,7 @@ typedef struct {
 
     /* stream name in publish or play*/
     ngx_str_t               name;
+    ngx_str_t               pargs;  /* play or publish args */
 
     /* connection parameters */
     ngx_str_t               app;
@@ -262,7 +263,11 @@ typedef struct {
     uint32_t                acodecs;
     uint32_t                vcodecs;
     ngx_str_t               page_url;
+
+    /* middleware */
+    ngx_str_t               scheme;
     ngx_str_t               domain;
+    ngx_str_t               serverid;
 
     /* handshake data */
     ngx_buf_t              *hs_buf;
@@ -430,8 +435,6 @@ typedef struct ngx_rtmp_core_srv_conf_s {
 
     ngx_rtmp_core_app_conf_t *default_app;
 
-    ngx_str_t               serverid;
-
     ngx_msec_t              timeout;
     ngx_msec_t              ping;
     ngx_msec_t              ping_timeout;
@@ -454,6 +457,11 @@ typedef struct ngx_rtmp_core_srv_conf_s {
 
     ngx_rtmp_conf_ctx_t    *ctx;
 } ngx_rtmp_core_srv_conf_t;
+
+/* nginx dynamic conf */
+typedef struct {
+    ngx_str_t               serverid;
+} ngx_rtmp_core_srv_dconf_t;
 
 
 typedef struct {

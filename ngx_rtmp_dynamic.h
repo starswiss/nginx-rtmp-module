@@ -9,6 +9,8 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
+#include "toolkit/ngx_map.h"
+#include "toolkit/ngx_dynamic_conf.h"
 #include "ngx_rtmp.h"
 
 
@@ -28,6 +30,7 @@ void *ngx_rtmp_get_module_main_dconf(ngx_rtmp_session_t *s, ngx_module_t *m);
 void *ngx_rtmp_get_module_srv_dconf(ngx_rtmp_session_t *s, ngx_module_t *m);
 void *ngx_rtmp_get_module_app_dconf(ngx_rtmp_session_t *s, ngx_module_t *m);
 
+void  ngx_rmtp_get_serverid_by_domain(ngx_str_t *serverid, ngx_str_t *domain);
+
 
 #endif
-

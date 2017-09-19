@@ -408,22 +408,39 @@ ngx_http_flv_live_parse(ngx_http_request_t *r, ngx_rtmp_session_t *s,
         s->flashver = hflcf->flashver;
     }
 
-    tcurl_len = sizeof("rtmp://") + r->headers_in.server.len + app.len;
+    /* tc_url */
+#if (NGX_HTTP_SSL)
+    if (r->connection->ssl) {
+        tcurl_len = sizeof("https://") - 1;
+    } else
+#endif
+    {
+        tcurl_len = sizeof("http://") - 1;
+    }
+    tcurl_len += r->headers_in.server.len + 1 + app.len;
+
     s->tc_url.len = tcurl_len;
     s->tc_url.data = ngx_pcalloc(r->pool, tcurl_len);
     if (s->tc_url.data == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
     p = s->tc_url.data;
-    p = ngx_cpymem(p, "rtmp://", sizeof("rtmp://") - 1);
+
+#if (NGX_HTTP_SSL)
+    if (r->connection->ssl) {
+        p = ngx_cpymem(p, "https://", sizeof("https://") - 1);
+    } else
+#endif
+    {
+        p = ngx_cpymem(p, "http://", sizeof("http://") - 1);
+    }
+
     p = ngx_cpymem(p, r->headers_in.server.data, r->headers_in.server.len);
     *p++ = '/';
     p = ngx_cpymem(p, app.data, app.len);
 
-    if (ngx_http_arg(r, (u_char *) "swf_url", 7, &s->swf_url) != NGX_OK) {
-        s->swf_url = hflcf->swf_url;
-    }
-
+    /* page_url */
     if (r->headers_in.referer) {
         s->page_url = r->headers_in.referer->value;
     } else {
@@ -440,11 +457,7 @@ ngx_http_flv_live_parse(ngx_http_request_t *r, ngx_rtmp_session_t *s,
                 ngx_min(r->args.len, NGX_RTMP_MAX_ARGS));
     }
 
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-            "http flv live, app=\"%V\" flashver=\"%V\" swf_url=\"%V\" "
-            "tc_url=\"%V\" page_url=\"\%V\" name=\"%s\" args=\"%s\"",
-            &s->app, &s->flashver, &s->swf_url, &s->tc_url, &s->page_url,
-            v->name, v->args);
+    ngx_rtmp_cmd_middleware_init(s);
 
     return NGX_OK;
 }
@@ -486,6 +499,20 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     ngx_rtmp_core_app_conf_t          **cacfp;
     ngx_http_cleanup_t                 *cln;
 
+    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_flv_live_ctx_t));
+    if (ctx == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    ngx_http_set_ctx(r, ctx, ngx_http_flv_live_module);
+
+    /* cleanup handler */
+    cln = ngx_http_cleanup_add(r, 0);
+    if (cln == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    cln->handler = ngx_http_flv_live_cleanup;
+    cln->data = r;
+
     hflcf = ngx_http_get_module_loc_conf(r, ngx_http_flv_live_module);
 
     addr_conf = ngx_rtmp_get_addr_conf_by_listening(hflcf->ls, r->connection);
@@ -498,28 +525,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     if (s == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
-    s->live_type = NGX_HTTP_FLV_LIVE;
-    s->live_server = ngx_live_create_server(&cscf->serverid);
-    s->handler = ngx_http_flv_live_send;
-    s->request = r;
-
-    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_flv_live_ctx_t));
-    if (ctx == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-    ngx_http_set_ctx(r, ctx, ngx_http_flv_live_module);
     ctx->session = s;
-
-    /* cleanup handler */
-    cln = ngx_http_cleanup_add(r, 0);
-    if (cln == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-    cln->handler = ngx_http_flv_live_cleanup;
-    cln->data = r;
 
     /* get host, app, stream name */
     ngx_memzero(&v, sizeof(ngx_rtmp_play_t));
@@ -527,6 +533,14 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     if (rc != NGX_OK) {
         return rc;
     }
+
+    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+    s->live_type = NGX_HTTP_FLV_LIVE;
+    s->live_server = ngx_live_create_server(&s->serverid);
+    s->handler = ngx_http_flv_live_send;
+    s->request = r;
+
     v.silent = 1;
 
     cacfp = cscf->applications.elts;
@@ -551,7 +565,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         s->app_conf = cscf->default_app->app_conf;
     }
 
-    ngx_rtmp_cmd_stream_init(s, v.name, 0);
+    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
 
     if (ngx_rtmp_play(s, &v) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;

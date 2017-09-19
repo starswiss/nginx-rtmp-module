@@ -4,6 +4,8 @@ RTMP_CORE_MODULES="                                         \
                 ngx_http_dynamic_module                     \
                 ngx_live_module                             \
                 ngx_rtmp_module                             \
+                ngx_rtmp_dynamic_module                     \
+                ngx_rtmp_dynamic_core_module                \
                 ngx_rtmp_core_module                        \
                 ngx_rtmp_cmd_module                         \
                 ngx_rtmp_codec_module                       \
@@ -30,9 +32,9 @@ RTMP_CORE_MODULES="                                         \
 
 
 EVENT_MODULES="$EVENT_MODULES                               \
+                ngx_event_timer_module                      \
                 ngx_dynamic_conf_module                     \
                 ngx_event_multiport_module                  \
-                ngx_event_timer_module                      \
                 "
 
 

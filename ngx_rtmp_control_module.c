@@ -11,12 +11,16 @@
 #include "ngx_live.h"
 #include "ngx_rtmp_live_module.h"
 #include "ngx_rtmp_record_module.h"
+#include "ngx_rtmp_dynamic.h"
 
 
 static char *ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static void * ngx_rtmp_control_create_loc_conf(ngx_conf_t *cf);
-static char * ngx_rtmp_control_merge_loc_conf(ngx_conf_t *cf,
-    void *parent, void *child);
+static char *ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd,
+       void *conf);
+
+static void *ngx_rtmp_control_create_loc_conf(ngx_conf_t *cf);
+static char *ngx_rtmp_control_merge_loc_conf(ngx_conf_t *cf,
+       void *parent, void *child);
 
 
 typedef const char * (*ngx_rtmp_control_handler_t)(ngx_http_request_t *r,
@@ -47,6 +51,8 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t                      control;
+
+    ngx_listening_t                *ls;
 } ngx_rtmp_control_loc_conf_t;
 
 
@@ -68,7 +74,14 @@ static ngx_command_t  ngx_rtmp_control_commands[] = {
       offsetof(ngx_rtmp_control_loc_conf_t, control),
       ngx_rtmp_control_masks },
 
-    ngx_null_command
+    { ngx_string("rtmp_control_port"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      ngx_rtmp_control_port,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      0,
+      NULL },
+
+      ngx_null_command
 };
 
 
@@ -315,24 +328,17 @@ ngx_rtmp_control_walk_stream(ngx_http_request_t *r, ngx_live_stream_t *st)
 
 
 static const char *
-ngx_rtmp_control_walk_server(ngx_http_request_t *r,
-        ngx_rtmp_core_srv_conf_t *cscf)
+ngx_rtmp_control_walk_server(ngx_http_request_t *r, ngx_live_server_t *srv)
 {
     ngx_live_conf_t            *lcf;
-    ngx_live_server_t          *srv;
     ngx_live_stream_t          *st;
-    ngx_str_t                   app, name, stream;
+    ngx_str_t                   serverid, app, name, stream;
     size_t                      n;
     const char                 *s;
     u_char                     *p;
 
     lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                            ngx_live_module);
-
-    srv = ngx_live_fetch_server(&cscf->serverid);
-    if (srv) {
-        return NGX_CONF_OK;
-    }
 
     if (ngx_http_arg(r, (u_char *) "app", sizeof("app") - 1, &app) != NGX_OK) {
         app.len = 0;
@@ -376,7 +382,9 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r,
             }
         }
     } else {
-        st = ngx_live_fetch_stream(&cscf->serverid, &stream);
+        serverid.data = srv->serverid;
+        serverid.len = ngx_strlen(srv->serverid);
+        st = ngx_live_fetch_stream(&serverid, &stream);
         if (st) {
             s = ngx_rtmp_control_walk_stream(r, st);
             if (s != NGX_CONF_OK) {
@@ -392,28 +400,24 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r,
 static const char *
 ngx_rtmp_control_walk(ngx_http_request_t *r, ngx_rtmp_control_handler_t h)
 {
-    ngx_rtmp_core_main_conf_t  *cmcf = ngx_rtmp_core_main_conf;
+    ngx_live_server_t                      *server;
+    ngx_str_t                               srv, serverid;
+    ngx_uint_t                              n;
+    const char                             *msg;
+    ngx_rtmp_session_t                    **s;
+    ngx_rtmp_control_ctx_t                 *ctx;
 
-    ngx_str_t                   srv;
-    ngx_uint_t                  sn, n;
-    const char                 *msg;
-    ngx_rtmp_session_t        **s;
-    ngx_rtmp_control_ctx_t     *ctx;
-    ngx_rtmp_core_srv_conf_t  **pcscf;
-
-    sn = 0;
-    if (ngx_http_arg(r, (u_char *) "srv", sizeof("srv") - 1, &srv) == NGX_OK) {
-        sn = ngx_atoi(srv.data, srv.len);
+    if (ngx_http_arg(r, (u_char *) "srv", sizeof("srv") - 1, &srv) != NGX_OK) {
+        return "Server not set";
     }
 
-    if (sn >= cmcf->servers.nelts) {
-        return "Server index out of range";
+    ngx_rmtp_get_serverid_by_domain(&serverid, &srv);
+    server = ngx_live_fetch_server(&serverid);
+    if (server == NULL) {
+        return NGX_CONF_OK;
     }
 
-    pcscf  = cmcf->servers.elts;
-    pcscf += sn;
-
-    msg = ngx_rtmp_control_walk_server(r, *pcscf);
+    msg = ngx_rtmp_control_walk_server(r, server);
     if (msg != NGX_CONF_OK) {
         return msg;
     }
@@ -733,4 +737,23 @@ ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     clcf->handler = ngx_rtmp_control_handler;
 
     return ngx_conf_set_bitmask_slot(cf, cmd, conf);
+}
+
+
+static char *
+ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_rtmp_control_loc_conf_t        *rclcf;
+    ngx_str_t                          *value;
+
+    rclcf = conf;
+
+    value = cf->args->elts;
+
+    rclcf->ls = ngx_rtmp_find_relation_port(cf->cycle, &value[1]);
+    if (rclcf->ls == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    return NGX_CONF_OK;
 }

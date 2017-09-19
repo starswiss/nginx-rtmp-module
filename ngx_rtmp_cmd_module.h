@@ -15,6 +15,7 @@
 
 
 #define NGX_RTMP_MAX_NAME           256
+#define NGX_RTMP_MAX_FLASHVER       256
 #define NGX_RTMP_MAX_URL            256
 #define NGX_RTMP_MAX_ARGS           NGX_RTMP_MAX_NAME
 
@@ -25,7 +26,7 @@ typedef struct {
     double                          trans;
     u_char                          app[NGX_RTMP_MAX_NAME];
     u_char                          args[NGX_RTMP_MAX_ARGS];
-    u_char                          flashver[32];
+    u_char                          flashver[NGX_RTMP_MAX_FLASHVER];
     u_char                          swf_url[NGX_RTMP_MAX_URL];
     u_char                          tc_url[NGX_RTMP_MAX_URL];
     double                          acodecs;
@@ -99,7 +100,8 @@ typedef struct {
 
 void ngx_rtmp_cmd_fill_args(u_char name[NGX_RTMP_MAX_NAME],
         u_char args[NGX_RTMP_MAX_ARGS]);
-void ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
+void ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s);
+void ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
         unsigned publishing);
 
 

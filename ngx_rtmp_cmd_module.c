@@ -9,6 +9,9 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_streams.h"
 #include "ngx_stream_zone_module.h"
+#include "toolkit/ngx_dynamic_conf.h"
+#include "toolkit/ngx_toolkit_misc.h"
+#include "ngx_rtmp_dynamic.h"
 
 
 #define NGX_RTMP_FMS_VERSION        "FMS/3,0,1,123"
@@ -111,13 +114,37 @@ ngx_rtmp_cmd_fill_args(u_char name[NGX_RTMP_MAX_NAME],
 }
 
 void
-ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
+ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_core_srv_dconf_t  *rcsdf;
+    ngx_request_url_t           rurl;
+
+    if (ngx_parse_request_url(&rurl, &s->tc_url) == NGX_ERROR) {
+        return;
+    }
+
+    s->scheme = rurl.scheme;
+    s->domain = rurl.host;
+
+    rcsdf = ngx_rtmp_get_module_srv_dconf(s, &ngx_rtmp_core_module);
+    if (rcsdf && rcsdf->serverid.len) {
+        s->serverid.data = ngx_pcalloc(s->connection->pool,
+                                       rcsdf->serverid.len);
+        if (s->serverid.data == NULL) {
+            return;
+        }
+        s->serverid.len = rcsdf->serverid.len;
+        ngx_memcpy(s->serverid.data, rcsdf->serverid.data, s->serverid.len);
+    } else {
+        s->serverid = s->domain;
+    }
+}
+
+void
+ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
         unsigned publishing)
 {
     u_char                     *p;
-    ngx_rtmp_core_srv_conf_t   *rcsf;
-
-    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     if (s->name.len == 0) {
         s->name.len = ngx_strlen(name);
@@ -125,16 +152,26 @@ ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name,
         ngx_memcpy(s->name.data, name, s->name.len);
     }
 
+    if (s->pargs.len == 0) {
+        s->pargs.len = ngx_strlen(args);
+        s->pargs.data = ngx_palloc(s->connection->pool, s->pargs.len);
+        ngx_memcpy(s->pargs.data, args, s->pargs.len);
+    }
+
     if (s->stream.len == 0) {
-        s->stream.len = s->app.len + 1 + s->name.len; /* app/name */
+        /* serverid/app/name */
+        s->stream.len = s->serverid.len + 1 + s->app.len + 1 + s->name.len;
         s->stream.data = ngx_palloc(s->connection->pool, s->stream.len);
         p = s->stream.data;
+
+        p = ngx_copy(p, s->serverid.data, s->serverid.len);
+        *p++ = '/';
         p = ngx_copy(p, s->app.data, s->app.len);
         *p++ = '/';
         p = ngx_copy(p, s->name.data, s->name.len);
     }
 
-    s->live_stream = ngx_live_create_stream(&rcsf->serverid, &s->stream);
+    s->live_stream = ngx_live_create_stream(&s->serverid, &s->stream);
 
     ngx_live_create_ctx(s, publishing);
 }
@@ -143,8 +180,11 @@ static ngx_int_t
 ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
-    ngx_rtmp_core_srv_conf_t   *rcsf;
     size_t                      len;
+    ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_rtmp_core_app_conf_t  **cacfp;
+    ngx_uint_t                  n;
+    u_char                     *p;
 
     static ngx_rtmp_connect_t   v;
 
@@ -218,8 +258,58 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             (uint32_t)v.acodecs, (uint32_t)v.vcodecs,
             (ngx_int_t)v.object_encoding);
 
-    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-    s->live_server = ngx_live_create_server(&rcsf->serverid);
+    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+#define NGX_RTMP_SET_STRPAR(name)                                             \
+    s->name.len = ngx_strlen(v.name);                                        \
+    s->name.data = ngx_palloc(s->connection->pool, s->name.len);              \
+    ngx_memcpy(s->name.data, v.name, s->name.len)
+
+    NGX_RTMP_SET_STRPAR(app);
+    NGX_RTMP_SET_STRPAR(args);
+    NGX_RTMP_SET_STRPAR(flashver);
+    NGX_RTMP_SET_STRPAR(swf_url);
+    NGX_RTMP_SET_STRPAR(tc_url);
+    NGX_RTMP_SET_STRPAR(page_url);
+
+#undef NGX_RTMP_SET_STRPAR
+
+    p = ngx_strlchr(s->app.data, s->app.data + s->app.len, '?');
+    if (p) {
+        s->app.len = (p - s->app.data);
+    }
+
+    s->acodecs = (uint32_t) v.acodecs;
+    s->vcodecs = (uint32_t) v.vcodecs;
+
+    /* find application & set app_conf */
+    cacfp = cscf->applications.elts;
+    for(n = 0; n < cscf->applications.nelts; ++n, ++cacfp) {
+        if ((*cacfp)->name.len == s->app.len &&
+            ngx_strncmp((*cacfp)->name.data, s->app.data, s->app.len) == 0)
+        {
+            /* found app! */
+            s->app_conf = (*cacfp)->app_conf;
+            break;
+        }
+    }
+
+    if (s->app_conf == NULL) {
+
+        if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "connect: application not found: '%V'", &s->app);
+            return NGX_ERROR;
+        }
+
+        s->app_conf = cscf->default_app->app_conf;
+    }
+
+    ngx_rtmp_cmd_middleware_init(s);
+
+    s->live_server = ngx_live_create_server(&s->serverid);
+
+
 
     return ngx_rtmp_connect(s, &v);
 }
@@ -229,10 +319,7 @@ static ngx_int_t
 ngx_rtmp_cmd_connect(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
-    ngx_rtmp_core_app_conf_t  **cacfp;
-    ngx_uint_t                  n;
     ngx_rtmp_header_t           h;
-    u_char                     *p;
 
     static double               trans;
     static double               capabilities = NGX_RTMP_CAPABILITIES;
@@ -303,52 +390,6 @@ ngx_rtmp_cmd_connect(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
     ngx_memzero(&h, sizeof(h));
     h.csid = NGX_RTMP_CSID_AMF_INI;
     h.type = NGX_RTMP_MSG_AMF_CMD;
-
-
-#define NGX_RTMP_SET_STRPAR(name)                                             \
-    s->name.len = ngx_strlen(v->name);                                        \
-    s->name.data = ngx_palloc(s->connection->pool, s->name.len);              \
-    ngx_memcpy(s->name.data, v->name, s->name.len)
-
-    NGX_RTMP_SET_STRPAR(app);
-    NGX_RTMP_SET_STRPAR(args);
-    NGX_RTMP_SET_STRPAR(flashver);
-    NGX_RTMP_SET_STRPAR(swf_url);
-    NGX_RTMP_SET_STRPAR(tc_url);
-    NGX_RTMP_SET_STRPAR(page_url);
-
-#undef NGX_RTMP_SET_STRPAR
-
-    p = ngx_strlchr(s->app.data, s->app.data + s->app.len, '?');
-    if (p) {
-        s->app.len = (p - s->app.data);
-    }
-
-    s->acodecs = (uint32_t) v->acodecs;
-    s->vcodecs = (uint32_t) v->vcodecs;
-
-    /* find application & set app_conf */
-    cacfp = cscf->applications.elts;
-    for(n = 0; n < cscf->applications.nelts; ++n, ++cacfp) {
-        if ((*cacfp)->name.len == s->app.len &&
-            ngx_strncmp((*cacfp)->name.data, s->app.data, s->app.len) == 0)
-        {
-            /* found app! */
-            s->app_conf = (*cacfp)->app_conf;
-            break;
-        }
-    }
-
-    if (s->app_conf == NULL) {
-
-        if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                    "connect: application not found: '%V'", &s->app);
-            return NGX_ERROR;
-        }
-
-        s->app_conf = cscf->default_app->app_conf;
-    }
 
     object_encoding = v->object_encoding;
 
@@ -456,10 +497,6 @@ ngx_rtmp_cmd_close_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
-    ngx_rtmp_core_srv_conf_t   *rcsf;
-
-    rcsf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
     ngx_live_delete_ctx(s);
     if (s->live_stream && s->live_stream->play_ctx == NULL
             && s->live_stream->publish_ctx == NULL)
@@ -467,7 +504,7 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         if (s->live_stream->pslot == ngx_process_slot) {
             ngx_stream_zone_delete_stream(&s->stream);
         }
-        ngx_live_delete_stream(&rcsf->serverid, &s->stream);
+        ngx_live_delete_stream(&s->serverid, &s->stream);
     }
 
     return NGX_OK;
@@ -558,7 +595,7 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   "publish: name='%s' args='%s' type=%s silent=%d",
                   v.name, v.args, v.type, v.silent);
 
-    ngx_rtmp_cmd_stream_init(s, v.name, 1);
+    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 1);
 
     return ngx_rtmp_publish(s, &v);
 }
@@ -567,6 +604,16 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_cmd_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 {
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+            "publish session(%p): app='%V' args='%V' flashver='%V' "
+            "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
+            "scheme='%V' domain='%V' serverid='%V' "
+            "name='%V' pargs='%V' stream='%V'",
+            s, &s->app, &s->args, &s->flashver,
+            &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
+            &s->scheme, &s->domain, &s->serverid,
+            &s->name, &s->pargs, &s->stream);
+
     return NGX_OK;
 }
 
@@ -621,7 +668,7 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                   (ngx_int_t) v.duration, (ngx_int_t) v.reset,
                   (ngx_int_t) v.silent);
 
-    ngx_rtmp_cmd_stream_init(s, v.name, 0);
+    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
 
     return ngx_rtmp_play(s, &v);
 }
@@ -630,6 +677,16 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_cmd_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+            "play session(%p): app='%V' args='%V' flashver='%V' "
+            "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
+            "scheme='%V' domain='%V' serverid='%V' "
+            "name='%V' pargs='%V' stream='%V'",
+            s, &s->app, &s->args, &s->flashver,
+            &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
+            &s->scheme, &s->domain, &s->serverid,
+            &s->name, &s->pargs, &s->stream);
+
     return NGX_OK;
 }
 

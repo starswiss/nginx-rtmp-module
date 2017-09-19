@@ -4,8 +4,6 @@
 
 Nginx event toolkit modules. It contains modules below, and will add more in the future.
 
-From [https://github.com/AlexWoo/nginx-toolkit-module](https://github.com/AlexWoo/nginx-toolkit-module)
-
 - [ngx-event-timer-module](doc/ngx-event-timer-module.md)
 
 	Independent timer for nginx
@@ -29,6 +27,10 @@ Now it support NGX\_CORE\_MODULE and NGX\_HTTP\_MODULE
 - [ngx-map](doc/ngx-map.md)
 
 A map implement use ngx_rbtree
+
+- [ngx-toolkit-misc](doc/ngx-toolkit-misc.md)
+
+Misc toolkit functions
 
 ## TODO
 

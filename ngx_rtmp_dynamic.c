@@ -6,8 +6,6 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include "ngx_rtmp.h"
-#include "toolkit/ngx_map.h"
-#include "toolkit/ngx_dynamic_conf.h"
 #include "ngx_rtmp_dynamic.h"
 
 
@@ -39,9 +37,6 @@ typedef struct {
 typedef struct {
     /* array of the ngx_rtmp_server_name_t, "server_name" directive */
     ngx_array_t                         server_names;
-
-    /* if serverid.len == 0, use domain as serverid*/
-    ngx_str_t                           serverid;
 
     ngx_rtmp_dynamic_core_app_conf_t   *default_app;
     ngx_map_t                           app_conf;
@@ -163,13 +158,6 @@ static ngx_command_t  ngx_rtmp_dynamic_core_dcommands[] = {
       0,
       NULL },
 
-    { ngx_string("serverid"),
-      NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_str_slot,
-      0,
-      offsetof(ngx_rtmp_dynamic_core_srv_conf_t, serverid),
-      NULL },
-
     { ngx_string("server_name"),
       NGX_RTMP_SRV_CONF|NGX_CONF_1MORE,
       ngx_rtmp_dynamic_core_server_name,
@@ -204,7 +192,7 @@ ngx_module_t  ngx_rtmp_dynamic_core_module = {
     NGX_MODULE_V1,
     &ngx_rtmp_dynamic_core_module_ctx,      /* module context */
     NULL,                                   /* module directives */
-    NGX_HTTP_MODULE,                        /* module type */
+    NGX_RTMP_MODULE,                        /* module type */
     NULL,                                   /* init master */
     NULL,                                   /* init module */
     NULL,                                   /* init process */
@@ -318,7 +306,7 @@ ngx_rtmp_dynamic_core_find_application(ngx_rtmp_session_t *s,
 {
     ngx_map_node_t                         *node;
 
-    node = ngx_map_find(&rdcscf->app_conf, (intptr_t) &(*rdcacf)->name);
+    node = ngx_map_find(&rdcscf->app_conf, (intptr_t) &s->app);
     if (node == NULL) {
         *rdcacf = rdcscf->default_app;
     } else {
@@ -484,14 +472,11 @@ failed:
 }
 
 static ngx_int_t
-ngx_rtmp_dynamic_core_find_virtual_server(ngx_rtmp_session_t *s,
+ngx_rtmp_dynamic_core_find_virtual_server(ngx_str_t *server,
         ngx_rtmp_dynamic_core_main_conf_t *rdcmcf,
         ngx_rtmp_dynamic_core_srv_conf_t **rdcscfp)
 {
     ngx_rtmp_dynamic_core_srv_conf_t       *rdcscf;
-    ngx_str_t                              *server;
-
-    server = &s->domain;
 
     rdcscf = ngx_hash_find_combined(&rdcmcf->names,
                                     ngx_hash_key(server->data, server->len),
@@ -946,7 +931,7 @@ ngx_rtmp_get_module_srv_dconf(ngx_rtmp_session_t *s, ngx_module_t *m)
         return NULL;
     }
 
-    rc = ngx_rtmp_dynamic_core_find_virtual_server(s, rdcmcf, &rdcscf);
+    rc = ngx_rtmp_dynamic_core_find_virtual_server(&s->domain, rdcmcf, &rdcscf);
     switch (rc) {
     case NGX_ERROR:
         return NULL;
@@ -980,4 +965,35 @@ ngx_rtmp_get_module_app_dconf(ngx_rtmp_session_t *s, ngx_module_t *m)
     }
 
     return NULL;
+}
+
+void
+ngx_rmtp_get_serverid_by_domain(ngx_str_t *serverid, ngx_str_t *domain)
+{
+    ngx_rtmp_dynamic_conf_t                *rdcf;
+    ngx_rtmp_dynamic_core_main_conf_t      *rdcmcf;
+    ngx_rtmp_dynamic_core_srv_conf_t       *rdcscf;
+    ngx_rtmp_core_srv_dconf_t              *rcsdcf;
+
+    rdcf = ngx_get_dconf(&ngx_rtmp_dynamic_module);
+    if (rdcf == NULL || rdcf->main_conf) {
+        goto notfound;
+    }
+
+    rdcmcf = rdcf->main_conf[ngx_rtmp_dynamic_core_module.ctx_index];
+    if (rdcmcf == NULL) {
+        goto notfound;
+    }
+
+    ngx_rtmp_dynamic_core_find_virtual_server(domain, rdcmcf, &rdcscf);
+    if (rdcscf && rdcscf->srv_conf) {
+        rcsdcf = rdcscf->srv_conf[ngx_rtmp_core_module.ctx_index];
+        if (rcsdcf && rcsdcf->serverid.len) {
+            *serverid = rcsdcf->serverid;
+            return;
+        }
+    }
+
+notfound:
+    *serverid = *domain;
 }

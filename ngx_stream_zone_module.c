@@ -13,7 +13,7 @@ static void *ngx_stream_zone_create_conf(ngx_cycle_t *cf);
 static char *ngx_stream_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
-#define NAME_LEN    256
+#define NAME_LEN    512
 
 static ngx_str_t stream_zone_key = ngx_string("stream_zone");
 

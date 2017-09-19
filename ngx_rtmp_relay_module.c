@@ -421,7 +421,10 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     }
 
     NGX_RTMP_SESSION_STR_COPY(stream,   stream);
+
     NGX_RTMP_SESSION_STR_COPY(name,     name);
+    NGX_RTMP_SESSION_STR_COPY(pargs,    pargs);
+
     NGX_RTMP_SESSION_STR_COPY(app,      app);
     NGX_RTMP_SESSION_STR_COPY(args,     args);
     NGX_RTMP_SESSION_STR_COPY(flashver, flashver);
@@ -429,10 +432,16 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     NGX_RTMP_SESSION_STR_COPY(tc_url,   tc_url);
     NGX_RTMP_SESSION_STR_COPY(page_url, page_url);
 
-    rs->acodecs = s->acodecs;
-    rs->vcodecs = s->vcodecs;
+    if (s) {
+        rs->acodecs = s->acodecs;
+        rs->vcodecs = s->vcodecs;
+    }
+
+    NGX_RTMP_SESSION_STR_COPY(serverid, serverid);
 
 #undef NGX_RTMP_SESSION_STR_COPY
+
+    ngx_rtmp_cmd_middleware_init(rs);
 
     /* rctx from here */
     rctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_relay_ctx_t));
@@ -474,6 +483,8 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     if (rctx->to.len == 0) {                    \
         rctx->to = rs->from;                    \
     }
+
+    NGX_RTMP_DEFAULT_STR(pargs,     pargs);
 
     NGX_RTMP_DEFAULT_STR(app,       app);
     NGX_RTMP_DEFAULT_STR(args,      args);
@@ -812,8 +823,12 @@ ngx_rtmp_relay_play_local(ngx_rtmp_session_t *s)
     v.silent = 1;
     *(ngx_cpymem(v.name, ctx->name.data,
             ngx_min(sizeof(v.name) - 1, ctx->name.len))) = 0;
+    if (ctx->pargs.len) {
+        *(ngx_cpymem(v.args, ctx->pargs.data,
+                    ngx_min(sizeof(v.args) - 1, ctx->pargs.len))) = 0;
+    }
 
-    ngx_rtmp_cmd_stream_init(s, v.name, 0);
+    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
 
     return ngx_rtmp_play(s, &v);
 }
@@ -834,8 +849,12 @@ ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s)
     v.silent = 1;
     *(ngx_cpymem(v.name, ctx->name.data,
             ngx_min(sizeof(v.name) - 1, ctx->name.len))) = 0;
+    if (ctx->pargs.len) {
+        *(ngx_cpymem(v.args, ctx->pargs.data,
+                    ngx_min(sizeof(v.args) - 1, ctx->pargs.len))) = 0;
+    }
 
-    ngx_rtmp_cmd_stream_init(s, v.name, 1);
+    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 1);
 
     return ngx_rtmp_publish(s, &v);
 }
@@ -844,6 +863,7 @@ ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_relay_send_connect(ngx_rtmp_session_t *s)
 {
+    ngx_str_t                   app;
     double                      acodecs = 3575, vcodecs = 252;
     static double               trans = NGX_RTMP_RELAY_CONNECT_TRANS;
 
@@ -910,8 +930,20 @@ ngx_rtmp_relay_send_connect(ngx_rtmp_session_t *s)
 
     /* app */
     if (ctx->app.len) {
-        out_cmd[0].data = ctx->app.data;
-        out_cmd[0].len  = ctx->app.len;
+        if (ctx->args.len) {
+            app.len = ctx->app.len + 1 + ctx->args.len;
+            app.data = ngx_pcalloc(s->connection->pool, app.len);
+            if (app.data == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_snprintf(app.data, app.len, "%V?%V", &ctx->app, &ctx->args);
+        } else {
+            app = ctx->app;
+        }
+
+        out_cmd[0].data = app.data;
+        out_cmd[0].len  = app.len;
     } else {
         out_cmd[0].data = cacf->name.data;
         out_cmd[0].len  = cacf->name.len;
@@ -1018,6 +1050,7 @@ ngx_rtmp_relay_send_create_stream(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_relay_send_publish(ngx_rtmp_session_t *s)
 {
+    ngx_str_t                   name;
     static double               trans;
 
     static ngx_rtmp_amf_elt_t   out_elts[] = {
@@ -1056,8 +1089,20 @@ ngx_rtmp_relay_send_publish(ngx_rtmp_session_t *s)
         out_elts[3].data = ctx->play_path.data;
         out_elts[3].len  = ctx->play_path.len;
     } else {
-        out_elts[3].data = ctx->name.data;
-        out_elts[3].len  = ctx->name.len;
+        if (ctx->pargs.len) {
+            name.len = ctx->name.len + 1 + ctx->pargs.len;
+            name.data = ngx_pcalloc(s->connection->pool, name.len);
+            if (name.data == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_snprintf(name.data, name.len, "%V?%V", &ctx->name, &ctx->pargs);
+        } else {
+            name = ctx->name;
+        }
+
+        out_elts[3].data = name.data;
+        out_elts[3].len  = name.len;
     }
 
     ngx_memzero(&h, sizeof(h));
@@ -1073,6 +1118,7 @@ ngx_rtmp_relay_send_publish(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_relay_send_play(ngx_rtmp_session_t *s)
 {
+    ngx_str_t                   name;
     static double               trans;
     static double               start, duration;
 
@@ -1118,8 +1164,20 @@ ngx_rtmp_relay_send_play(ngx_rtmp_session_t *s)
         out_elts[3].data = ctx->play_path.data;
         out_elts[3].len  = ctx->play_path.len;
     } else {
-        out_elts[3].data = ctx->name.data;
-        out_elts[3].len  = ctx->name.len;
+        if (ctx->pargs.len) {
+            name.len = ctx->name.len + 1 + ctx->pargs.len;
+            name.data = ngx_pcalloc(s->connection->pool, name.len);
+            if (name.data == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_snprintf(name.data, name.len, "%V?%V", &ctx->name, &ctx->pargs);
+        } else {
+            name = ctx->name;
+        }
+
+        out_elts[3].data = name.data;
+        out_elts[3].len  = name.len;
     }
 
     if (ctx->live) {
