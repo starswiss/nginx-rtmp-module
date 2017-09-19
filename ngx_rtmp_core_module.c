@@ -9,7 +9,7 @@
 #include <ngx_event.h>
 #include <nginx.h>
 #include "ngx_rtmp.h"
-#include "toolkit/ngx_dynamic_conf.h"
+#include "ngx_dynamic_conf.h"
 #include "ngx_rtmp_dynamic.h"
 
 

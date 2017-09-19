@@ -1,7 +1,6 @@
 ngx_addon_name="ngx_rtmp_module"
 
 RTMP_CORE_MODULES="                                         \
-                ngx_http_dynamic_module                     \
                 ngx_live_module                             \
                 ngx_rtmp_module                             \
                 ngx_rtmp_dynamic_module                     \
@@ -32,14 +31,11 @@ RTMP_CORE_MODULES="                                         \
 
 
 EVENT_MODULES="$EVENT_MODULES                               \
-                ngx_event_timer_module                      \
-                ngx_dynamic_conf_module                     \
                 ngx_event_multiport_module                  \
                 "
 
 
 RTMP_HTTP_MODULES="                                         \
-                ngx_http_dynamic_core_module                \
                 ngx_rtmp_stat_module                        \
                 ngx_rtmp_control_module                     \
                 ngx_http_flv_live_module                    \
@@ -70,11 +66,6 @@ RTMP_DEPS="                                                     \
                 $ngx_addon_dir/http/ngx_http_set_header.h       \
                 $ngx_addon_dir/ngx_live.h                       \
                 $ngx_addon_dir/ngx_rtmp_dynamic.h               \
-                $ngx_addon_dir/toolkit/ngx_map.h                \
-                $ngx_addon_dir/toolkit/ngx_event_timer_module.h \
-                $ngx_addon_dir/toolkit/ngx_dynamic_conf.h       \
-                $ngx_addon_dir/toolkit/ngx_http_dynamic.h       \
-                $ngx_addon_dir/toolkit/ngx_toolkit_misc.h       \
                 "
 
 
@@ -126,11 +117,6 @@ RTMP_HTTP_SRCS="                                                \
                 $ngx_addon_dir/ngx_rtmp_control_module.c        \
                 $ngx_addon_dir/http/ngx_http_flv_live_module.c  \
                 $ngx_addon_dir/http/ngx_http_set_header.c       \
-                $ngx_addon_dir/toolkit/ngx_map.c                \
-                $ngx_addon_dir/toolkit/ngx_event_timer_module.c \
-                $ngx_addon_dir/toolkit/ngx_dynamic_conf.c       \
-                $ngx_addon_dir/toolkit/ngx_http_dynamic.c       \
-                $ngx_addon_dir/toolkit/ngx_toolkit_misc.c       \
                 "
 
 if [ -f auto/module ] ; then

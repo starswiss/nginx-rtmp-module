@@ -9,8 +9,8 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
-#include "toolkit/ngx_map.h"
-#include "toolkit/ngx_dynamic_conf.h"
+#include "ngx_map.h"
+#include "ngx_dynamic_conf.h"
 #include "ngx_rtmp.h"
 
 

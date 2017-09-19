@@ -9,8 +9,8 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_streams.h"
 #include "ngx_stream_zone_module.h"
-#include "toolkit/ngx_dynamic_conf.h"
-#include "toolkit/ngx_toolkit_misc.h"
+#include "ngx_dynamic_conf.h"
+#include "ngx_toolkit_misc.h"
 #include "ngx_rtmp_dynamic.h"
 
 
