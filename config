@@ -18,7 +18,6 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_relay_module                       \
                 ngx_rtmp_exec_module                        \
                 ngx_rtmp_notify_module                      \
-                ngx_stream_zone_module                      \
                 ngx_rtmp_auto_pull_module                   \
                 ngx_rtmp_auth_request_module                \
                 ngx_rtmp_log_module                         \
@@ -27,11 +26,6 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_dash_module                        \
                 ngx_rtmp_shared_module                      \
                 ngx_rtmp_gop_module                         \
-                "
-
-
-EVENT_MODULES="$EVENT_MODULES                               \
-                ngx_event_multiport_module                  \
                 "
 
 
@@ -60,8 +54,6 @@ RTMP_DEPS="                                                     \
                 $ngx_addon_dir/ngx_rtmp_proxy_protocol.h        \
                 $ngx_addon_dir/hls/ngx_rtmp_mpegts.h            \
                 $ngx_addon_dir/dash/ngx_rtmp_mp4.h              \
-                $ngx_addon_dir/ngx_stream_zone_module.h         \
-                $ngx_addon_dir/ngx_event_multiport_module.h     \
                 $ngx_addon_dir/http/ngx_http_set_header.h       \
                 $ngx_addon_dir/ngx_live.h                       \
                 $ngx_addon_dir/ngx_rtmp_dynamic.h               \
@@ -100,8 +92,6 @@ RTMP_CORE_SRCS="                                                \
                 $ngx_addon_dir/hls/ngx_rtmp_mpegts.c            \
                 $ngx_addon_dir/dash/ngx_rtmp_mp4.c              \
                 $ngx_addon_dir/ngx_rtmp_auto_pull_module.c      \
-                $ngx_addon_dir/ngx_stream_zone_module.c         \
-                $ngx_addon_dir/ngx_event_multiport_module.c     \
                 $ngx_addon_dir/ngx_live.c                       \
                 $ngx_addon_dir/ngx_rtmp_shared_module.c         \
                 $ngx_addon_dir/ngx_rtmp_gop_module.c            \

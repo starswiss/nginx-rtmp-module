@@ -8,7 +8,7 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_relay_module.h"
 #include "ngx_stream_zone_module.h"
-#include "ngx_event_multiport_module.h"
+#include "ngx_multiport.h"
 
 
 static ngx_rtmp_publish_pt              next_publish;
@@ -110,14 +110,13 @@ ngx_rtmp_auto_pull_target(ngx_rtmp_session_t *s,
 {
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_url_t                          *u;
-    socklen_t                           len;
+    ngx_str_t                           port;
 
     apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
 
     ngx_memzero(target, sizeof(ngx_rtmp_relay_target_t));
 
     u = &target->url;
-    u->url = s->name;
     target->name = s->name;
     target->app = s->app;
     target->tc_url = s->tc_url;
@@ -125,30 +124,23 @@ ngx_rtmp_auto_pull_target(ngx_rtmp_session_t *s,
     target->swf_url = s->swf_url;
     target->flash_ver = s->flashver;
 
-    u->naddrs = 1;
-    u->addrs = ngx_pcalloc(s->connection->pool, sizeof(ngx_addr_t));
-    if (u->addrs == NULL) {
-        return NGX_ERROR;
-    }
+    ngx_memzero(u, sizeof(ngx_url_t));
+    ngx_memzero(&port, sizeof(ngx_str_t));
 
-    if (apcf->auto_pull_port.len >= 5 &&
-        ngx_strncasecmp(apcf->auto_pull_port.data, (u_char *) "unix:", 5) == 0)
+    if (ngx_multiport_get_port(s->connection->pool, &port,
+            &apcf->auto_pull_port, pslot) == NGX_ERROR)
     {
-        len = sizeof(struct sockaddr_un);
-    } else if (apcf->auto_pull_port.data[0] == '[') {
-        len = sizeof(struct sockaddr_in);
-    } else {
-        len = sizeof(struct sockaddr_in6);
-    }
-
-    u->addrs[0].sockaddr = ngx_pcalloc(s->connection->pool, len);
-    if (u->addrs[0].sockaddr == NULL) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "auto pull, get mulitport error: %V", &apcf->auto_pull_port);
         return NGX_ERROR;
     }
 
-    u->addrs[0].socklen = ngx_event_multiport_get_multiport(
-            u->addrs[0].sockaddr, &apcf->auto_pull_port, pslot);
-    if (u->addrs[0].socklen == 0) {
+    u->url = port;
+    u->no_resolve = 1;
+
+    if (ngx_parse_url(s->connection->pool, u) != NGX_OK) {
+        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+                "auto pull, parse url failed '%V'", &u->url);
         return NGX_ERROR;
     }
 

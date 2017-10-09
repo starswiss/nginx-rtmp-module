@@ -912,7 +912,7 @@ ngx_rtmp_get_module_main_dconf(ngx_rtmp_session_t *s, ngx_module_t *m)
     ngx_rtmp_dynamic_conf_t                *rdcf;
 
     rdcf = ngx_get_dconf(&ngx_rtmp_dynamic_module);
-    if (rdcf == NULL) {
+    if (rdcf == NULL || rdcf->main_conf == NULL) {
         return NULL;
     }
 
