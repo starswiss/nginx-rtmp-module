@@ -163,10 +163,9 @@ ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
             "auto push, session %p publish %s", s, v->name);
 
-    /* TODO for multiprocess stream should be serverid+app+name */
     pslot = ngx_stream_zone_insert_stream(&s->stream);
     if (pslot == NGX_ERROR) {
-        return NGX_ERROR;
+        goto next;
     }
     s->live_stream->pslot = pslot;
 
@@ -214,10 +213,9 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     }
 
     if (s->live_stream->pslot == -1) { /* first access for stream */
-        /* TODO for multiprocess stream should be serverid+app+name */
         pslot = ngx_stream_zone_insert_stream(&s->stream);
         if (pslot == NGX_ERROR) {
-            return NGX_ERROR;
+            goto next;
         }
         s->live_stream->pslot = pslot;
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
