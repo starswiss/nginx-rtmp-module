@@ -7,6 +7,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include "ngx_rtmp_netcall_module.h"
+#include "ngx_dynamic_resolver.h"
 
 
 static ngx_int_t ngx_rtmp_netcall_postconfiguration(ngx_conf_t *cf);
@@ -155,7 +156,7 @@ ngx_rtmp_netcall_get_peer(ngx_peer_connection_t *pc, void *data)
 {
     ngx_rtmp_netcall_session_t   *cs = data;
 
-    pc->sockaddr =(struct sockaddr *)&cs->url->sockaddr;
+    pc->sockaddr = (struct sockaddr *)&cs->url->sockaddr;
     pc->socklen = cs->url->socklen;
     pc->name = &cs->url->host;
 
@@ -180,6 +181,8 @@ ngx_rtmp_netcall_create(ngx_rtmp_session_t *s, ngx_rtmp_netcall_init_t *ci)
     ngx_connection_t               *c, *cc;
     ngx_pool_t                     *pool;
     ngx_int_t                       rc;
+    ngx_url_t                       u;
+    struct sockaddr_in             *sin;
 
     pool = NULL;
     c = s->connection;
@@ -228,9 +231,15 @@ ngx_rtmp_netcall_create(ngx_rtmp_session_t *s, ngx_rtmp_netcall_init_t *ci)
         ngx_memcpy(cs->arg, ci->arg, ci->argsize);
     }
 
+    u = *ci->url;
+    u.socklen = ngx_dynamic_resolver_gethostbyname(&u.host,
+                    (struct sockaddr *) &u.sockaddr);
+    sin = (struct sockaddr_in *) &u.sockaddr;
+    sin->sin_port = ntohs(u.port);
+
     cs->timeout = nscf->timeout;
     cs->bufsize = nscf->bufsize;
-    cs->url = ci->url;
+    cs->url = &u;
     cs->session = s;
     cs->filter = ci->filter;
     cs->sink = ci->sink;

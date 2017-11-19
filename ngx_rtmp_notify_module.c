@@ -12,6 +12,7 @@
 #include "ngx_rtmp_netcall_module.h"
 #include "ngx_rtmp_record_module.h"
 #include "ngx_rtmp_relay_module.h"
+#include "ngx_dynamic_resolver.h"
 
 
 static ngx_rtmp_connect_pt                      next_connect;
@@ -1578,6 +1579,7 @@ ngx_rtmp_notify_parse_url(ngx_conf_t *cf, ngx_str_t *url)
         }
         return NULL;
     }
+    ngx_dynamic_resolver_add_domain(&u->host, cf->cycle);
 
     return u;
 }

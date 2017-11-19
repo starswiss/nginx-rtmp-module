@@ -8,6 +8,7 @@
 #include <ngx_core.h>
 #include "ngx_rtmp_relay_module.h"
 #include "ngx_rtmp_cmd_module.h"
+#include "ngx_dynamic_resolver.h"
 
 
 static ngx_rtmp_publish_pt          next_publish;
@@ -340,11 +341,13 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     ngx_rtmp_session_t             *rs;
     ngx_peer_connection_t          *pc;
     ngx_connection_t               *c;
-    ngx_addr_t                     *addr;
+    ngx_addr_t                     *addr, daddr;
     ngx_pool_t                     *pool;
     ngx_int_t                       rc;
     ngx_str_t                       v, *uri;
-    u_char                         *first, *last, *p;
+    u_char                         *first, *last, *p, text[NGX_SOCKADDRLEN];
+    struct sockaddr                 sa;
+    struct sockaddr_in             *sin;
 
     racf = ngx_rtmp_get_module_app_conf(cctx, ngx_rtmp_relay_module);
 
@@ -362,15 +365,28 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
         goto clear;
     }
 
-    if (target->url.naddrs == 0) {
-        ngx_log_error(NGX_LOG_ERR, racf->log, 0,
-                      "relay: no address");
-        goto clear;
-    }
+    daddr.socklen = ngx_dynamic_resolver_gethostbyname(&target->url.host,
+                                                       &sa);
+    if (daddr.socklen == 0) { /* dynamic resolver sync failed */
+        if (target->url.naddrs == 0) {
+            ngx_log_error(NGX_LOG_ERR, racf->log, 0,
+                    "relay: no address");
+            goto clear;
+        }
 
-    /* get address */
-    addr = &target->url.addrs[target->counter % target->url.naddrs];
-    target->counter++;
+        /* get address */
+        addr = &target->url.addrs[target->counter % target->url.naddrs];
+        target->counter++;
+    } else {
+        sin = (struct sockaddr_in *) &sa;
+        sin->sin_port = ntohs(target->url.port);
+        daddr.sockaddr = &sa;
+        ngx_memzero(text, sizeof(text));
+        daddr.name.len = ngx_sock_ntop(daddr.sockaddr, daddr.socklen, text,
+                                       NGX_SOCKADDRLEN, 1);
+        daddr.name.data = text;
+        addr = &daddr;
+    }
 
     /* copy log to keep shared log unchanged */
     pc->log = racf->log;
@@ -1593,6 +1609,7 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         }
         return NGX_CONF_ERROR;
     }
+    ngx_dynamic_resolver_add_domain(&u->host, cf->cycle);
 
     value += 2;
     for (i = 2; i < cf->args->nelts; ++i, ++value) {
