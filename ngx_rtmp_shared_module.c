@@ -181,7 +181,7 @@ ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame)
     /* recycle frame */
     frame->next = rscf->free_frame;
     rscf->free_frame = frame;
-    ++rscf->free_frame;
+    ++rscf->nfree_frame;
 }
 
 void
