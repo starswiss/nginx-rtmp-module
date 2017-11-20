@@ -290,7 +290,7 @@ typedef struct {
     unsigned                interprocess:1;
     unsigned                auto_pulled:1;
     unsigned                relay:1;
-    unsigned                static_relay:1;
+    unsigned                closed:1;
 
     /* live type: 0- RTMP 1- http-flv 2- hls */
     unsigned                live_type:2;
@@ -346,6 +346,10 @@ struct ngx_live_stream_s {
     ngx_rtmp_core_ctx_t        *play_ctx;
 
     ngx_live_stream_t          *next;
+
+    /* for relay */
+    unsigned                    players;
+    unsigned                    publishers;
 
     /* for live */
     ngx_rtmp_live_ctx_t        *ctx;

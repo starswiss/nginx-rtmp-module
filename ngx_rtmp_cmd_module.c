@@ -174,6 +174,12 @@ ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
     s->live_stream = ngx_live_create_stream(&s->serverid, &s->stream);
 
     ngx_live_create_ctx(s, publishing);
+
+    if (publishing) {
+        ++s->live_stream->publishers;
+    } else {
+        ++s->live_stream->players;
+    }
 }
 
 static ngx_int_t
@@ -497,6 +503,20 @@ ngx_rtmp_cmd_close_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 static ngx_int_t
 ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
+    ngx_rtmp_core_ctx_t                *ctx;
+
+    if (s->closed) { /* stream already close */
+        return NGX_OK;
+    }
+
+    s->closed = 1;
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_core_module);
+    if (ctx->publishing) {
+        --s->live_stream->publishers;
+    } else {
+        --s->live_stream->players;
+    }
+
     ngx_live_delete_ctx(s);
     if (s->live_stream && s->live_stream->play_ctx == NULL
             && s->live_stream->publish_ctx == NULL)
@@ -505,6 +525,24 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
             ngx_stream_zone_delete_stream(&s->stream);
         }
         ngx_live_delete_stream(&s->serverid, &s->stream);
+    }
+
+    if (s->live_stream->players == 0) {
+        /* all players close, close relay publish */
+        for (ctx = s->live_stream->publish_ctx; ctx; ctx = ctx->next) {
+            if (ctx->session->relay) {
+                ngx_rtmp_finalize_session(ctx->session);
+            }
+        }
+    }
+
+    if (s->live_stream->publishers == 0) {
+        /* all publishers close, close relay play */
+        for (ctx = s->live_stream->play_ctx; ctx; ctx = ctx->next) {
+            if (ctx->session->relay) {
+                ngx_rtmp_finalize_session(ctx->session);
+            }
+        }
     }
 
     return NGX_OK;
