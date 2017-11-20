@@ -566,6 +566,14 @@ ngx_rtmp_gop_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         goto next;
     }
 
+    if (ctx->avc_header) {
+        ngx_rtmp_shared_free_frame(ctx->avc_header);
+    }
+
+    if (ctx->aac_header) {
+        ngx_rtmp_shared_free_frame(ctx->aac_header);
+    }
+
     /* free cache in publisher */
     while (ctx->gop_pos != ctx->gop_last) {
         ngx_rtmp_shared_free_frame(ctx->cache[ctx->gop_pos]);
