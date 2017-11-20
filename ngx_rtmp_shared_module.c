@@ -20,6 +20,9 @@ typedef struct {
     ngx_rtmp_frame_t           *free_frame;
     ngx_mpegts_frame_t         *free_mpegts_frame;
     ngx_pool_t                 *pool;
+
+    ngx_uint_t                  nalloc_frame;
+    ngx_uint_t                  nfree_frame;
 } ngx_rtmp_shared_conf_t;
 
 
@@ -136,11 +139,14 @@ ngx_rtmp_shared_alloc_frame(size_t size, ngx_chain_t *cl, ngx_flag_t mandatory)
     frame = rscf->free_frame;
     if (frame) {
         rscf->free_frame = frame->next;
+        frame->chain = NULL;
+        --rscf->nfree_frame;
     } else {
         frame = ngx_pcalloc(rscf->pool, sizeof(ngx_rtmp_frame_t));
         if (frame == NULL) {
             return NULL;
         }
+        ++rscf->nalloc_frame;
     }
 
     frame->ref = 1;
@@ -175,6 +181,7 @@ ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame)
     /* recycle frame */
     frame->next = rscf->free_frame;
     rscf->free_frame = frame;
+    ++rscf->free_frame;
 }
 
 void
@@ -272,4 +279,40 @@ ngx_rtmp_shared_free_mpegts_frame(ngx_mpegts_frame_t *frame)
     /* recycle frame */
     frame->next = rscf->free_mpegts_frame;
     rscf->free_mpegts_frame = frame;
+}
+
+ngx_chain_t *
+ngx_rtmp_shared_state(ngx_http_request_t *r)
+{
+	ngx_rtmp_shared_conf_t     *rscf;
+    ngx_chain_t                *cl;
+    ngx_buf_t                  *b;
+    size_t                      len;
+
+    rscf = (ngx_rtmp_shared_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
+                                                   ngx_rtmp_shared_module);
+
+    len = sizeof("##########rtmp shared state##########\n") - 1
+        + sizeof("ngx_rtmp_shared alloc frame: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("ngx_rtmp_shared free frame: \n") - 1 + NGX_OFF_T_LEN;
+
+    cl = ngx_alloc_chain_link(r->pool);
+    if (cl == NULL) {
+        return NULL;
+    }
+    cl->next = NULL;
+
+    b = ngx_create_temp_buf(r->pool, len);
+    if (b == NULL) {
+        return NULL;
+    }
+    cl->buf = b;
+
+    b->last = ngx_snprintf(b->last, len,
+            "##########rtmp shared state##########\n"
+            "ngx_rtmp_shared alloc frame: %ui\n"
+            "ngx_rtmp_shared free frame: %ui\n",
+            rscf->nalloc_frame, rscf->nfree_frame);
+
+    return cl;
 }

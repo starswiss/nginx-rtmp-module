@@ -596,6 +596,7 @@ void ngx_rtmp_shared_free_frame(ngx_rtmp_frame_t *frame);
 
 #define ngx_rtmp_shared_acquire_frame(frame) ++frame->ref;
 
+ngx_chain_t *ngx_rtmp_shared_state(ngx_http_request_t *r);
 
 void ngx_mpegts_shared_append_chain(ngx_mpegts_frame_t *frame, ngx_chain_t *cl,
         ngx_flag_t mandatory);
