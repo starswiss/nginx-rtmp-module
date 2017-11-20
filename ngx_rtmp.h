@@ -329,7 +329,6 @@ typedef struct {
 
 typedef struct ngx_rtmp_core_ctx_s  ngx_rtmp_core_ctx_t;
 typedef struct ngx_rtmp_live_ctx_s  ngx_rtmp_live_ctx_t;
-typedef struct ngx_rtmp_relay_ctx_s ngx_rtmp_relay_ctx_t;
 
 struct ngx_rtmp_core_ctx_s {
     ngx_rtmp_core_ctx_t    *next;
@@ -357,9 +356,6 @@ struct ngx_live_stream_s {
     ngx_msec_t                  epoch;
     unsigned                    active:1;
     unsigned                    publishing:1;
-
-    /* for relay */
-    ngx_rtmp_relay_ctx_t       *relay_ctx;
 };
 
 struct ngx_live_server_s {

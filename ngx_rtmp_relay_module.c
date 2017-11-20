@@ -13,22 +13,14 @@
 
 static ngx_rtmp_publish_pt          next_publish;
 static ngx_rtmp_play_pt             next_play;
-static ngx_rtmp_delete_stream_pt    next_delete_stream;
-static ngx_rtmp_close_stream_pt     next_close_stream;
 
 
-static ngx_int_t ngx_rtmp_relay_init_process(ngx_cycle_t *cycle);
 static ngx_int_t ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf);
-static void * ngx_rtmp_relay_create_app_conf(ngx_conf_t *cf);
-static char * ngx_rtmp_relay_merge_app_conf(ngx_conf_t *cf,
+static void *ngx_rtmp_relay_create_app_conf(ngx_conf_t *cf);
+static char *ngx_rtmp_relay_merge_app_conf(ngx_conf_t *cf,
        void *parent, void *child);
-static char * ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd,
+static char *ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd,
        void *conf);
-static ngx_int_t ngx_rtmp_relay_publish(ngx_rtmp_session_t *s,
-       ngx_rtmp_publish_t *v);
-static ngx_rtmp_relay_ctx_t * ngx_rtmp_relay_create_connection(
-       ngx_rtmp_session_t *s, ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
-       ngx_rtmp_relay_target_t *target);
 
 
 /*                _____
@@ -48,8 +40,6 @@ static ngx_rtmp_relay_ctx_t * ngx_rtmp_relay_create_connection(
 typedef struct {
     ngx_array_t                 pulls;         /* ngx_rtmp_relay_target_t * */
     ngx_array_t                 pushes;        /* ngx_rtmp_relay_target_t * */
-    ngx_array_t                 static_pulls;  /* ngx_rtmp_relay_target_t * */
-    ngx_array_t                 static_events; /* ngx_event_t * */
     ngx_log_t                  *log;
     ngx_msec_t                  buflen;
     ngx_flag_t                  session_relay;
@@ -59,9 +49,33 @@ typedef struct {
 
 
 typedef struct {
-    ngx_rtmp_conf_ctx_t         cctx;
-    ngx_rtmp_relay_target_t    *target;
-} ngx_rtmp_relay_static_t;
+    ngx_str_t                       name;
+    ngx_str_t                       url;
+    ngx_log_t                       log;
+    ngx_rtmp_session_t             *session;
+
+    ngx_str_t                       pargs; /* play or publish ctx */
+
+    ngx_str_t                       app;
+    ngx_str_t                       args;
+    ngx_str_t                       tc_url;
+    ngx_str_t                       page_url;
+    ngx_str_t                       swf_url;
+    ngx_str_t                       flash_ver;
+    uint32_t                        acodecs;
+    uint32_t                        vcodecs;
+
+    ngx_str_t                       play_path;
+    ngx_int_t                       live;
+    ngx_int_t                       start;
+    ngx_int_t                       stop;
+
+    ngx_event_t                     push_evt;
+    void                           *tag;
+    void                           *data;
+
+    unsigned                        publishing:1;
+} ngx_rtmp_relay_ctx_t;
 
 
 #define NGX_RTMP_RELAY_CONNECT_TRANS            1
@@ -145,7 +159,7 @@ ngx_module_t  ngx_rtmp_relay_module = {
     NGX_RTMP_MODULE,                        /* module type */
     NULL,                                   /* init master */
     NULL,                                   /* init module */
-    ngx_rtmp_relay_init_process,            /* init process */
+    NULL,                                   /* init process */
     NULL,                                   /* init thread */
     NULL,                                   /* exit thread */
     NULL,                                   /* exit process */
@@ -169,18 +183,6 @@ ngx_rtmp_relay_create_app_conf(ngx_conf_t *cf)
     }
 
     if (ngx_array_init(&racf->pulls, cf->pool, 1, sizeof(void *)) != NGX_OK) {
-        return NULL;
-    }
-
-    if (ngx_array_init(&racf->static_pulls, cf->pool, 1, sizeof(void *))
-        != NGX_OK)
-    {
-        return NULL;
-    }
-
-    if (ngx_array_init(&racf->static_events, cf->pool, 1, sizeof(void *))
-        != NGX_OK)
-    {
         return NULL;
     }
 
@@ -208,90 +210,6 @@ ngx_rtmp_relay_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
             3000);
 
     return NGX_CONF_OK;
-}
-
-
-static void
-ngx_rtmp_relay_static_pull_reconnect(ngx_event_t *ev)
-{
-    ngx_rtmp_relay_static_t    *rs = ev->data;
-
-    ngx_rtmp_relay_ctx_t       *ctx;
-    ngx_rtmp_relay_app_conf_t  *racf;
-
-    racf = ngx_rtmp_get_module_app_conf(&rs->cctx, ngx_rtmp_relay_module);
-
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, racf->log, 0,
-                   "relay: reconnecting static pull");
-
-    ctx = ngx_rtmp_relay_create_connection(NULL, &rs->cctx, &rs->target->name,
-                                           rs->target);
-    if (ctx) {
-        ctx->session->static_relay = 1;
-        ctx->static_evt = ev;
-        return;
-    }
-
-    ngx_add_timer(ev, racf->pull_reconnect);
-}
-
-
-static void
-ngx_rtmp_relay_push_reconnect(ngx_event_t *ev)
-{
-    ngx_rtmp_session_t             *s = ev->data;
-
-    ngx_rtmp_relay_app_conf_t      *racf;
-    ngx_rtmp_relay_ctx_t           *ctx, *pctx;
-    ngx_uint_t                      n;
-    ngx_rtmp_relay_target_t        *target, **t;
-
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
-            "relay: push reconnect");
-
-    racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx == NULL) {
-        return;
-    }
-
-    t = racf->pushes.elts;
-    for (n = 0; n < racf->pushes.nelts; ++n, ++t) {
-        target = *t;
-
-        if (target->name.len && (ctx->name.len != target->name.len ||
-            ngx_memcmp(ctx->name.data, target->name.data, ctx->name.len)))
-        {
-            continue;
-        }
-
-        for (pctx = ctx->play; pctx; pctx = pctx->next) {
-            if (pctx->tag == &ngx_rtmp_relay_module &&
-                pctx->data == target)
-            {
-                break;
-            }
-        }
-
-        if (pctx) {
-            continue;
-        }
-
-        if (ngx_rtmp_relay_push(s, &ctx->name, target) == NGX_OK) {
-            continue;
-        }
-
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "relay: push reconnect failed name='%V' app='%V' "
-                "playpath='%V' url='%V'",
-                &ctx->name, &target->app, &target->play_path,
-                &target->url.url);
-
-        if (!ctx->push_evt.timer_set) {
-            ngx_add_timer(&ctx->push_evt, racf->push_reconnect);
-        }
-    }
 }
 
 
@@ -618,14 +536,6 @@ ngx_rtmp_relay_create_local_ctx(ngx_rtmp_session_t *s, ngx_str_t *name,
     }
     ctx->session = s;
 
-    ctx->push_evt.data = s;
-    ctx->push_evt.log = s->connection->log;
-    ctx->push_evt.handler = ngx_rtmp_relay_push_reconnect;
-
-    if (ctx->publish) {
-        return NULL;
-    }
-
     if (ngx_rtmp_relay_copy_str(s->connection->pool, &ctx->name, name)
             != NGX_OK)
     {
@@ -643,46 +553,24 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_create_ctx_pt create_play_ctx)
 {
     ngx_rtmp_relay_app_conf_t      *racf;
-    ngx_rtmp_relay_ctx_t           *publish_ctx, *play_ctx, **cctx;
-
+    ngx_rtmp_relay_ctx_t           *ctx;
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
     if (racf == NULL) {
         return NGX_ERROR;
     }
 
-    play_ctx = create_play_ctx(s, name, target);
-    if (play_ctx == NULL) {
+    ctx = create_play_ctx(s, name, target);
+    if (ctx == NULL) {
         return NGX_ERROR;
     }
+    ctx->publishing = 1;
 
-    cctx = &s->live_stream->relay_ctx;
-    for (; *cctx; cctx = &(*cctx)->next) {
-        if ((*cctx)->name.len == name->len
-            && !ngx_memcmp(name->data, (*cctx)->name.data,
-                name->len))
-        {
-            break;
-        }
-    }
-
-    if (*cctx) {
-        play_ctx->publish = (*cctx)->publish;
-        play_ctx->next = (*cctx)->play;
-        (*cctx)->play = play_ctx;
-        return NGX_OK;
-    }
-
-    publish_ctx = create_publish_ctx(s, name, target);
-    if (publish_ctx == NULL) {
-        ngx_rtmp_finalize_session(play_ctx->session);
+    ctx = create_publish_ctx(s, name, target);
+    if (ctx == NULL) {
+        ngx_rtmp_finalize_session(ctx->session);
         return NGX_ERROR;
     }
-
-    publish_ctx->publish = publish_ctx;
-    publish_ctx->play = play_ctx;
-    play_ctx->publish = publish_ctx;
-    *cctx = publish_ctx;
 
     return NGX_OK;
 }
@@ -1282,7 +1170,7 @@ ngx_rtmp_relay_on_result(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             return ngx_rtmp_relay_send_create_stream(s);
 
         case NGX_RTMP_RELAY_CREATE_STREAM_TRANS:
-            if (ctx->publish != ctx && !s->static_relay) {
+            if (ctx->publishing) {
                 if (ngx_rtmp_relay_send_publish(s) != NGX_OK) {
                     return NGX_ERROR;
                 }
@@ -1451,119 +1339,6 @@ ngx_rtmp_relay_handshake_done(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 }
 
 
-static void
-ngx_rtmp_relay_close(ngx_rtmp_session_t *s)
-{
-    ngx_rtmp_relay_app_conf_t          *racf;
-    ngx_rtmp_relay_ctx_t               *ctx, **cctx;
-
-    racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx == NULL) {
-        return;
-    }
-
-    if (s->static_relay) {
-        ngx_add_timer(ctx->static_evt, racf->pull_reconnect);
-    }
-
-    if (ctx->publish == NULL) {
-        return;
-    }
-
-    /* play end disconnect? */
-    if (ctx->publish != ctx) {
-        for (cctx = &ctx->publish->play; *cctx; cctx = &(*cctx)->next) {
-            if (*cctx == ctx) {
-                *cctx = ctx->next;
-                break;
-            }
-        }
-
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ctx->session->connection->log, 0,
-                "relay: play disconnect app='%V' name='%V'",
-                &ctx->app, &ctx->name);
-
-        /* push reconnect */
-        if (s->relay && ctx->tag == &ngx_rtmp_relay_module &&
-            !ctx->publish->push_evt.timer_set)
-        {
-            ngx_add_timer(&ctx->publish->push_evt, racf->push_reconnect);
-        }
-
-#ifdef NGX_DEBUG
-        {
-            ngx_uint_t  n = 0;
-            for (cctx = &ctx->publish->play; *cctx; cctx = &(*cctx)->next, ++n);
-            ngx_log_debug3(NGX_LOG_DEBUG_RTMP, ctx->session->connection->log, 0,
-                "relay: play left after disconnect app='%V' name='%V': %ui",
-                &ctx->app, &ctx->name, n);
-        }
-#endif
-
-        if (ctx->publish->play == NULL && ctx->publish->session->relay) {
-            ngx_log_debug2(NGX_LOG_DEBUG_RTMP,
-                 ctx->publish->session->connection->log, 0,
-                "relay: publish disconnect empty app='%V' name='%V'",
-                &ctx->app, &ctx->name);
-            ngx_rtmp_finalize_session(ctx->publish->session);
-        }
-
-        ctx->publish = NULL;
-
-        return;
-    }
-
-    /* publish end disconnect */
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ctx->session->connection->log, 0,
-            "relay: publish disconnect app='%V' name='%V'",
-            &ctx->app, &ctx->name);
-
-    if (ctx->push_evt.timer_set) {
-        ngx_del_timer(&ctx->push_evt);
-    }
-
-    for (cctx = &ctx->play; *cctx; cctx = &(*cctx)->next) {
-        (*cctx)->publish = NULL;
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, (*cctx)->session->connection->log,
-            0, "relay: play disconnect orphan app='%V' name='%V'",
-            &(*cctx)->app, &(*cctx)->name);
-        ngx_rtmp_finalize_session((*cctx)->session);
-    }
-    ctx->publish = NULL;
-
-    cctx = &s->live_stream->relay_ctx;
-    for (; *cctx && *cctx != ctx; cctx = &(*cctx)->next);
-    if (*cctx) {
-        *cctx = ctx->next;
-    }
-}
-
-
-static ngx_int_t
-ngx_rtmp_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
-{
-    ngx_rtmp_relay_app_conf_t  *racf;
-
-    racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
-    if (racf && !racf->session_relay) {
-        ngx_rtmp_relay_close(s);
-    }
-
-    return next_close_stream(s, v);
-}
-
-
-static ngx_int_t
-ngx_rtmp_relay_delete_stream(ngx_rtmp_session_t *s, ngx_rtmp_delete_stream_t *v)
-{
-    ngx_rtmp_relay_close(s);
-
-    return next_delete_stream(s, v);
-}
-
-
 static char *
 ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -1572,9 +1347,7 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_rtmp_relay_target_t            *target, **t;
     ngx_url_t                          *u;
     ngx_uint_t                          i;
-    ngx_int_t                           is_pull, is_static;
-    ngx_event_t                       **ee, *e;
-    ngx_rtmp_relay_static_t            *rs;
+    ngx_int_t                           is_pull;
     u_char                             *p;
 
     value = cf->args->elts;
@@ -1582,7 +1355,6 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     racf = ngx_rtmp_conf_get_module_app_conf(cf, ngx_rtmp_relay_module);
 
     is_pull = (value[0].data[3] == 'l');
-    is_static = 0;
 
     target = ngx_pcalloc(cf->pool, sizeof(*target));
     if (target == NULL) {
@@ -1657,58 +1429,10 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 #undef NGX_RTMP_RELAY_STR_PAR
 #undef NGX_RTMP_RELAY_NUM_PAR
 
-        if (n.len == sizeof("static") - 1 &&
-            ngx_strncasecmp(n.data, (u_char *) "static", n.len) == 0 &&
-            ngx_atoi(v.data, v.len))
-        {
-            is_static = 1;
-            continue;
-        }
-
         return "unsuppored parameter";
     }
 
-    if (is_static) {
-
-        if (!is_pull) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "static push is not allowed");
-            return NGX_CONF_ERROR;
-        }
-
-        if (target->name.len == 0) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "stream name missing in static pull "
-                               "declaration");
-            return NGX_CONF_ERROR;
-        }
-
-        ee = ngx_array_push(&racf->static_events);
-        if (ee == NULL) {
-            return NGX_CONF_ERROR;
-        }
-
-        e = ngx_pcalloc(cf->pool, sizeof(ngx_event_t));
-        if (e == NULL) {
-            return NGX_CONF_ERROR;
-        }
-
-        *ee = e;
-
-        rs = ngx_pcalloc(cf->pool, sizeof(ngx_rtmp_relay_static_t));
-        if (rs == NULL) {
-            return NGX_CONF_ERROR;
-        }
-
-        rs->target = target;
-
-        e->data = rs;
-        e->log = &cf->cycle->new_log;
-        e->handler = ngx_rtmp_relay_static_pull_reconnect;
-
-        t = ngx_array_push(&racf->static_pulls);
-
-    } else if (is_pull) {
+    if (is_pull) {
         t = ngx_array_push(&racf->pulls);
 
     } else {
@@ -1722,59 +1446,6 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     *t = target;
 
     return NGX_CONF_OK;
-}
-
-
-static ngx_int_t
-ngx_rtmp_relay_init_process(ngx_cycle_t *cycle)
-{
-#if !(NGX_WIN32)
-    ngx_rtmp_core_main_conf_t  *cmcf = ngx_rtmp_core_main_conf;
-    ngx_rtmp_core_srv_conf_t  **pcscf, *cscf;
-    ngx_rtmp_core_app_conf_t  **pcacf, *cacf;
-    ngx_rtmp_relay_app_conf_t  *racf;
-    ngx_uint_t                  n, m, k;
-    ngx_rtmp_relay_static_t    *rs;
-    ngx_rtmp_listen_t          *lst;
-    ngx_event_t               **pevent, *event;
-
-    if (cmcf == NULL || cmcf->listen.nelts == 0) {
-        return NGX_OK;
-    }
-
-    /* only first worker does static pulling */
-
-    if (ngx_process_slot) {
-        return NGX_OK;
-    }
-
-    lst = cmcf->listen.elts;
-
-    pcscf = cmcf->servers.elts;
-    for (n = 0; n < cmcf->servers.nelts; ++n, ++pcscf) {
-
-        cscf = *pcscf;
-        pcacf = cscf->applications.elts;
-
-        for (m = 0; m < cscf->applications.nelts; ++m, ++pcacf) {
-
-            cacf = *pcacf;
-            racf = cacf->app_conf[ngx_rtmp_relay_module.ctx_index];
-            pevent = racf->static_events.elts;
-
-            for (k = 0; k < racf->static_events.nelts; ++k, ++pevent) {
-                event = *pevent;
-
-                rs = event->data;
-                rs->cctx = *lst->ctx;
-                rs->cctx.app_conf = cacf->app_conf;
-
-                ngx_post_event(event, &ngx_rtmp_init_queue);
-            }
-        }
-    }
-#endif
-    return NGX_OK;
 }
 
 
@@ -1797,12 +1468,6 @@ ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf)
 
     next_play = ngx_rtmp_play;
     ngx_rtmp_play = ngx_rtmp_relay_play;
-
-    next_delete_stream = ngx_rtmp_delete_stream;
-    ngx_rtmp_delete_stream = ngx_rtmp_relay_delete_stream;
-
-    next_close_stream = ngx_rtmp_close_stream;
-    ngx_rtmp_close_stream = ngx_rtmp_relay_close_stream;
 
 
     ch = ngx_array_push(&cmcf->amf);

@@ -32,41 +32,6 @@ typedef struct {
 } ngx_rtmp_relay_target_t;
 
 
-struct ngx_rtmp_relay_ctx_s {
-    ngx_str_t                       name;
-    ngx_str_t                       url;
-    ngx_log_t                       log;
-    ngx_rtmp_session_t             *session;
-    ngx_rtmp_relay_ctx_t           *publish;
-    ngx_rtmp_relay_ctx_t           *play;
-    ngx_rtmp_relay_ctx_t           *next;
-
-    ngx_str_t                       pargs; /* play or publish ctx */
-
-    ngx_str_t                       app;
-    ngx_str_t                       args;
-    ngx_str_t                       tc_url;
-    ngx_str_t                       page_url;
-    ngx_str_t                       swf_url;
-    ngx_str_t                       flash_ver;
-    uint32_t                        acodecs;
-    uint32_t                        vcodecs;
-
-    ngx_str_t                       play_path;
-    ngx_int_t                       live;
-    ngx_int_t                       start;
-    ngx_int_t                       stop;
-
-    ngx_event_t                     push_evt;
-    ngx_event_t                    *static_evt;
-    void                           *tag;
-    void                           *data;
-};
-
-
-extern ngx_module_t                 ngx_rtmp_relay_module;
-
-
 ngx_int_t ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
                               ngx_rtmp_relay_target_t *target);
 ngx_int_t ngx_rtmp_relay_push(ngx_rtmp_session_t *s, ngx_str_t *name,
