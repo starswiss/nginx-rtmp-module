@@ -256,7 +256,7 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ngx_rtmp_cmd_fill_args(v.app, v.args);
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
             "connect: app='%s' args='%s' flashver='%s' swf_url='%s' "
             "tc_url='%s' page_url='%s' acodecs=%uD vcodecs=%uD "
             "object_encoding=%ui",
@@ -314,8 +314,6 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_cmd_middleware_init(s);
 
     s->live_server = ngx_live_create_server(&s->serverid);
-
-
 
     return ngx_rtmp_connect(s, &v);
 }
@@ -428,7 +426,7 @@ ngx_rtmp_cmd_create_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_ERROR;
     }
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "createStream");
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0, "createStream");
 
     return ngx_rtmp_create_stream(s, &v);
 }
@@ -494,8 +492,6 @@ ngx_rtmp_cmd_close_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_ERROR;
     }
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "closeStream");
-
     return ngx_rtmp_close_stream(s, &v);
 }
 
@@ -545,6 +541,8 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         }
     }
 
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "closeStream");
+
     return NGX_OK;
 }
 
@@ -585,7 +583,7 @@ ngx_rtmp_cmd_delete_stream(ngx_rtmp_session_t *s, ngx_rtmp_delete_stream_t *v)
 {
     ngx_rtmp_close_stream_t         cv;
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "deleteStream %p", s);
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0, "deleteStream");
 
     cv.stream = 0;
 
@@ -629,9 +627,9 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ngx_rtmp_cmd_fill_args(v.name, v.args);
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                  "publish: name='%s' args='%s' type=%s silent=%d",
-                  v.name, v.args, v.type, v.silent);
+    ngx_log_debug4(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+                   "publish: name='%s' args='%s' type=%s silent=%d",
+                   v.name, v.args, v.type, v.silent);
 
     ngx_rtmp_cmd_stream_init(s, v.name, v.args, 1);
 
@@ -643,14 +641,12 @@ static ngx_int_t
 ngx_rtmp_cmd_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 {
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "publish session(%p): app='%V' args='%V' flashver='%V' "
+            "publish: name='%V' pargs='%V' app='%V' args='%V' flashver='%V' "
             "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
-            "scheme='%V' domain='%V' serverid='%V' "
-            "name='%V' pargs='%V' stream='%V'",
-            s, &s->app, &s->args, &s->flashver,
+            "scheme='%V' domain='%V' serverid='%V' stream='%V'",
+            &s->name, &s->pargs, &s->app, &s->args, &s->flashver,
             &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
-            &s->scheme, &s->domain, &s->serverid,
-            &s->name, &s->pargs, &s->stream);
+            &s->scheme, &s->domain, &s->serverid, &s->stream);
 
     return NGX_OK;
 }
@@ -699,12 +695,12 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ngx_rtmp_cmd_fill_args(v.name, v.args);
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                  "play: name='%s' args='%s' start=%i duration=%i "
-                  "reset=%i silent=%i",
-                  v.name, v.args, (ngx_int_t) v.start,
-                  (ngx_int_t) v.duration, (ngx_int_t) v.reset,
-                  (ngx_int_t) v.silent);
+    ngx_log_debug6(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+                   "play: name='%s' args='%s' start=%i duration=%i "
+                   "reset=%i silent=%i",
+                   v.name, v.args, (ngx_int_t) v.start,
+                   (ngx_int_t) v.duration, (ngx_int_t) v.reset,
+                   (ngx_int_t) v.silent);
 
     ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
 
@@ -716,14 +712,12 @@ static ngx_int_t
 ngx_rtmp_cmd_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "play session(%p): app='%V' args='%V' flashver='%V' "
+            "play: name='%V' pargs='%V' app='%V' args='%V' flashver='%V' "
             "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
-            "scheme='%V' domain='%V' serverid='%V' "
-            "name='%V' pargs='%V' stream='%V'",
-            s, &s->app, &s->args, &s->flashver,
+            "scheme='%V' domain='%V' serverid='%V' stream='%V'",
+            &s->name, &s->pargs, &s->app, &s->args, &s->flashver,
             &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
-            &s->scheme, &s->domain, &s->serverid,
-            &s->name, &s->pargs, &s->stream);
+            &s->scheme, &s->domain, &s->serverid, &s->stream);
 
     return NGX_OK;
 }
@@ -773,9 +767,9 @@ ngx_rtmp_cmd_play2_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ngx_rtmp_cmd_fill_args(v.name, v.args);
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                  "play2: name='%s' args='%s' start=%i",
-                  v.name, v.args, (ngx_int_t) v.start);
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+                   "play2: name='%s' args='%s' start=%i",
+                   v.name, v.args, (ngx_int_t) v.start);
 
     /* continue from current timestamp */
 
@@ -844,7 +838,7 @@ static ngx_int_t
 ngx_rtmp_cmd_disconnect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                         ngx_chain_t *in)
 {
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "disconnect %p", s);
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "disconnect");
 
     return ngx_rtmp_disconnect(s);
 }

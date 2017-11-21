@@ -653,10 +653,5 @@ ngx_http_flv_live(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-    ngx_conf_log_error(NGX_LOG_ERR, cf, 0,
-            "\napp: %V\nflashver: %V\nswf_url: %V\ntc_url: %V\npage_url: %V",
-            &hflcf->app, &hflcf->flashver, &hflcf->swf_url, &hflcf->tc_url,
-            &hflcf->page_url);
-
     return NGX_CONF_OK;
 }

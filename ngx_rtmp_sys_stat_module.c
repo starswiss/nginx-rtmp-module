@@ -66,12 +66,38 @@ static ngx_int_t
 ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
 {
     ngx_chain_t                       **ll, *out;
+    ngx_buf_t                          *b;
+    size_t                              len;
 
     r->headers_out.status = NGX_HTTP_OK;
     ngx_http_send_header(r);
 
     ll = &out;
 
+    len = sizeof("--------------------------------------------------\n") - 1
+        + sizeof("ngx_worker:   ngx_process_slot:   pid: \n") - 1
+        + 3 * NGX_OFF_T_LEN;
+
+    *ll = ngx_alloc_chain_link(r->pool);
+    if (*ll == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    (*ll)->next = NULL;
+
+    b = ngx_create_temp_buf(r->pool, len);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    (*ll)->buf = b;
+
+    b->last = ngx_snprintf(b->last, len,
+            "--------------------------------------------------\n"
+            "ngx_worker: %i  ngx_process_slot: %i  pid: %i\n",
+            ngx_worker, ngx_process_slot, ngx_pid);
+
+    if (*ll) {
+        ll = &(*ll)->next;
+    }
     *ll = ngx_rtmp_shared_state(r);
 
     if (*ll) {

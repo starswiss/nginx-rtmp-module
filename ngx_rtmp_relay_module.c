@@ -678,9 +678,6 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "replay play %p %d",
-            s->live_stream, s->live_stream->players);
-
     if (s->live_stream->players > 1) { /* already pull */
         goto next;
     }

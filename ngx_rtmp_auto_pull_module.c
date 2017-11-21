@@ -160,9 +160,6 @@ ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         goto next;
     }
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto push, session %p publish %s", s, v->name);
-
     pslot = ngx_stream_zone_insert_stream(&s->stream);
     if (pslot == NGX_ERROR) {
         goto next;
@@ -170,9 +167,9 @@ ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     s->live_stream->pslot = pslot;
 
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto push, session %p stream %s not in current process, "
+            "auto push, stream %s not in current process, "
             "pslot:%i ngx_process_slot:%i",
-            s, v->name, pslot, ngx_process_slot);
+            v->name, pslot, ngx_process_slot);
 
     if (pslot == ngx_process_slot) {
         goto next;
@@ -202,26 +199,20 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto pull, session %p play %s", s, v->name);
-
     if (s->live_stream->pslot != -1) {
-        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                "auto pull, session %p stream %s already in current process",
-                s, v->name);
+        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+                "auto pull, stream %s already in current process", v->name);
         goto next;
-    }
-
-    if (s->live_stream->pslot == -1) { /* first access for stream */
+    } else { /* first access for stream */
         pslot = ngx_stream_zone_insert_stream(&s->stream);
         if (pslot == NGX_ERROR) {
             goto next;
         }
         s->live_stream->pslot = pslot;
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                "auto pull, session %p stream %s not in current process, "
+                "auto pull, stream %s not in current process, "
                 "pslot:%i ngx_process_slot:%i",
-                s, v->name, pslot, ngx_process_slot);
+                v->name, pslot, ngx_process_slot);
     }
 
     if (pslot == ngx_process_slot) {
