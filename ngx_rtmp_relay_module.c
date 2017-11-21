@@ -49,34 +49,45 @@ typedef struct {
 
 
 typedef struct {
-    ngx_str_t                       name;
-    ngx_str_t                       url;
-    ngx_log_t                       log;
-    ngx_rtmp_session_t             *session;
+    ngx_str_t                   name;
+    ngx_str_t                   url;
+    ngx_log_t                   log;
+    ngx_rtmp_session_t         *session;
 
-    ngx_str_t                       pargs; /* play or publish ctx */
+    ngx_str_t                   pargs; /* play or publish ctx */
 
-    ngx_str_t                       app;
-    ngx_str_t                       args;
-    ngx_str_t                       tc_url;
-    ngx_str_t                       page_url;
-    ngx_str_t                       swf_url;
-    ngx_str_t                       flash_ver;
-    uint32_t                        acodecs;
-    uint32_t                        vcodecs;
+    ngx_str_t                   app;
+    ngx_str_t                   args;
+    ngx_str_t                   tc_url;
+    ngx_str_t                   page_url;
+    ngx_str_t                   swf_url;
+    ngx_str_t                   flash_ver;
+    uint32_t                    acodecs;
+    uint32_t                    vcodecs;
 
-    ngx_str_t                       play_path;
-    ngx_int_t                       live;
-    ngx_int_t                       start;
-    ngx_int_t                       stop;
+    ngx_str_t                   play_path;
+    ngx_int_t                   live;
+    ngx_int_t                   start;
+    ngx_int_t                   stop;
 
-    ngx_event_t                     push_evt;
-    void                           *tag;
-    void                           *data;
+    ngx_event_t                 push_evt;
+    void                       *tag;
+    void                       *data;
 
-    unsigned                        publishing:1;
+    unsigned                    publishing:1;
 } ngx_rtmp_relay_ctx_t;
 
+
+typedef struct {
+    char                       *code;
+    ngx_uint_t                  status;
+} ngx_rtmp_status_code_t;
+
+static ngx_rtmp_status_code_t ngx_rtmp_relay_status_error_code[] = {
+    { "NetStream.Publish.BadName",      400 },
+    { "NetStream.Play.StreamNotFound",  404 },
+    { NULL, 0 }
+};
 
 #define NGX_RTMP_RELAY_CONNECT_TRANS            1
 #define NGX_RTMP_RELAY_CREATE_STREAM_TRANS      2
@@ -134,7 +145,6 @@ static ngx_command_t  ngx_rtmp_relay_commands[] = {
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_relay_app_conf_t, session_relay),
       NULL },
-
 
       ngx_null_command
 };
@@ -564,13 +574,13 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
     if (ctx == NULL) {
         return NGX_ERROR;
     }
-    ctx->publishing = 1;
 
     ctx = create_publish_ctx(s, name, target);
     if (ctx == NULL) {
         ngx_rtmp_finalize_session(ctx->session);
         return NGX_ERROR;
     }
+    ctx->publishing = 1;
 
     return NGX_OK;
 }
@@ -1111,6 +1121,45 @@ ngx_rtmp_relay_send_play(ngx_rtmp_session_t *s)
 
 
 static ngx_int_t
+ngx_rtmp_relay_status_error(ngx_rtmp_session_t *s, char *type, char *code,
+        char *level, char *desc)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+    ngx_rtmp_core_ctx_t        *cctx;
+    size_t                      i;
+    ngx_flag_t                  status = 0;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+
+    if (ngx_strcmp(type, "onStatus") == 0) {
+        status = 1;
+    }
+
+    for (i = 0; ngx_rtmp_relay_status_error_code[i].code; ++i) {
+
+        if (ngx_strcmp(ngx_rtmp_relay_status_error_code[i].code, code)
+                != 0)
+        {
+            continue;
+        }
+
+        if (ctx->publishing) {
+            cctx = s->live_stream->play_ctx;
+        } else {
+            cctx = s->live_stream->publish_ctx;
+        }
+
+        for (; cctx; cctx = cctx->next) {
+            status ? ngx_rtmp_send_status(cctx->session, code, level, desc)
+                   : ngx_rtmp_send_error(cctx->session, code, level, desc);
+        }
+    }
+
+    return NGX_OK;
+}
+
+
+static ngx_int_t
 ngx_rtmp_relay_on_result(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
@@ -1174,7 +1223,7 @@ ngx_rtmp_relay_on_result(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             return ngx_rtmp_relay_send_create_stream(s);
 
         case NGX_RTMP_RELAY_CREATE_STREAM_TRANS:
-            if (ctx->publishing) {
+            if (ctx->publishing == 0) {
                 if (ngx_rtmp_relay_send_publish(s) != NGX_OK) {
                     return NGX_ERROR;
                 }
@@ -1252,6 +1301,9 @@ ngx_rtmp_relay_on_error(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             "relay: _error: level='%s' code='%s' description='%s'",
             v.level, v.code, v.desc);
 
+    ngx_rtmp_relay_status_error(s, "_error", (char *) v.code,
+            (char *) v.level, (char *) v.desc);
+
     return NGX_OK;
 }
 
@@ -1323,6 +1375,14 @@ ngx_rtmp_relay_on_status(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
             "relay: onStatus: level='%s' code='%s' description='%s'",
             v.level, v.code, v.desc);
+
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            "relay onStatus: level='%s' code='%s' description='%s'"
+            "csid=%uD timestamp=%uD, mlen=%uD, type=%uD, msid=%uD",
+            v.level, v.code, v.desc, h->csid, h->timestamp, h->mlen,
+            h->type, h->msid);
+    ngx_rtmp_relay_status_error(s, "onStatus", (char *) v.code,
+            (char *) v.level, (char *) v.desc);
 
     return NGX_OK;
 }

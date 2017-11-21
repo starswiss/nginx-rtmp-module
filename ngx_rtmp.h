@@ -696,12 +696,16 @@ ngx_int_t ngx_rtmp_send_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_rtmp_amf_elt_t *elts, size_t nelts);
 
 /* AMF status sender */
+ngx_rtmp_frame_t *ngx_rtmp_create_error(ngx_rtmp_session_t *s, char *code,
+        char* level, char *desc);
 ngx_rtmp_frame_t *ngx_rtmp_create_status(ngx_rtmp_session_t *s, char *code,
         char* level, char *desc);
 ngx_rtmp_frame_t *ngx_rtmp_create_play_status(ngx_rtmp_session_t *s, char *code,
         char* level, ngx_uint_t duration, ngx_uint_t bytes);
 ngx_rtmp_frame_t *ngx_rtmp_create_sample_access(ngx_rtmp_session_t *s);
 
+ngx_int_t ngx_rtmp_send_error(ngx_rtmp_session_t *s, char *code,
+        char* level, char *desc);
 ngx_int_t ngx_rtmp_send_status(ngx_rtmp_session_t *s, char *code,
         char* level, char *desc);
 ngx_int_t ngx_rtmp_send_play_status(ngx_rtmp_session_t *s, char *code,
