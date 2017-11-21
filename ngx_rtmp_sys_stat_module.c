@@ -15,14 +15,14 @@
 #include "ngx_dynamic_resolver.h"
 
 
-static char *ngx_http_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static char *ngx_rtmp_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
-static ngx_command_t  ngx_http_sys_stat_commands[] = {
+static ngx_command_t  ngx_rtmp_sys_stat_commands[] = {
 
     { ngx_string("sys_stat"),
       NGX_HTTP_LOC_CONF|NGX_CONF_NOARGS,
-      ngx_http_sys_stat,
+      ngx_rtmp_sys_stat,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
@@ -31,7 +31,7 @@ static ngx_command_t  ngx_http_sys_stat_commands[] = {
 };
 
 
-static ngx_http_module_t  ngx_http_sys_stat_module_ctx = {
+static ngx_http_module_t  ngx_rtmp_sys_stat_module_ctx = {
     NULL,                               /* preconfiguration */
     NULL,                               /* postconfiguration */
 
@@ -46,10 +46,10 @@ static ngx_http_module_t  ngx_http_sys_stat_module_ctx = {
 };
 
 
-ngx_module_t  ngx_http_sys_stat_module = {
+ngx_module_t  ngx_rtmp_sys_stat_module = {
     NGX_MODULE_V1,
-    &ngx_http_sys_stat_module_ctx,      /* module context */
-    ngx_http_sys_stat_commands,         /* module directives */
+    &ngx_rtmp_sys_stat_module_ctx,      /* module context */
+    ngx_rtmp_sys_stat_commands,         /* module directives */
     NGX_HTTP_MODULE,                    /* module type */
     NULL,                               /* init master */
     NULL,                               /* init module */
@@ -63,7 +63,7 @@ ngx_module_t  ngx_http_sys_stat_module = {
 
 
 static ngx_int_t
-ngx_http_sys_stat_handler(ngx_http_request_t *r)
+ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
 {
     ngx_chain_t                       **ll, *out;
 
@@ -105,12 +105,12 @@ ngx_http_sys_stat_handler(ngx_http_request_t *r)
 }
 
 static char *
-ngx_http_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_rtmp_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_core_loc_conf_t           *clcf;
 
     clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-    clcf->handler = ngx_http_sys_stat_handler;
+    clcf->handler = ngx_rtmp_sys_stat_handler;
 
     return NGX_CONF_OK;
 }
