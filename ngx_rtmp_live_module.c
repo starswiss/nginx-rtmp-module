@@ -456,6 +456,7 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
         ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
                       "live: stream not found");
 
+        s->status = 404;
         ngx_rtmp_send_status(s, "NetStream.Play.StreamNotFound", "error",
                              "No such stream");
 

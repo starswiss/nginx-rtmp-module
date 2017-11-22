@@ -81,12 +81,13 @@ typedef struct {
 typedef struct {
     char                       *code;
     ngx_uint_t                  status;
+    ngx_flag_t                  finalize;
 } ngx_rtmp_status_code_t;
 
 static ngx_rtmp_status_code_t ngx_rtmp_relay_status_error_code[] = {
-    { "NetStream.Publish.BadName",      400 },
-    { "NetStream.Play.StreamNotFound",  404 },
-    { NULL, 0 }
+    { "NetStream.Publish.BadName",      400, 1 },
+    { "NetStream.Play.StreamNotFound",  404, 1 },
+    { NULL, 0, 0 }
 };
 
 #define NGX_RTMP_RELAY_CONNECT_TRANS            1
@@ -1135,6 +1136,10 @@ ngx_rtmp_relay_status_error(ngx_rtmp_session_t *s, char *type, char *code,
         status = 1;
     }
 
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            "relay transit, %s: level='%s' code='%s' description='%s'",
+            type, level, code, desc);
+
     for (i = 0; ngx_rtmp_relay_status_error_code[i].code; ++i) {
 
         if (ngx_strcmp(ngx_rtmp_relay_status_error_code[i].code, code)
@@ -1150,8 +1155,13 @@ ngx_rtmp_relay_status_error(ngx_rtmp_session_t *s, char *type, char *code,
         }
 
         for (; cctx; cctx = cctx->next) {
+            cctx->session->status = ngx_rtmp_relay_status_error_code[i].status;
             status ? ngx_rtmp_send_status(cctx->session, code, level, desc)
                    : ngx_rtmp_send_error(cctx->session, code, level, desc);
+
+            if (ngx_rtmp_relay_status_error_code[i].finalize) {
+                ngx_rtmp_finalize_session(cctx->session);
+            }
         }
     }
 
@@ -1376,11 +1386,6 @@ ngx_rtmp_relay_on_status(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             "relay: onStatus: level='%s' code='%s' description='%s'",
             v.level, v.code, v.desc);
 
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-            "relay onStatus: level='%s' code='%s' description='%s'"
-            "csid=%uD timestamp=%uD, mlen=%uD, type=%uD, msid=%uD",
-            v.level, v.code, v.desc, h->csid, h->timestamp, h->mlen,
-            h->type, h->msid);
     ngx_rtmp_relay_status_error(s, "onStatus", (char *) v.code,
             (char *) v.level, (char *) v.desc);
 

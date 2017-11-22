@@ -302,28 +302,48 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
 }
 
 
+static void
+ngx_rtmp_async_finalize_http_request(ngx_event_t *ev)
+{
+    ngx_rtmp_session_t         *s;
+    ngx_http_request_t         *r;
+
+    s = ev->data;
+    r = s->request;
+
+    if (r->header_sent) {
+        ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
+    } else {
+        if (s->status) {
+            ngx_http_finalize_request(r, s->status);
+        } else {
+            ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
+        }
+    }
+
+    ngx_http_run_posted_requests(r->connection);
+}
+
+
 void
 ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
 {
     ngx_event_t        *e;
     ngx_connection_t   *c;
-    ngx_http_request_t *r;
-
-    if (s->live_type != NGX_RTMP_LIVE) {
-        r = s->request;
-        if (r->header_sent) {
-            ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
-        } else {
-            ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
-        }
-
-        ngx_http_run_posted_requests(r->connection);
-
-        return;
-    }
 
     c = s->connection;
     if (c->destroyed) {
+        return;
+    }
+
+    if (s->live_type != NGX_RTMP_LIVE) {
+        e = &s->close;
+        e->data = s;
+        e->handler = ngx_rtmp_async_finalize_http_request;
+        e->log = c->log;
+
+        ngx_post_event(e, &ngx_posted_events);
+
         return;
     }
 

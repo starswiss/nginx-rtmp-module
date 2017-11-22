@@ -294,6 +294,7 @@ typedef struct {
 
     /* live type: 0- RTMP 1- http-flv 2- hls */
     unsigned                live_type:2;
+    ngx_uint_t              status;
     ngx_http_request_t     *request;
     ngx_event_handler_pt    handler;
 
