@@ -18,6 +18,7 @@ typedef struct {
 
     ngx_live_server_t          *free_server;
     ngx_live_stream_t          *free_stream;
+    ngx_relay_reconnect_t      *free_reconnect;
 
     ngx_uint_t                  alloc_server_count;
     ngx_uint_t                  free_server_count;
@@ -25,11 +26,21 @@ typedef struct {
     ngx_uint_t                  alloc_stream_count;
     ngx_uint_t                  free_stream_count;
 
+    ngx_uint_t                  alloc_reconnect_count;
+    ngx_uint_t                  free_reconnect_count;
+
     ngx_pool_t                 *pool;
 } ngx_live_conf_t;
 
 
 extern ngx_module_t     ngx_live_module;
+
+
+/*
+ * paras:
+ *      r: http request to query status of rbuf
+ */
+ngx_chain_t *ngx_live_state(ngx_http_request_t *r);
 
 
 #endif

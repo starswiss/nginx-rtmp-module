@@ -505,8 +505,16 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         return NGX_OK;
     }
 
+    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "closeStream");
+
     s->closed = 1;
+
+    if (s->live_stream == NULL) { /* stream before publish or play status */
+        return NGX_OK;
+    }
+
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_core_module);
+
     if (ctx->publishing) {
         --s->live_stream->publishers;
     } else {
@@ -540,8 +548,6 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
             }
         }
     }
-
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "closeStream");
 
     return NGX_OK;
 }

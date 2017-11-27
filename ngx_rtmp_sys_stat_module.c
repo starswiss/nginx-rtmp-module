@@ -13,6 +13,7 @@
 #include "ngx_event_timer_module.h"
 #include "ngx_event_resolver.h"
 #include "ngx_dynamic_resolver.h"
+#include "ngx_live.h"
 
 
 static char *ngx_rtmp_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
@@ -94,6 +95,11 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
             "--------------------------------------------------\n"
             "ngx_worker: %i  ngx_process_slot: %i  pid: %i\n",
             ngx_worker, ngx_process_slot, ngx_pid);
+
+    if (*ll) {
+        ll = &(*ll)->next;
+    }
+    *ll = ngx_live_state(r);
 
     if (*ll) {
         ll = &(*ll)->next;

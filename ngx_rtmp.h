@@ -328,14 +328,24 @@ typedef struct {
 #define NGX_LIVE_SERVERID_LEN   512
 #define NGX_LIVE_STREAM_LEN     512
 
-typedef struct ngx_rtmp_core_ctx_s  ngx_rtmp_core_ctx_t;
-typedef struct ngx_rtmp_live_ctx_s  ngx_rtmp_live_ctx_t;
+typedef struct ngx_rtmp_core_ctx_s      ngx_rtmp_core_ctx_t;
+typedef struct ngx_rtmp_live_ctx_s      ngx_rtmp_live_ctx_t;
+typedef struct ngx_relay_reconnect_s    ngx_relay_reconnect_t;
 
 struct ngx_rtmp_core_ctx_s {
     ngx_rtmp_core_ctx_t    *next;
     ngx_rtmp_session_t     *session;
 
     unsigned                publishing:1;
+};
+
+struct ngx_relay_reconnect_s {
+    ngx_event_t             reconnect;
+    void                   *tag;
+    void                   *data;
+    ngx_live_stream_t      *live_stream;
+
+    ngx_relay_reconnect_t  *next;
 };
 
 struct ngx_live_stream_s {
@@ -345,6 +355,9 @@ struct ngx_live_stream_s {
 
     ngx_rtmp_core_ctx_t        *publish_ctx;
     ngx_rtmp_core_ctx_t        *play_ctx;
+
+    ngx_relay_reconnect_t      *publish_reconnect;
+    ngx_relay_reconnect_t      *play_reconnect;
 
     ngx_live_stream_t          *next;
 
@@ -372,6 +385,9 @@ struct ngx_live_server_s {
 
     ngx_live_stream_t         **streams;
 };
+
+ngx_relay_reconnect_t *ngx_live_get_relay_reconnect();
+void ngx_live_put_relay_reconnect(ngx_relay_reconnect_t *rc);
 
 ngx_live_server_t *ngx_live_create_server(ngx_str_t *serverid);
 ngx_live_server_t *ngx_live_fetch_server(ngx_str_t *serverid);
