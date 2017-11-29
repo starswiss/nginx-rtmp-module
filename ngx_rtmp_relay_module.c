@@ -708,6 +708,11 @@ ngx_int_t
 ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_target_t *target)
 {
+    if (s->live_stream->publishers > 0 || s->live_stream->players > 1) {
+        /* stream alread publish or already pull */
+        return NGX_OK;
+    }
+
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
             "relay: create pull name='%V' app='%V' playpath='%V' url='%V'",
             name, &target->app, &target->play_path, &target->url.url);
@@ -801,10 +806,6 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     }
 
     if (s->auto_pulled) {
-        goto next;
-    }
-
-    if (s->live_stream->players > 1) { /* already pull */
         goto next;
     }
 
