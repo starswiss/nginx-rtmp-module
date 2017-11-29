@@ -9,6 +9,7 @@
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_amf.h"
 #include "ngx_rbuf.h"
+#include "ngx_rtmp_monitor_module.h"
 
 
 static void ngx_rtmp_recv(ngx_event_t *rev);
@@ -648,6 +649,8 @@ ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
         (*ll)->buf->pos = l->buf->pos;
         (*ll)->buf->last = l->buf->last;
     }
+
+    ngx_rtmp_monitor_frame(s, &frame->hdr, NULL, frame->av_header, 0);
 
     return head;
 

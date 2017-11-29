@@ -11,6 +11,7 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rbuf.h"
 #include "ngx_http_set_header.h"
+#include "ngx_rtmp_monitor_module.h"
 
 
 static char *ngx_http_flv_live(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
@@ -225,6 +226,8 @@ ngx_http_flv_live_prepare_out_chain(ngx_http_request_t *r,
 
     (*ll)->buf->last = p;
     (*ll)->buf->flush = 1;
+
+    ngx_rtmp_monitor_frame(s, &frame->hdr, NULL, frame->av_header, 0);
 
     return head;
 

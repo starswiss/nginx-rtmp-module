@@ -26,6 +26,7 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_dash_module                        \
                 ngx_rtmp_shared_module                      \
                 ngx_rtmp_gop_module                         \
+                ngx_rtmp_monitor_module                     \
                 "
 
 
@@ -53,6 +54,7 @@ RTMP_DEPS="                                                     \
                 $ngx_addon_dir/ngx_rtmp_streams.h               \
                 $ngx_addon_dir/ngx_rtmp_bitop.h                 \
                 $ngx_addon_dir/ngx_rtmp_proxy_protocol.h        \
+                $ngx_addon_dir/ngx_rtmp_monitor_module.h        \
                 $ngx_addon_dir/hls/ngx_rtmp_mpegts.h            \
                 $ngx_addon_dir/dash/ngx_rtmp_mp4.h              \
                 $ngx_addon_dir/http/ngx_http_set_header.h       \
@@ -96,6 +98,7 @@ RTMP_CORE_SRCS="                                                \
                 $ngx_addon_dir/ngx_live.c                       \
                 $ngx_addon_dir/ngx_rtmp_shared_module.c         \
                 $ngx_addon_dir/ngx_rtmp_gop_module.c            \
+                $ngx_addon_dir/ngx_rtmp_monitor_module.c        \
                 $ngx_addon_dir/ngx_rtmp_auth_request_module.c   \
                 $ngx_addon_dir/ngx_rtmp_dynamic.c               \
                 "

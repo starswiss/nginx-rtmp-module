@@ -853,7 +853,7 @@ ngx_rtmp_codec_meta_data(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ctx->width = (ngx_uint_t) v.width;
     ctx->height = (ngx_uint_t) v.height;
     ctx->duration = (ngx_uint_t) v.duration;
-    ctx->frame_rate = (ngx_uint_t) v.frame_rate;
+    ctx->frame_rate = v.frame_rate;
     ctx->video_data_rate = (ngx_uint_t) v.video_data_rate;
     ctx->video_codec_id = (ngx_uint_t) v.video_codec_id_n;
     ctx->audio_data_rate = (ngx_uint_t) v.audio_data_rate;
