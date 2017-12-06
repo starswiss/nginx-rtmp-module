@@ -1113,6 +1113,11 @@ ngx_rtmp_log_disconnect(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_log_module);
+
+    if (ctx == NULL) {
+        return NGX_OK;
+    }
+
     ltctx = ctx->timers.elts;
     for (i = 0; i < ctx->timers.nelts; ++i, ++ltctx) {
         ngx_del_timer(&ltctx->event);

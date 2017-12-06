@@ -140,17 +140,22 @@ ngx_rtmp_monitor_consume(ngx_event_t *ev)
     }
 
     cctx = ngx_rtmp_get_module_ctx(ps, ngx_rtmp_codec_module);
+    if (cctx == NULL) {
+        goto next;
+    }
 
-    if (cctx->frame_rate == 0) {
+    if (cctx->frame_rate != 0) {
+        ctx->frame_rate = cctx->frame_rate;
+    }
+
+next:
+    if (ctx->frame_rate == 0) {
         ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
                 "monitor, frame rate error, stream: %V, frame rate: %.2f",
-                &s->stream, cctx->frame_rate);
+                &s->stream, ctx->frame_rate);
         return;
     }
 
-    ctx->frame_rate = cctx->frame_rate;
-
-next:
     ctx->nframes -= ctx->frame_rate;
 
     if (ctx->nframes <= 0) {
@@ -228,7 +233,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_monitor_app_conf_t    *macf;
     ngx_rtmp_monitor_ctx_t         *ctx;
 
-    if (h->type != NGX_RTMP_MSG_AUDIO && h->type != NGX_RTMP_MSG_VIDEO) {
+    if (h->type != NGX_RTMP_MSG_VIDEO) {
         return;
     }
 
@@ -260,7 +265,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_rtmp_monitor_dump_frame(s, h, in);
     }
 
-    if (h->type != NGX_RTMP_MSG_VIDEO || is_header) {
+    if (is_header) {
         return;
     }
 
