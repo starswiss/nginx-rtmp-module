@@ -972,6 +972,7 @@ ngx_rtmp_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
     ngx_rtmp_live_app_conf_t       *lacf;
     ngx_rtmp_live_ctx_t            *ctx;
+    ngx_rtmp_session_t             *ps;
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
@@ -999,6 +1000,11 @@ ngx_rtmp_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         ngx_rtmp_send_status(s, "NetStream.Play.Start",
                              "status", "Start live");
         ngx_rtmp_send_sample_access(s);
+    }
+
+    if (s->live_stream->publish_ctx && s->live_stream->publish_ctx->session) {
+        ps = s->live_stream->publish_ctx->session;
+        ngx_rtmp_gop_send(ps, s);
     }
 
 next:
