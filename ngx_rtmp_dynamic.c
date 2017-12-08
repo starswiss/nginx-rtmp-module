@@ -566,7 +566,7 @@ ngx_rtmp_dynamic_core_application(ngx_conf_t *cf, ngx_command_t *cmd,
     value = cf->args->elts;
 
     rdcacf->name = value[1];
-    if (rdcacf->name.len == 0 && rdcacf->name.data[0] == '*') { /* default */
+    if (rdcacf->name.len == 1 && rdcacf->name.data[0] == '*') { /* default */
         if (rdcscf->default_app) {
             return "is duplicate";
         }
