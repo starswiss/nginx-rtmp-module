@@ -240,6 +240,7 @@ ngx_rtmp_relay_pull_reconnect(ngx_event_t *ev)
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
 
+    live_stream->relay_pull_tag = NULL;
     if (ngx_rtmp_relay_pull(s, &s->name, target) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
                 "relay: pull reconnect failed name='%V' app='%V' "
@@ -656,11 +657,7 @@ ngx_rtmp_relay_create_local_ctx(ngx_rtmp_session_t *s, ngx_str_t *name,
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
-        if (ctx == NULL) {
-            return NULL;
-        }
-        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
+        return NULL;
     }
     ctx->session = s;
 
@@ -708,8 +705,15 @@ ngx_int_t
 ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_target_t *target)
 {
-    if (s->live_stream->publishers > 0 || s->live_stream->players > 1) {
+    if (s->live_stream->relay_pull_tag) {
         /* stream alread publish or already pull */
+        return NGX_OK;
+    }
+
+    s->live_stream->relay_pull_tag = target->tag;
+    s->live_stream->relay_pull_data = target->data;
+
+    if (s->live_stream->publish_ctx) {
         return NGX_OK;
     }
 
@@ -746,12 +750,21 @@ ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     size_t                          n;
     ngx_rtmp_relay_ctx_t           *ctx;
 
-    if (s->interprocess) {
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx && s->relay) {
         goto next;
     }
 
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx && s->relay) {
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
+        if (ctx == NULL) {
+            return NGX_ERROR;
+        }
+        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
+        ctx->publishing = 1;
+    }
+
+    if (s->interprocess) {
         goto next;
     }
 
@@ -803,6 +816,14 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
     if (ctx && s->relay) {
         goto next;
+    }
+
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
+        if (ctx == NULL) {
+            return NGX_ERROR;
+        }
+        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
     }
 
     if (s->auto_pulled) {
@@ -1533,7 +1554,7 @@ ngx_rtmp_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     ngx_rtmp_relay_ctx_t               *ctx;
     ngx_live_stream_t                  *st;
 
-    if (!s->relay || s->closed) {
+    if (s->closed) {
         goto next;
     }
 
@@ -1543,24 +1564,42 @@ ngx_rtmp_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         goto next;
     }
 
-    if (ctx->tag != &ngx_rtmp_relay_module) {
-        /* relay not create by rtmp relay module */
-        goto next;
-    }
-
-    target = ctx->data;
-
     st = ngx_live_fetch_stream(&s->serverid, &s->stream);
     if (st == NULL) {
         goto next;
     }
 
+    if (ctx->publishing) { /* relay pull session */
+        if (st->relay_pull_tag &&
+                st->relay_pull_tag != &ngx_rtmp_relay_module)
+        {
+            /* relay pull not create by relay module */
+            goto next;
+        }
+    } else { /* relay push session */
+        if (s->relay == 0 || ctx->tag != &ngx_rtmp_relay_module) {
+            /* relay not create by rtmp relay module */
+            goto next;
+        }
+    }
+
     if (ctx->publishing) { /* relay pull session close */
+        if (st->publish_ctx && (st->publish_ctx->session != s
+                            || st->publish_ctx->next))
+        {
+            goto next;
+        }
+
         if (st->play_ctx != NULL) {
-            ngx_rtmp_relay_create_reconnect(s, target, 1);
+            target = st->relay_pull_data;
+            if (target) { /* pure push */
+                st->relay_pull_tag = &ngx_rtmp_relay_module;
+                ngx_rtmp_relay_create_reconnect(s, target, 1);
+            }
         }
     } else { /* relay push session close */
         if (st->publish_ctx != NULL) {
+            target = ctx->data;
             ngx_rtmp_relay_create_reconnect(s, target, 0);
         }
     }

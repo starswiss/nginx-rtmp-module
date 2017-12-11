@@ -359,11 +359,10 @@ struct ngx_live_stream_s {
     ngx_relay_reconnect_t      *publish_reconnect;
     ngx_relay_reconnect_t      *play_reconnect;
 
-    ngx_live_stream_t          *next;
+    void                       *relay_pull_tag;
+    void                       *relay_pull_data;
 
-    /* for relay */
-    unsigned                    players;
-    unsigned                    publishers;
+    ngx_live_stream_t          *next;
 
     /* for live */
     ngx_rtmp_live_ctx_t        *ctx;

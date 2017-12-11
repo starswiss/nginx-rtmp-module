@@ -507,6 +507,11 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         return NGX_DECLINED;
     }
 
+    sctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_gop_module);
+    if (sctx == NULL) { /* publisher doesn't publish av frame */
+        return NGX_DECLINED;
+    }
+
     ssctx = ngx_rtmp_get_module_ctx(ss, ngx_rtmp_gop_module);
     if (ssctx == NULL) {
         ssctx = ngx_pcalloc(ss->connection->pool, sizeof(ngx_rtmp_gop_ctx_t));
@@ -525,7 +530,6 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         return NGX_AGAIN;
     }
 
-    sctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_gop_module);
     pos = ngx_rtmp_gop_prev(s, sctx->gop_last);
     /* new frame is video key frame */
     if (sctx->cache[pos]->keyframe && !sctx->cache[pos]->av_header) {
