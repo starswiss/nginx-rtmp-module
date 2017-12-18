@@ -48,40 +48,6 @@ typedef struct {
 
 
 typedef struct {
-    ngx_str_t                   name;
-    ngx_str_t                   url;
-    ngx_rtmp_session_t         *session;
-
-    ngx_str_t                   pargs; /* play or publish ctx */
-
-    ngx_str_t                   app;
-    ngx_str_t                   args;
-    ngx_str_t                   tc_url;
-    ngx_str_t                   page_url;
-    ngx_str_t                   swf_url;
-    ngx_str_t                   flash_ver;
-    uint32_t                    acodecs;
-    uint32_t                    vcodecs;
-
-    ngx_str_t                   play_path;
-    ngx_int_t                   live;
-    ngx_int_t                   start;
-    ngx_int_t                   stop;
-
-    void                       *tag;
-    void                       *data;
-
-    unsigned                    publishing:1;
-} ngx_rtmp_relay_ctx_t;
-
-
-typedef struct {
-    ngx_rtmp_relay_target_t    *target;
-    ngx_pool_t                 *pool;
-} ngx_rtmp_relay_reconnect_t;
-
-
-typedef struct {
     char                       *code;
     ngx_uint_t                  status;
     ngx_flag_t                  finalize;
@@ -208,10 +174,8 @@ ngx_rtmp_relay_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_relay_app_conf_t  *conf = child;
 
     ngx_conf_merge_msec_value(conf->buflen, prev->buflen, 5000);
-    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect,
-            3000);
-    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect,
-            3000);
+    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
+    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
 
     return NGX_CONF_OK;
 }
@@ -657,7 +621,11 @@ ngx_rtmp_relay_create_local_ctx(ngx_rtmp_session_t *s, ngx_str_t *name,
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
     if (ctx == NULL) {
-        return NULL;
+        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
+        if (ctx == NULL) {
+            return NULL;
+        }
+        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
     }
     ctx->session = s;
 
@@ -687,12 +655,15 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
 
     ctx = create_play_ctx(s, name, target);
     if (ctx == NULL) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "relay create, play ctx is NULL");
         return NGX_ERROR;
     }
 
     ctx = create_publish_ctx(s, name, target);
     if (ctx == NULL) {
-        ngx_rtmp_finalize_session(ctx->session);
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "relay create, publish ctx is NULL");
         return NGX_ERROR;
     }
     ctx->publishing = 1;
@@ -1570,9 +1541,7 @@ ngx_rtmp_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     }
 
     if (ctx->publishing) { /* relay pull session */
-        if (st->relay_pull_tag &&
-                st->relay_pull_tag != &ngx_rtmp_relay_module)
-        {
+        if (st->relay_pull_tag != &ngx_rtmp_relay_module) {
             /* relay pull not create by relay module */
             goto next;
         }
