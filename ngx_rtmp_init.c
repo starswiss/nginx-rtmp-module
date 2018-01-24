@@ -8,6 +8,7 @@
 #include <ngx_core.h>
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_proxy_protocol.h"
+#include "ngx_http_client.h"
 
 
 static void ngx_rtmp_close_connection(ngx_connection_t *c);
@@ -303,6 +304,21 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
 
 
 static void
+ngx_rtmp_async_finalize_http_client(ngx_event_t *ev)
+{
+    ngx_rtmp_session_t         *s;
+    ngx_http_request_t         *hcr;
+
+    s = ev->data;
+    hcr = s->request;
+
+    if (hcr) {
+        ngx_http_client_finalize_request(hcr, 1);
+    }
+}
+
+
+static void
 ngx_rtmp_async_finalize_http_request(ngx_event_t *ev)
 {
     ngx_rtmp_session_t         *s;
@@ -339,7 +355,11 @@ ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
     if (s->live_type != NGX_RTMP_LIVE) {
         e = &s->close;
         e->data = s;
-        e->handler = ngx_rtmp_async_finalize_http_request;
+        if (s->relay) {
+            e->handler = ngx_rtmp_async_finalize_http_client;
+        } else {
+            e->handler = ngx_rtmp_async_finalize_http_request;
+        }
         e->log = c->log;
 
         ngx_post_event(e, &ngx_posted_events);

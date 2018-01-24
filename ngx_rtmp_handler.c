@@ -780,7 +780,9 @@ ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,
 send:
     if (!s->connection->write->active) {
         if (s->live_type == NGX_HTTP_FLV_LIVE) {
-            s->handler(s->connection->write);
+            if (s->handler) {
+                s->handler(s->connection->write);
+            }
         } else {
             ngx_rtmp_send(s->connection->write);
         }

@@ -15,6 +15,7 @@
 
 typedef struct {
     ngx_url_t                       url;
+    ngx_str_t                       schema;
     ngx_str_t                       app;
     ngx_str_t                       name;
     ngx_str_t                       tc_url;
@@ -67,6 +68,8 @@ ngx_int_t ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
                               ngx_rtmp_relay_target_t *target);
 ngx_int_t ngx_rtmp_relay_push(ngx_rtmp_session_t *s, ngx_str_t *name,
                               ngx_rtmp_relay_target_t *target);
+
+ngx_int_t ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s);
 
 
 #endif /* _NGX_RTMP_RELAY_H_INCLUDED_ */

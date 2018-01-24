@@ -9,6 +9,7 @@
 #include "ngx_rtmp_relay_module.h"
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_dynamic_resolver.h"
+#include "ngx_http_flv_relay.h"
 
 
 static ngx_rtmp_publish_pt          next_publish;
@@ -606,7 +607,13 @@ ngx_rtmp_relay_create_remote_ctx(ngx_rtmp_session_t *s, ngx_str_t* name,
     cctx.srv_conf = s->srv_conf;
     cctx.main_conf = s->main_conf;
 
-    return ngx_rtmp_relay_create_connection(s, &cctx, name, target);
+    if (target->schema.len == 0 ||
+            ngx_memcmp(target->schema.data, "rtmp", 4) == 0)
+    {
+        return ngx_rtmp_relay_create_connection(s, &cctx, name, target);
+    } else {
+        return ngx_http_relay_create_connection(s, &cctx, name, target);
+    }
 }
 
 
@@ -863,7 +870,7 @@ ngx_rtmp_relay_play_local(ngx_rtmp_session_t *s)
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_rtmp_relay_publish_local(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_publish_t          v;
@@ -1609,8 +1616,16 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     u->url = value[1];
 
     if (ngx_strncasecmp(u->url.data, (u_char *) "rtmp://", 7) == 0) {
+        target->schema.data = value[1].data;
+        target->schema.len = 4;
         u->url.data += 7;
         u->url.len  -= 7;
+    } else if (ngx_strncasecmp(u->url.data, (u_char *) "http://", 7) == 0) {
+        target->schema.data = value[1].data;
+        target->schema.len = 4;
+        u->url.data += 7;
+        u->url.len  -= 7;
+        u->default_port = 80;
     }
 
     if (ngx_parse_url(cf->pool, u) != NGX_OK) {
@@ -1654,6 +1669,7 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             continue;                                                         \
         }
 
+        NGX_RTMP_RELAY_STR_PAR("schema",      schema);
         NGX_RTMP_RELAY_STR_PAR("app",         app);
         NGX_RTMP_RELAY_STR_PAR("name",        name);
         NGX_RTMP_RELAY_STR_PAR("tcUrl",       tc_url);

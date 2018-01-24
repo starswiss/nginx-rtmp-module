@@ -298,6 +298,13 @@ typedef struct {
     ngx_http_request_t     *request;
     ngx_event_handler_pt    handler;
 
+    unsigned                flv_state;
+
+    ngx_uint_t              flv_version;
+    ngx_uint_t              flv_flags;
+    unsigned                flv_data_offset;
+    unsigned                flv_tagsize;
+
     /* input stream 0 (reserved by RTMP spec)
      * is used as free chain link */
 
