@@ -329,15 +329,16 @@ ngx_rtmp_async_finalize_http_request(ngx_event_t *ev)
 
     if (r->header_sent) {
         ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
+        ngx_http_run_posted_requests(r->connection);
     } else {
+        r->error_page = 1;
+
         if (s->status) {
             ngx_http_finalize_request(r, s->status);
         } else {
             ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
         }
     }
-
-    ngx_http_run_posted_requests(r->connection);
 }
 
 

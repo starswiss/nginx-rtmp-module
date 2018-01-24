@@ -264,9 +264,12 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         r->connection->timedout = 1;
         if (r->header_sent) {
             ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
+            ngx_http_run_posted_requests(r->connection);
         } else {
+            r->error_page = 1;
             ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
         }
+
         return;
     }
 
