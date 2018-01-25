@@ -527,16 +527,20 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
     if (ctx->pargs.len) {
         len = len + 1 + ctx->pargs.len;
     }
+
     request_url.data = ngx_pcalloc(cs->connection->pool, len);
     if (request_url.data == NULL) {
         return NGX_ERROR;
     }
-    ngx_snprintf(request_url.data, len, "%V://%V/%V/%V", &s->scheme,
-            &s->domain, &ctx->app, &ctx->name);
-    if (ctx->pargs.len) {
-        ngx_snprintf(request_url.data, len, "%V?%V", &request_url, &ctx->pargs);
-    }
     request_url.len = len;
+
+    if (ctx->pargs.len) {
+        ngx_snprintf(request_url.data, len, "%V://%V/%V/%V?%V", &s->scheme,
+                &s->domain, &ctx->app, &ctx->name, &ctx->pargs);
+    } else {
+        ngx_snprintf(request_url.data, len, "%V://%V/%V/%V", &s->scheme,
+                &s->domain, &ctx->app, &ctx->name);
+    }
 
     hcr = ngx_http_client_create_request(&request_url, NGX_HTTP_CLIENT_GET,
             NGX_HTTP_CLIENT_VERSION_10, NULL, cs->connection->log,
