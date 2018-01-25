@@ -10,6 +10,20 @@
 #include "ngx_rbuf.h"
 
 
+typedef struct {
+    ngx_uint_t                  status;
+    char                       *code;
+    char                       *level;
+    char                       *desc;
+} ngx_http_status_code_t;
+
+static ngx_http_status_code_t ngx_http_relay_status_code[] = {
+    { 400, "NetStream.Play.BadName", "error", "Bad Request" },
+    { 404, "NetStream.Play.StreamNotFound", "error", "No such stream" },
+    { 503, "NetStream.Play.ServiceUnavailable", "error", "Service Unavailable" },
+    { 0, "NetStream.Play.StreamError", "error", "Stream Error" }
+};
+
 static ngx_int_t
 ngx_http_relay_parse_flv(ngx_rtmp_session_t *s, ngx_buf_t *b)
 {
@@ -413,6 +427,44 @@ end:
 }
 
 static void
+ngx_http_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
+{
+    ngx_live_stream_t          *st;
+    ngx_rtmp_core_ctx_t        *cctx;
+    char                       *code, *level, *desc;
+    size_t                      i;
+
+    for (i = 0; ngx_http_relay_status_code[i].code; ++i) {
+
+        if (status != ngx_http_relay_status_code[i].status) {
+            continue;
+        }
+
+        break;
+    }
+
+    code = ngx_http_relay_status_code[i].code;
+    level = ngx_http_relay_status_code[i].level;
+    desc = ngx_http_relay_status_code[i].desc;
+
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            "http relay transit, %d: level='%s' code='%s' description='%s'",
+            status, code, level, desc);
+
+    st = ngx_live_create_stream(&s->serverid, &s->stream);
+    cctx = st->play_ctx;
+
+    for (; cctx; cctx = cctx->next) {
+        cctx->session->status = status;
+        ngx_rtmp_send_status(cctx->session, code, level, desc);
+
+        if (ngx_strcmp(level, "error") == 0) {
+            ngx_rtmp_finalize_session(cctx->session);
+        }
+    }
+}
+
+static void
 ngx_http_relay_recv(void *request, ngx_http_request_t *hcr)
 {
     ngx_rtmp_session_t         *s;
@@ -424,9 +476,7 @@ ngx_http_relay_recv(void *request, ngx_http_request_t *hcr)
 
     status_code = ngx_http_client_status_code(hcr);
     if (status_code != NGX_HTTP_OK) {
-        //TODO transfer to rtmp status
-        ngx_log_error(NGX_LOG_ERR, hcr->connection->log, 0,
-                "Receive unexpected status code, %ui", status_code);
+        ngx_http_relay_error(s, status_code);
         ngx_http_client_finalize_request(hcr, 1);
         return;
     }
