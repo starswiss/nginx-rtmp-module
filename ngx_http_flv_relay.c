@@ -380,8 +380,6 @@ ngx_http_relay_recv_body(void *request, ngx_http_request_t *hcr)
 
     l = cl;
     for (;;) {
-        if (l) {
-        }
         if (l && l->buf->pos == l->buf->last) {
             l = l->next;
         }
@@ -427,6 +425,30 @@ end:
 }
 
 static void
+ngx_http_flv_client_cleanup(void *data)
+{
+    ngx_http_request_t         *hcr;
+    ngx_http_client_ctx_t      *ctx;
+    ngx_rtmp_session_t         *s;
+
+    hcr = data;
+
+    ctx = hcr->ctx[0];
+    s = ctx->request;
+
+    if (ctx == NULL) {
+        return;
+    }
+
+    if (s) {
+        ngx_rtmp_finalize_fake_session(s);
+    }
+
+    ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
+            "http flv client, cleanup");
+}
+
+static void
 ngx_http_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
 {
     ngx_live_stream_t          *st;
@@ -469,10 +491,20 @@ ngx_http_relay_recv(void *request, ngx_http_request_t *hcr)
 {
     ngx_rtmp_session_t         *s;
     ngx_http_client_ctx_t      *ctx;
+    ngx_http_cleanup_t         *cln;
     ngx_uint_t                  status_code;
 
     s = request;
     ctx = hcr->ctx[0];
+
+    cln = ngx_http_cleanup_add(hcr, 0);
+    if (cln == NULL) {
+        ngx_http_relay_error(s, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        ngx_http_client_finalize_request(hcr, 1);
+        return;
+    }
+    cln->handler = ngx_http_flv_client_cleanup;
+    cln->data = hcr;
 
     status_code = ngx_http_client_status_code(hcr);
     if (status_code != NGX_HTTP_OK) {
@@ -487,30 +519,6 @@ ngx_http_relay_recv(void *request, ngx_http_request_t *hcr)
     ngx_http_relay_recv_body(request, hcr);
 }
 
-static void
-ngx_http_flv_client_cleanup(void *data)
-{
-    ngx_http_request_t         *hcr;
-    ngx_http_client_ctx_t      *ctx;
-    ngx_rtmp_session_t         *s;
-
-    hcr = data;
-
-    ctx = hcr->ctx[0];
-    s = ctx->request;
-
-    if (ctx == NULL) {
-        return;
-    }
-
-    if (s) {
-        ngx_rtmp_finalize_fake_session(s);
-    }
-
-    ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
-            "http flv client, cleanup");
-}
-
 static ngx_int_t
 ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
 {
@@ -518,7 +526,6 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
     ngx_str_t                   request_url;
     size_t                      len;
     ngx_rtmp_relay_ctx_t       *ctx;
-    ngx_http_cleanup_t         *cln;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
 
@@ -552,13 +559,6 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
 
     s->request = hcr;
     s->live_type = NGX_HTTP_FLV_LIVE;
-
-    cln = ngx_http_cleanup_add(hcr, 0);
-    if (cln == NULL) {
-        return NGX_ERROR;
-    }
-    cln->handler = ngx_http_flv_client_cleanup;
-    cln->data = hcr;
 
     return NGX_OK;
 }
