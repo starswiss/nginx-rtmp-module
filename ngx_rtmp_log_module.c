@@ -994,6 +994,7 @@ ngx_rtmp_log_add_trunc_timer(ngx_rtmp_session_t *s, ngx_rtmp_log_ctx_t *ctx,
     ngx_msec_t                  t;
 
     ltctx = ngx_array_push(&ctx->timers);
+    ngx_memzero(ltctx, sizeof(ngx_rtmp_log_timer_ctx_t));
     ltctx->session = s;
     ltctx->log = log;
     e = &ltctx->event;
