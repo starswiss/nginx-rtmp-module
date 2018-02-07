@@ -9,6 +9,7 @@
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_proxy_protocol.h"
 #include "ngx_http_client.h"
+#include "ngx_rbuf.h"
 
 
 static void ngx_rtmp_close_connection(ngx_connection_t *c);
@@ -299,6 +300,11 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
         s->out_pos %= s->out_queue;
     }
 
+    if (s->out_chain) {
+        ngx_put_chainbufs(s->out_chain);
+        s->out_chain = NULL;
+    }
+
     ngx_rtmp_close_connection(c);
 }
 
@@ -384,6 +390,7 @@ void
 ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s)
 {
     ngx_connection_t               *c;
+    ngx_rtmp_stream_t              *st;
 
     c = s->connection;
     if (c->destroyed) {
@@ -397,6 +404,17 @@ ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s)
     while (s->out_pos != s->out_last) {
         ngx_rtmp_shared_free_frame(s->out[s->out_pos++]);
         s->out_pos %= s->out_queue;
+    }
+
+    if (s->out_chain) {
+        ngx_put_chainbufs(s->out_chain);
+        s->out_chain = NULL;
+    }
+
+    st = &s->in_streams[0];
+    if (st->in) {
+        ngx_put_chainbufs(st->in);
+        st->in = NULL;
     }
 }
 
