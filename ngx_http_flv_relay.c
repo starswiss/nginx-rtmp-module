@@ -526,10 +526,17 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
     ngx_str_t                   request_url;
     size_t                      len;
     ngx_rtmp_relay_ctx_t       *ctx;
+    ngx_request_url_t           rurl;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
 
-    len = s->scheme.len + 3 + s->domain.len + 1 + ctx->app.len + 1
+    if (ngx_parse_request_url(&rurl, &ctx->tc_url) == NGX_ERROR) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "parse tc_url(%V) failed", &ctx->tc_url);
+        return NGX_ERROR;
+    }
+
+    len = s->scheme.len + 3 + rurl.host.len + 1 + ctx->app.len + 1
         + ctx->name.len;
     if (ctx->pargs.len) {
         len = len + 1 + ctx->pargs.len;
@@ -543,10 +550,10 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
 
     if (ctx->pargs.len) {
         ngx_snprintf(request_url.data, len, "%V://%V/%V/%V?%V", &s->scheme,
-                &s->domain, &ctx->app, &ctx->name, &ctx->pargs);
+                &rurl.host, &ctx->app, &ctx->name, &ctx->pargs);
     } else {
         ngx_snprintf(request_url.data, len, "%V://%V/%V/%V", &s->scheme,
-                &s->domain, &ctx->app, &ctx->name);
+                &rurl.host, &ctx->app, &ctx->name);
     }
 
     hcr = ngx_http_client_create_request(&request_url, NGX_HTTP_CLIENT_GET,
