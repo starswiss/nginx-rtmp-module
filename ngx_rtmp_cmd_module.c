@@ -258,8 +258,6 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             (uint32_t)v.acodecs, (uint32_t)v.vcodecs,
             (ngx_int_t)v.object_encoding);
 
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
 #define NGX_RTMP_SET_STRPAR(name)                                             \
     s->name.len = ngx_strlen(v.name);                                        \
     s->name.data = ngx_palloc(s->connection->pool, s->name.len);              \
@@ -281,6 +279,15 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     s->acodecs = (uint32_t) v.acodecs;
     s->vcodecs = (uint32_t) v.vcodecs;
+
+    ngx_rtmp_cmd_middleware_init(s);
+
+    if (ngx_rtmp_set_virtual_server(s, &s->domain)) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "rtmp connect, set vhost for \"%V\" failed", &s->domain);
+        return NGX_ERROR;
+    }
+    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     /* find application & set app_conf */
     cacfp = cscf->applications.elts;
@@ -304,8 +311,6 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
         s->app_conf = cscf->default_app->app_conf;
     }
-
-    ngx_rtmp_cmd_middleware_init(s);
 
     s->live_server = ngx_live_create_server(&s->serverid);
 

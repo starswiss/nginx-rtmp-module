@@ -151,15 +151,17 @@ ngx_rtmp_init_session(ngx_connection_t *c, ngx_rtmp_addr_conf_t *addr_conf)
 
     s = ngx_pcalloc(c->pool, sizeof(ngx_rtmp_session_t) +
             sizeof(ngx_rtmp_frame_t *) * ((ngx_rtmp_core_srv_conf_t *)
-                addr_conf->ctx-> srv_conf[ngx_rtmp_core_module
+                addr_conf->default_server->ctx-> srv_conf[ngx_rtmp_core_module
                     .ctx_index])->out_queue);
     if (s == NULL) {
         ngx_rtmp_close_connection(c);
         return NULL;
     }
 
-    s->main_conf = addr_conf->ctx->main_conf;
-    s->srv_conf = addr_conf->ctx->srv_conf;
+    s->addr_conf = addr_conf;
+
+    s->main_conf = addr_conf->default_server->ctx->main_conf;
+    s->srv_conf = addr_conf->default_server->ctx->srv_conf;
 
     s->addr_text = &addr_conf->addr_text;
 
@@ -426,14 +428,16 @@ ngx_rtmp_init_fake_session(ngx_connection_t *c, ngx_rtmp_addr_conf_t *addr_conf)
 
     s = ngx_pcalloc(c->pool, sizeof(ngx_rtmp_session_t) +
             sizeof(ngx_rtmp_frame_t *) * ((ngx_rtmp_core_srv_conf_t *)
-                addr_conf->ctx-> srv_conf[ngx_rtmp_core_module
+                addr_conf->default_server->ctx-> srv_conf[ngx_rtmp_core_module
                     .ctx_index])->out_queue);
     if (s == NULL) {
         return NULL;
     }
 
-    s->main_conf = addr_conf->ctx->main_conf;
-    s->srv_conf = addr_conf->ctx->srv_conf;
+    s->addr_conf = addr_conf;
+
+    s->main_conf = addr_conf->default_server->ctx->main_conf;
+    s->srv_conf = addr_conf->default_server->ctx->srv_conf;
 
     s->addr_text = &addr_conf->addr_text;
 

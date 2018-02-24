@@ -25,55 +25,19 @@ typedef unsigned __int8     uint8_t;
 #endif
 
 
+#if (NGX_PCRE)
+typedef struct {
+    ngx_regex_t            *regex;
+    ngx_str_t               name;
+} ngx_rtmp_regex_t;
+#endif
+
+
 typedef struct {
     void                  **main_conf;
     void                  **srv_conf;
     void                  **app_conf;
 } ngx_rtmp_conf_ctx_t;
-
-
-typedef struct {
-    u_char                  sockaddr[NGX_SOCKADDRLEN];
-    socklen_t               socklen;
-
-    /* server ctx */
-    ngx_rtmp_conf_ctx_t    *ctx;
-
-    unsigned                bind:1;
-    unsigned                wildcard:1;
-#if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
-    unsigned                ipv6only:2;
-#endif
-    unsigned                so_keepalive:2;
-    unsigned                proxy_protocol:1;
-#if (NGX_HAVE_KEEPALIVE_TUNABLE)
-    int                     tcp_keepidle;
-    int                     tcp_keepintvl;
-    int                     tcp_keepcnt;
-#endif
-} ngx_rtmp_listen_t;
-
-
-typedef struct {
-    ngx_rtmp_conf_ctx_t    *ctx;
-    ngx_str_t               addr_text;
-    unsigned                proxy_protocol:1;
-} ngx_rtmp_addr_conf_t;
-
-typedef struct {
-    in_addr_t               addr;
-    ngx_rtmp_addr_conf_t    conf;
-} ngx_rtmp_in_addr_t;
-
-
-#if (NGX_HAVE_INET6)
-
-typedef struct {
-    struct in6_addr         addr6;
-    ngx_rtmp_addr_conf_t    conf;
-} ngx_rtmp_in6_addr_t;
-
-#endif
 
 
 typedef struct {
@@ -87,27 +51,6 @@ typedef struct {
     in_port_t               port;
     ngx_array_t             addrs;       /* array of ngx_rtmp_conf_addr_t */
 } ngx_rtmp_conf_port_t;
-
-
-typedef struct {
-    struct sockaddr        *sockaddr;
-    socklen_t               socklen;
-
-    ngx_rtmp_conf_ctx_t    *ctx;
-
-    unsigned                bind:1;
-    unsigned                wildcard:1;
-#if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
-    unsigned                ipv6only:2;
-#endif
-    unsigned                so_keepalive:2;
-    unsigned                proxy_protocol:1;
-#if (NGX_HAVE_KEEPALIVE_TUNABLE)
-    int                     tcp_keepidle;
-    int                     tcp_keepintvl;
-    int                     tcp_keepcnt;
-#endif
-} ngx_rtmp_conf_addr_t;
 
 
 #define NGX_RTMP_VERSION                3
@@ -220,11 +163,14 @@ struct ngx_mpegts_frame_s {
 
 typedef struct ngx_live_stream_s    ngx_live_stream_t;
 typedef struct ngx_live_server_s    ngx_live_server_t;
+typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 
 typedef struct {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
 
     ngx_event_t             close;
+
+    ngx_rtmp_addr_conf_t   *addr_conf;
 
     void                  **ctx;
     void                  **main_conf;
@@ -432,13 +378,17 @@ typedef struct {
 
 typedef struct {
     ngx_array_t             servers;    /* ngx_rtmp_core_srv_conf_t */
-    ngx_array_t             listen;     /* ngx_rtmp_listen_t */
 
     ngx_array_t             events[NGX_RTMP_MAX_EVENT];
 
     ngx_hash_t              amf_hash;
     ngx_array_t             amf_arrays;
     ngx_array_t             amf;
+
+    ngx_uint_t              server_names_hash_max_size;
+    ngx_uint_t              server_names_hash_bucket_size;
+
+    ngx_array_t            *ports;  /* ngx_rtmp_conf_port_t */
 } ngx_rtmp_core_main_conf_t;
 
 
@@ -479,7 +429,99 @@ typedef struct ngx_rtmp_core_srv_conf_s {
     ngx_msec_t              buflen;
 
     ngx_rtmp_conf_ctx_t    *ctx;
+
+    unsigned                listen:1;
+#if (NGX_PCRE)
+    unsigned                captures:1;
+#endif
+
+    ngx_str_t               server_name;
+
+    /* array of the ngx_rtmp_server_name_t, "server_name" directive */
+    ngx_array_t             server_names;
 } ngx_rtmp_core_srv_conf_t;
+
+
+typedef struct {
+#if (NGX_PCRE)
+    ngx_rtmp_regex_t       *regex;
+#endif
+    ngx_rtmp_core_srv_conf_t *server; /* virtual name server conf */
+    ngx_str_t               name;
+} ngx_rtmp_server_name_t;
+
+
+typedef struct {
+    ngx_hash_combined_t     names;
+
+    ngx_uint_t              nregex;
+    ngx_rtmp_server_name_t *regex;
+} ngx_rtmp_virtual_names_t;
+
+
+struct ngx_rtmp_addr_conf_s {
+    ngx_rtmp_core_srv_conf_t *default_server;
+    ngx_rtmp_virtual_names_t *virtual_names;
+
+    ngx_str_t               addr_text;
+    unsigned                proxy_protocol:1;
+};
+
+typedef struct {
+    in_addr_t               addr;
+    ngx_rtmp_addr_conf_t    conf;
+} ngx_rtmp_in_addr_t;
+
+
+#if (NGX_HAVE_INET6)
+
+typedef struct {
+    struct in6_addr         addr6;
+    ngx_rtmp_addr_conf_t    conf;
+} ngx_rtmp_in6_addr_t;
+
+#endif
+
+
+typedef struct {
+    struct sockaddr        *sockaddr;
+    socklen_t               socklen;
+
+    unsigned                default_server:1;
+    unsigned                bind:1;
+    unsigned                wildcard:1;
+#if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
+    unsigned                ipv6only:2;
+#endif
+    unsigned                so_keepalive:2;
+    unsigned                proxy_protocol:1;
+#if (NGX_HAVE_KEEPALIVE_TUNABLE)
+    int                     tcp_keepidle;
+    int                     tcp_keepintvl;
+    int                     tcp_keepcnt;
+#endif
+
+    u_char                  addr[NGX_SOCKADDR_STRLEN + 1];
+} ngx_rtmp_listen_opt_t;
+
+
+typedef struct {
+    ngx_rtmp_listen_opt_t   opt;
+
+    ngx_hash_t              hash;
+    ngx_hash_wildcard_t    *wc_head;
+    ngx_hash_wildcard_t    *wc_tail;
+
+#if (NGX_PCRE)
+    ngx_uint_t              nregex;
+    ngx_rtmp_server_name_t *regex;
+#endif
+
+    /* the default server configuration for this address:port */
+    ngx_rtmp_core_srv_conf_t   *default_server;
+    ngx_array_t             servers;    /* array of ngx_http_core_srv_conf_t */
+} ngx_rtmp_conf_addr_t;
+
 
 /* nginx dynamic conf */
 typedef struct {
@@ -539,6 +581,16 @@ typedef struct {
     ((ngx_rtmp_conf_ctx_t *) cf->ctx)->srv_conf[module.ctx_index]
 #define ngx_rtmp_conf_get_module_app_conf(cf, module)                        \
     ((ngx_rtmp_conf_ctx_t *) cf->ctx)->app_conf[module.ctx_index]
+
+
+/* for virtual server */
+#if (NGX_PCRE)
+ngx_rtmp_regex_t *ngx_rtmp_regex_compile(ngx_conf_t *cf,
+    ngx_regex_compile_t *rc);
+#endif
+ngx_int_t ngx_rtmp_add_listen(ngx_conf_t *cf, ngx_rtmp_core_srv_conf_t *cscf,
+    ngx_rtmp_listen_opt_t *lsopt);
+ngx_int_t ngx_rtmp_set_virtual_server(ngx_rtmp_session_t *s, ngx_str_t *host);
 
 
 #ifdef NGX_DEBUG

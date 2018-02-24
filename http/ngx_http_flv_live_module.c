@@ -540,6 +540,9 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         return rc;
     }
 
+    if (ngx_rtmp_set_virtual_server(s, &s->domain)) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
     s->live_type = NGX_HTTP_FLV_LIVE;
