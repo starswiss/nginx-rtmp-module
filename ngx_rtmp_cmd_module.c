@@ -114,6 +114,37 @@ ngx_rtmp_cmd_fill_args(u_char name[NGX_RTMP_MAX_NAME],
 }
 
 void
+ngx_rtmp_cmd_reset_vhost(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
+{
+    ngx_request_url_t           ru;
+    ngx_str_t                   tcurl;
+    char                       *p;
+
+    tcurl.data = v->tc_url;
+    tcurl.len = ngx_strlen(v->tc_url);
+
+    if (ngx_parse_request_url(&ru, &tcurl) == NGX_ERROR) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                "tcurl error, %s", v->tc_url);
+        return;
+    }
+
+    if (ngx_inet_addr(ru.host.data, ru.host.len) == INADDR_NONE) {
+        /* domain is not ip */
+        return;
+    }
+
+    p = ngx_strstr(v->app, "/");
+    if (p == NULL) { /* app only has one level */
+        return;
+    }
+
+    /* use first level of app as domain, the rest as app */
+    *ngx_snprintf(v->tc_url, NGX_RTMP_MAX_URL, "rtmp://%s", v->app) = 0;
+    *ngx_snprintf(v->app, NGX_RTMP_MAX_NAME, "%s", p + 1) = 0;
+}
+
+void
 ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_core_srv_dconf_t  *rcsdf;
@@ -249,6 +280,7 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     ngx_rtmp_cmd_fill_args(v.app, v.args);
+    ngx_rtmp_cmd_reset_vhost(s, &v);
 
     ngx_log_error(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
             "connect: app='%s' args='%s' flashver='%s' swf_url='%s' "
