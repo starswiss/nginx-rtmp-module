@@ -426,7 +426,11 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     }
     c = pc->connection;
     c->pool = pool;
-    c->addr_text = target->url.url;
+    if (ngx_rtmp_relay_copy_str(pool, &c->addr_text, &target->url.url)
+        != NGX_OK)
+    {
+        goto clear;
+    }
 
     addr_conf = ngx_pcalloc(pool, sizeof(ngx_rtmp_addr_conf_t));
     if (addr_conf == NULL) {
@@ -490,10 +494,7 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
         goto clear;
     }
 
-    if (ngx_rtmp_relay_copy_str(pool, &rctx->url, &target->url.url) != NGX_OK) {
-        goto clear;
-    }
-
+    rctx->url = c->addr_text;
     rctx->tag = target->tag;
     rctx->data = target->data;
 
