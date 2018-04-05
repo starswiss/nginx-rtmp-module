@@ -30,8 +30,8 @@ typedef struct {
 
 typedef struct {
     ngx_url_t                          *url;
-    ngx_rtmp_play_t                    *play_v;
-    ngx_rtmp_publish_t                 *publish_v;
+    ngx_rtmp_play_t                     play_v;
+    ngx_rtmp_publish_t                  publish_v;
 
     unsigned                            publishing;
 } ngx_rtmp_auth_request_ctx_t;
@@ -199,9 +199,9 @@ ngx_rtmp_auth_request_handle(ngx_rtmp_session_t *s, void *arg,
     }
 
     if (ctx->publishing) {
-        return next_publish(s, ctx->publish_v);
+        return next_publish(s, &ctx->publish_v);
     } else {
-        return next_play(s, ctx->play_v);
+        return next_play(s, &ctx->play_v);
     }
 }
 
@@ -292,7 +292,7 @@ ngx_rtmp_auth_request_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         ctx->publishing = 1;
     }
 
-    ctx->publish_v = v;
+    ctx->publish_v = *v;
 
     if (ngx_rtmp_auth_request_send(s) == NGX_ERROR) {
         goto next;
@@ -333,7 +333,7 @@ ngx_rtmp_auth_request_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_auth_request_module);
     }
 
-    ctx->play_v = v;
+    ctx->play_v = *v;
 
     if (ngx_rtmp_auth_request_send(s) == NGX_ERROR) {
         goto next;
