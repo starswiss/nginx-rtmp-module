@@ -574,9 +574,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         s->app_conf = cscf->default_app->app_conf;
     }
 
-    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
-
-    if (ngx_rtmp_play(s, &v) != NGX_OK) {
+    if (ngx_rtmp_play_filter(s, &v) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 

@@ -208,10 +208,6 @@ ngx_rtmp_monitor_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
     ngx_rtmp_monitor_ctx_t     *ctx;
 
-    if (s->closed) {
-        goto next;
-    }
-
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_monitor_module);
 
     if (ctx == NULL) {

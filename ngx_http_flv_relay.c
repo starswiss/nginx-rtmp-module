@@ -607,7 +607,7 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
         return NULL;
     }
     ci->port = target->url.port;
-    ci->max_retries = 1;
+    ci->max_retries = 0;
     pool = ci->pool;
 
     cs = ngx_client_connect(ci, s->connection->log);
@@ -638,9 +638,11 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
     }
     rs->app_conf = cctx->app_conf;
     rs->relay = 1;
+    rs->idx = target->idx;
+    rs->publishing = target->publishing;
 
     /* set parameters */
-    #define NGX_RTMP_SESSION_STR_COPY(to, from)                                 \
+    #define NGX_RTMP_SESSION_STR_COPY(to, from)                             \
     if (s && ngx_http_relay_copy_str(pool, &rs->to, &s->from) != NGX_OK) {  \
         goto clear;                                                         \
     }

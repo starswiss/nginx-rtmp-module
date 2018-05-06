@@ -369,7 +369,6 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
 {
     ngx_live_server_t         **psrv;
     ngx_live_stream_t         **pst, *st;
-    ngx_relay_reconnect_t      *rc;
 
     psrv = ngx_live_find_server(serverid);
     if (*psrv == NULL) {
@@ -386,16 +385,14 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
 
     st = *pst;
 
-    while (st->publish_reconnect) {
-        rc = st->publish_reconnect;
-        st->publish_reconnect = st->publish_reconnect->next;
-        ngx_live_put_relay_reconnect(rc);
+    if (st->push_reconnect) {
+        ngx_live_put_relay_reconnect(st->push_reconnect);
+        st->push_reconnect = NULL;
     }
 
-    while (st->play_reconnect) {
-        rc = st->play_reconnect;
-        st->play_reconnect = st->play_reconnect->next;
-        ngx_live_put_relay_reconnect(rc);
+    if (st->pull_reconnect) {
+        ngx_live_put_relay_reconnect(st->pull_reconnect);
+        st->pull_reconnect = NULL;
     }
 
     *pst = st->next;

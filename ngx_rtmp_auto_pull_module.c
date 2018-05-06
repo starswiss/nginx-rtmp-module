@@ -11,9 +11,8 @@
 #include "ngx_multiport.h"
 
 
-static ngx_rtmp_publish_pt              next_publish;
-static ngx_rtmp_play_pt                 next_play;
-static ngx_rtmp_close_stream_pt         next_close_stream;
+static ngx_rtmp_push_pt                 next_push;
+static ngx_rtmp_pull_pt                 next_pull;
 
 
 static void *ngx_rtmp_auto_pull_create_app_conf(ngx_conf_t *cf);
@@ -25,8 +24,6 @@ static ngx_int_t ngx_rtmp_auto_pull_postconfiguration(ngx_conf_t *cf);
 typedef struct {
     ngx_flag_t                          auto_pull;
     ngx_str_t                           auto_pull_port;
-    ngx_msec_t                          push_reconnect;
-    ngx_msec_t                          pull_reconnect;
 } ngx_rtmp_auto_pull_app_conf_t;
 
 
@@ -44,20 +41,6 @@ static ngx_command_t  ngx_rtmp_auto_pull_commands[] = {
       ngx_conf_set_str_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_auto_pull_app_conf_t, auto_pull_port),
-      NULL },
-
-    { ngx_string("rtmp_auto_push_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_auto_pull_app_conf_t, push_reconnect),
-      NULL },
-
-    { ngx_string("rtmp_auto_pull_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_auto_pull_app_conf_t, pull_reconnect),
       NULL },
 
       ngx_null_command
@@ -103,8 +86,6 @@ ngx_rtmp_auto_pull_create_app_conf(ngx_conf_t *cf)
     }
 
     conf->auto_pull = NGX_CONF_UNSET;
-    conf->push_reconnect = NGX_CONF_UNSET_MSEC;
-    conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
 
     return conf;
 }
@@ -118,8 +99,6 @@ ngx_rtmp_auto_pull_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->auto_pull, prev->auto_pull, 1);
     ngx_conf_merge_str_value(conf->auto_pull_port, prev->auto_pull_port,
                              "unix:/tmp/rtmp_auto_pull.sock");
-    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 1000);
-    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 1000);
 
     return NGX_CONF_OK;
 }
@@ -171,161 +150,8 @@ ngx_rtmp_auto_pull_target(ngx_rtmp_session_t *s,
 }
 
 
-static void
-ngx_rtmp_auto_pull_pull_reconnect(ngx_event_t *ev)
-{
-    ngx_rtmp_session_t                 *s;
-    ngx_relay_reconnect_t              *rc, **prc;
-    ngx_live_stream_t                  *live_stream;
-    ngx_rtmp_relay_target_t             target;
-    ngx_rtmp_play_t                     v;
-    ngx_int_t                           pslot;
-
-    rc = ev->data;
-    live_stream = rc->live_stream;
-
-    if (live_stream->play_ctx == NULL) { /* all pull closed */
-        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                "auto pull, pull reconnect, all players closed");
-        goto done;
-    }
-
-    s = live_stream->play_ctx->session;
-    pslot = ngx_stream_zone_insert_stream(&s->stream);
-    if (pslot == NGX_ERROR) { /* process next_play */
-        goto next;
-    }
-    s->live_stream->pslot = pslot;
-
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto pull reconnect , stream %V not in current process, "
-            "pslot:%i ngx_process_slot:%i",
-            &s->name, pslot, ngx_process_slot);
-
-    if (pslot == ngx_process_slot) { /* curr process occupied stream */
-        goto next;
-    }
-
-    if (ngx_rtmp_auto_pull_target(s, &target, pslot) == NGX_ERROR) {
-        goto done;
-    }
-
-    live_stream->relay_pull_tag = NULL;
-    ngx_rtmp_relay_pull(s, &s->name, &target);
-
-    goto done;
-
-next:
-    ngx_memzero(&v, sizeof(ngx_rtmp_play_t));
-    ngx_memcpy(v.name, s->name.data, s->name.len);
-    ngx_memcpy(v.args, s->pargs.data, s->pargs.len);
-
-    s->auto_pulled = 0;
-    s->live_stream->relay_pull_tag = NULL;
-    s->live_stream->relay_pull_data = NULL;
-    next_play(s, &v);
-
-done:
-    for (prc = &live_stream->play_reconnect; *prc; prc = &(*prc)->next) {
-        if (*prc == rc) {
-            *prc = rc->next;
-            ngx_live_put_relay_reconnect(rc);
-            break;
-        }
-    }
-}
-
-
-static void
-ngx_rtmp_auto_pull_push_reconnect(ngx_event_t *ev)
-{
-    ngx_rtmp_session_t                 *s;
-    ngx_relay_reconnect_t              *rc, **prc;
-    ngx_live_stream_t                  *live_stream;
-    ngx_rtmp_relay_target_t             target;
-    ngx_int_t                           pslot;
-
-    rc = ev->data;
-    live_stream = rc->live_stream;
-
-    if (live_stream->publish_ctx == NULL) { /* all push closed */
-        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                "auto pull, push reconnect, all publishers closed");
-        goto done;
-    }
-
-    s = live_stream->publish_ctx->session;
-    pslot = ngx_stream_zone_insert_stream(&s->stream);
-    if (pslot == NGX_ERROR) {
-        goto done;
-    }
-    s->live_stream->pslot = pslot;
-
-    ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto push reconnect , stream %V not in current process, "
-            "pslot:%i ngx_process_slot:%i",
-            &s->name, pslot, ngx_process_slot);
-
-    if (pslot == ngx_process_slot) { /* curr process occupied stream */
-        goto done;
-    }
-
-    if (ngx_rtmp_auto_pull_target(s, &target, pslot) == NGX_ERROR) {
-        goto done;
-    }
-
-    ngx_rtmp_relay_push(s, &s->name, &target);
-
-done:
-    for (prc = &live_stream->publish_reconnect; *prc; prc = &(*prc)->next) {
-        if (*prc == rc) {
-            *prc = rc->next;
-            ngx_live_put_relay_reconnect(rc);
-            break;
-        }
-    }
-}
-
-
-static void
-ngx_rtmp_auto_pull_create_reconnect(ngx_rtmp_session_t *s,
-        ngx_live_stream_t *st, unsigned publishing)
-{
-    ngx_relay_reconnect_t              *rc;
-    ngx_rtmp_auto_pull_app_conf_t      *apcf;
-
-    apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
-
-    rc = ngx_live_get_relay_reconnect();
-    rc->tag = &ngx_rtmp_auto_pull_module;
-    rc->data = NULL;
-    rc->live_stream = st;
-
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-            "auto pull, relay session closed, reconnect %p", rc);
-
-    rc->reconnect.data = rc;
-    rc->reconnect.log = ngx_cycle->log;
-    if (publishing) { /* for pull, relay session is publishing */
-        rc->reconnect.handler = ngx_rtmp_auto_pull_pull_reconnect;
-
-        rc->next = st->play_reconnect;
-        st->play_reconnect = rc;
-        ngx_add_timer(&rc->reconnect, apcf->pull_reconnect);
-    } else { /* for push, relay session is playing */
-        rc->reconnect.handler = ngx_rtmp_auto_pull_push_reconnect;
-
-        rc->next = st->publish_reconnect;
-        st->publish_reconnect = rc;
-        ngx_add_timer(&rc->reconnect, apcf->push_reconnect);
-    }
-
-    return;
-}
-
-
 static ngx_int_t
-ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
+ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_int_t                           pslot;
@@ -344,9 +170,9 @@ ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     s->live_stream->pslot = pslot;
 
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "auto push, stream %s not in current process, "
+            "auto push, stream %V not in current process, "
             "pslot:%i ngx_process_slot:%i",
-            v->name, pslot, ngx_process_slot);
+            &s->stream, pslot, ngx_process_slot);
 
     if (pslot == ngx_process_slot) {
         goto next;
@@ -358,13 +184,15 @@ ngx_rtmp_auto_pull_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     ngx_rtmp_relay_push(s, &s->name, &target);
 
+    return NGX_AGAIN;
+
 next:
-    return next_publish(s, v);
+    return next_push(s);
 }
 
 
 static ngx_int_t
-ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
+ngx_rtmp_auto_pull_pull(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_int_t                           pslot;
@@ -378,7 +206,7 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     if (s->live_stream->pslot != -1) {
         ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
-                "auto pull, stream %s already in current process", v->name);
+                "auto pull, stream %V already in current process", &s->stream);
         goto next;
     } else { /* first access for stream */
         pslot = ngx_stream_zone_insert_stream(&s->stream);
@@ -387,9 +215,9 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         }
         s->live_stream->pslot = pslot;
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-                "auto pull, stream %s not in current process, "
+                "auto pull, stream %V not in current process, "
                 "pslot:%i ngx_process_slot:%i",
-                v->name, pslot, ngx_process_slot);
+                &s->stream, pslot, ngx_process_slot);
     }
 
     if (pslot == ngx_process_slot) {
@@ -403,47 +231,10 @@ ngx_rtmp_auto_pull_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     s->auto_pulled = 1;
     ngx_rtmp_relay_pull(s, &s->name, &target);
 
-next:
-    return next_play(s, v);
-}
-
-
-static ngx_int_t
-ngx_rtmp_auto_pull_close_stream(ngx_rtmp_session_t *s,
-        ngx_rtmp_close_stream_t *v)
-{
-    ngx_rtmp_relay_ctx_t               *ctx;
-    ngx_live_stream_t                  *st;
-
-    if (s->relay == 0 || s->closed) {
-        goto next;
-    }
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx == NULL) {
-        goto next;
-    }
-
-    if (ctx->tag != &ngx_rtmp_auto_pull_module) {
-        /* relay not create by rtmp auto pull module */
-        goto next;
-    }
-
-    st = ctx->data;
-
-    if (ctx->publishing) { /* relay pull session close */
-        if (st->play_ctx != NULL) {
-            st->relay_pull_tag = &ngx_rtmp_auto_pull_module;
-            ngx_rtmp_auto_pull_create_reconnect(s, st, 1);
-        }
-    } else { /* relay push session close */
-        if (st->publish_ctx != NULL) {
-            ngx_rtmp_auto_pull_create_reconnect(s, st, 0);
-        }
-    }
+    return NGX_AGAIN;
 
 next:
-    return next_close_stream(s, v);
+    return next_pull(s);
 }
 
 
@@ -452,14 +243,11 @@ ngx_rtmp_auto_pull_postconfiguration(ngx_conf_t *cf)
 {
     /* chain handlers */
 
-    next_publish = ngx_rtmp_publish;
-    ngx_rtmp_publish = ngx_rtmp_auto_pull_publish;
+    next_push = ngx_rtmp_push;
+    ngx_rtmp_push = ngx_rtmp_auto_pull_push;
 
-    next_play = ngx_rtmp_play;
-    ngx_rtmp_play = ngx_rtmp_auto_pull_play;
-
-    next_close_stream = ngx_rtmp_close_stream;
-    ngx_rtmp_close_stream = ngx_rtmp_auto_pull_close_stream;
+    next_pull = ngx_rtmp_pull;
+    ngx_rtmp_pull = ngx_rtmp_auto_pull_pull;
 
     return NGX_OK;
 }

@@ -17,6 +17,8 @@
 
 #include "ngx_rtmp_amf.h"
 #include "ngx_rtmp_bandwidth.h"
+#include "ngx_http_client.h"
+#include "ngx_netcall.h"
 
 
 #if (NGX_WIN32)
@@ -236,7 +238,11 @@ typedef struct {
     unsigned                interprocess:1;
     unsigned                auto_pulled:1;
     unsigned                relay:1;
+    unsigned                played:1;
+    unsigned                published:1;
     unsigned                closed:1;
+    unsigned                publishing:1;
+    ngx_uint_t              idx;
 
     /* live type: 0- RTMP 1- http-flv 2- hls */
     unsigned                live_type:2;
@@ -294,12 +300,12 @@ struct ngx_rtmp_core_ctx_s {
 
 struct ngx_relay_reconnect_s {
     ngx_event_t             reconnect;
-    void                   *tag;
-    void                   *data;
     ngx_live_stream_t      *live_stream;
 
     ngx_relay_reconnect_t  *next;
 };
+
+#define NGX_LIVE_MAX_PUSH   8
 
 struct ngx_live_stream_s {
     u_char                      name[NGX_LIVE_STREAM_LEN];
@@ -309,11 +315,14 @@ struct ngx_live_stream_s {
     ngx_rtmp_core_ctx_t        *publish_ctx;
     ngx_rtmp_core_ctx_t        *play_ctx;
 
-    ngx_relay_reconnect_t      *publish_reconnect;
-    ngx_relay_reconnect_t      *play_reconnect;
+    /* oclp relay */
+    ngx_netcall_ctx_t          *stream_nctx;
+    ngx_netcall_ctx_t          *pull_nctx;
+    ngx_netcall_ctx_t          *push_nctx[NGX_LIVE_MAX_PUSH];
 
-    void                       *relay_pull_tag;
-    void                       *relay_pull_data;
+    ngx_relay_reconnect_t      *pull_reconnect;
+    ngx_relay_reconnect_t      *push_reconnect;
+    ngx_uint_t                  push_count;
 
     ngx_live_stream_t          *next;
 
@@ -337,6 +346,7 @@ struct ngx_live_server_s {
 
     ngx_live_stream_t         **streams;
 };
+
 
 ngx_relay_reconnect_t *ngx_live_get_relay_reconnect();
 void ngx_live_put_relay_reconnect(ngx_relay_reconnect_t *rc);
@@ -399,6 +409,8 @@ extern ngx_rtmp_core_main_conf_t   *ngx_rtmp_core_main_conf;
 typedef struct {
     ngx_array_t             applications; /* ngx_rtmp_core_app_conf_t */
     ngx_str_t               name;
+    ngx_msec_t              pull_reconnect;
+    ngx_msec_t              push_reconnect;
     void                  **app_conf;
 } ngx_rtmp_core_app_conf_t;
 
@@ -822,6 +834,7 @@ extern ngx_thread_volatile ngx_event_t     *ngx_rtmp_init_queue;
 #endif
 
 extern ngx_uint_t                           ngx_rtmp_max_module;
+extern ngx_module_t                         ngx_rtmp_module;
 extern ngx_module_t                         ngx_rtmp_core_module;
 
 

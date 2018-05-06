@@ -44,7 +44,6 @@ static ngx_conf_deprecated_t  ngx_conf_deprecated_so_keepalive = {
 
 static ngx_command_t  ngx_rtmp_core_commands[] = {
 
-
     { ngx_string("server_names_hash_max_size"),
       NGX_RTMP_MAIN_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_num_slot,
@@ -184,6 +183,20 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       ngx_conf_set_msec_slot,
       NGX_RTMP_SRV_CONF_OFFSET,
       offsetof(ngx_rtmp_core_srv_conf_t, buflen),
+      NULL },
+
+    { ngx_string("push_reconnect"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, push_reconnect),
+      NULL },
+
+    { ngx_string("pull_reconnect"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, pull_reconnect),
       NULL },
 
       ngx_null_command
@@ -414,6 +427,9 @@ ngx_rtmp_core_create_app_conf(ngx_conf_t *cf)
         return NULL;
     }
 
+    conf->push_reconnect = NGX_CONF_UNSET_MSEC;
+    conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
+
     return conf;
 }
 
@@ -424,8 +440,8 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_core_app_conf_t *prev = parent;
     ngx_rtmp_core_app_conf_t *conf = child;
 
-    (void)prev;
-    (void)conf;
+    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
+    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
 
     return NGX_CONF_OK;
 }

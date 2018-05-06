@@ -203,7 +203,7 @@ ngx_rtmp_control_redirect_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
     ngx_memzero(&vc, sizeof(ngx_rtmp_close_stream_t));
 
     /* close_stream should be synchronous */
-    ngx_rtmp_close_stream(s, &vc);
+    ngx_rtmp_close_stream_filter(s, &vc);
 
     lctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_live_module);
 
@@ -216,7 +216,7 @@ ngx_rtmp_control_redirect_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 
         ngx_rtmp_cmd_fill_args(vpublish.name, vpublish.args);
 
-        if (ngx_rtmp_publish(s, &vpublish) != NGX_OK) {
+        if (ngx_rtmp_publish_filter(s, &vpublish) != NGX_OK) {
             return "publish failed";
         }
 
@@ -229,7 +229,7 @@ ngx_rtmp_control_redirect_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 
         ngx_rtmp_cmd_fill_args(vplay.name, vplay.args);
 
-        if (ngx_rtmp_play(s, &vplay) != NGX_OK) {
+        if (ngx_rtmp_play_filter(s, &vplay) != NGX_OK) {
             return "play failed";
         }
     }

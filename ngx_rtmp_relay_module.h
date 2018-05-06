@@ -27,6 +27,9 @@ typedef struct {
     ngx_int_t                       start;
     ngx_int_t                       stop;
 
+    ngx_uint_t                      idx;
+    unsigned                        publishing:1;
+
     void                           *tag;     /* usually module reference */
     void                           *data;    /* module-specific data */
     ngx_uint_t                      counter; /* mutable connection counter */
@@ -63,6 +66,9 @@ typedef struct {
 
 extern ngx_module_t  ngx_rtmp_relay_module;
 
+
+ngx_int_t ngx_rtmp_relay_status_error(ngx_rtmp_session_t *s, char *type,
+                                      char *code, char *level, char *desc);
 
 ngx_int_t ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
                               ngx_rtmp_relay_target_t *target);

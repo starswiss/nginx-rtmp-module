@@ -18,6 +18,7 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_relay_module                       \
                 ngx_rtmp_exec_module                        \
                 ngx_rtmp_notify_module                      \
+                ngx_rtmp_oclp_module                        \
                 ngx_rtmp_auto_pull_module                   \
                 ngx_rtmp_auth_request_module                \
                 ngx_rtmp_log_module                         \
@@ -39,6 +40,7 @@ RTMP_HTTP_MODULES="                                         \
 
 
 RTMP_DEPS="                                                     \
+                $ngx_addon_dir/ngx_netcall.h                    \
                 $ngx_addon_dir/ngx_rtmp_amf.h                   \
                 $ngx_addon_dir/ngx_rtmp_bandwidth.h             \
                 $ngx_addon_dir/ngx_rtmp_cmd_module.h            \
@@ -52,6 +54,7 @@ RTMP_DEPS="                                                     \
                 $ngx_addon_dir/ngx_rtmp_record_module.h         \
                 $ngx_addon_dir/ngx_rtmp_relay_module.h          \
                 $ngx_addon_dir/ngx_http_flv_relay.h             \
+                $ngx_addon_dir/ngx_rtmp_oclp_module.h           \
                 $ngx_addon_dir/ngx_rtmp_streams.h               \
                 $ngx_addon_dir/ngx_rtmp_bitop.h                 \
                 $ngx_addon_dir/ngx_rtmp_proxy_protocol.h        \
@@ -65,6 +68,7 @@ RTMP_DEPS="                                                     \
 
 
 RTMP_CORE_SRCS="                                                \
+                $ngx_addon_dir/ngx_netcall.c                    \
                 $ngx_addon_dir/ngx_rtmp.c                       \
                 $ngx_addon_dir/ngx_rtmp_init.c                  \
                 $ngx_addon_dir/ngx_rtmp_handshake.c             \
@@ -88,6 +92,7 @@ RTMP_CORE_SRCS="                                                \
                 $ngx_addon_dir/ngx_rtmp_bandwidth.c             \
                 $ngx_addon_dir/ngx_rtmp_exec_module.c           \
                 $ngx_addon_dir/ngx_rtmp_notify_module.c         \
+                $ngx_addon_dir/ngx_rtmp_oclp_module.c           \
                 $ngx_addon_dir/ngx_rtmp_log_module.c            \
                 $ngx_addon_dir/ngx_rtmp_limit_module.c          \
                 $ngx_addon_dir/ngx_rtmp_bitop.c                 \
