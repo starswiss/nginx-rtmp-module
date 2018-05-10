@@ -12,8 +12,8 @@
 #include "ngx_http_flv_relay.h"
 
 
-static ngx_rtmp_publish_pt          next_publish;
-static ngx_rtmp_play_pt             next_play;
+static ngx_rtmp_push_pt             next_push;
+static ngx_rtmp_pull_pt             next_pull;
 
 
 static ngx_int_t ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf);
@@ -476,35 +476,6 @@ ngx_rtmp_relay_create_remote_ctx(ngx_rtmp_session_t *s, ngx_str_t* name,
 }
 
 
-static ngx_rtmp_relay_ctx_t *
-ngx_rtmp_relay_create_local_ctx(ngx_rtmp_session_t *s, ngx_str_t *name,
-        ngx_rtmp_relay_target_t *target)
-{
-    ngx_rtmp_relay_ctx_t           *ctx;
-
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
-                   "relay: create local context");
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
-        if (ctx == NULL) {
-            return NULL;
-        }
-        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
-    }
-    ctx->session = s;
-
-    if (ngx_rtmp_relay_copy_str(s->connection->pool, &ctx->name, name)
-            != NGX_OK)
-    {
-        return NULL;
-    }
-
-    return ctx;
-}
-
-
 static ngx_int_t
 ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_target_t *target,
@@ -513,26 +484,42 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
 {
     ngx_rtmp_relay_app_conf_t      *racf;
     ngx_rtmp_relay_ctx_t           *ctx;
+    u_char                          pname[NGX_RTMP_MAX_NAME];
+    u_char                          pargs[NGX_RTMP_MAX_ARGS];
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
     if (racf == NULL) {
         return NGX_ERROR;
     }
 
-    ctx = create_play_ctx(s, name, target);
-    if (ctx == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "relay create, play ctx is NULL");
-        return NGX_ERROR;
+    if (create_play_ctx != NULL) {
+        ctx = create_play_ctx(s, name, target);
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "relay create, play ctx is NULL");
+            return NGX_ERROR;
+        }
+    } else {
+        ctx = create_publish_ctx(s, name, target);
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "relay create, publish ctx is NULL");
+            return NGX_ERROR;
+        }
+        ctx->publishing = 1;
     }
 
-    ctx = create_publish_ctx(s, name, target);
-    if (ctx == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "relay create, publish ctx is NULL");
-        return NGX_ERROR;
+    ngx_memzero(pname, sizeof(pname));
+    ngx_memzero(pargs, sizeof(pargs));
+
+    *(ngx_cpymem(pname, ctx->name.data,
+                ngx_min(sizeof(pname) - 1, ctx->name.len))) = 0;
+    if (ctx->pargs.len) {
+        *(ngx_cpymem(pargs, ctx->pargs.data,
+                    ngx_min(sizeof(pargs) - 1, ctx->pargs.len))) = 0;
     }
-    ctx->publishing = 1;
+
+    ngx_rtmp_cmd_stream_init(ctx->session, pname, pargs, ctx->publishing);
 
     return NGX_OK;
 }
@@ -555,7 +542,7 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
 
     return ngx_rtmp_relay_create(s, name, target,
             ngx_rtmp_relay_create_remote_ctx,
-            ngx_rtmp_relay_create_local_ctx);
+            NULL);
 }
 
 
@@ -568,35 +555,27 @@ ngx_rtmp_relay_push(ngx_rtmp_session_t *s, ngx_str_t *name,
             name, &target->app, &target->play_path, &target->url.url);
 
     return ngx_rtmp_relay_create(s, name, target,
-            ngx_rtmp_relay_create_local_ctx,
+            NULL,
             ngx_rtmp_relay_create_remote_ctx);
 }
 
 
 static ngx_int_t
-ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
+ngx_rtmp_relay_publish(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_relay_app_conf_t      *racf;
     ngx_rtmp_relay_target_t        *target, **t;
     ngx_str_t                       name;
     size_t                          n;
     ngx_rtmp_relay_ctx_t           *ctx;
+    unsigned                        relay, error;
 
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-    if (ctx && s->relay) {
+    if (s->interprocess) {
         goto next;
     }
 
-    if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
-        if (ctx == NULL) {
-            return NGX_ERROR;
-        }
-        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
-        ctx->publishing = 1;
-    }
-
-    if (s->interprocess) {
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx && s->relay) {
         goto next;
     }
 
@@ -605,8 +584,9 @@ ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         goto next;
     }
 
-    name.len = ngx_strlen(v->name);
-    name.data = v->name;
+    name = s->name;
+    relay = 0;
+    error = 0;
 
     t = racf->pushes.elts;
     for (n = 0; n < racf->pushes.nelts; ++n, ++t) {
@@ -619,6 +599,7 @@ ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         }
 
         if (ngx_rtmp_relay_push(s, &name, target) == NGX_OK) {
+            relay = 1;
             continue;
         }
 
@@ -627,15 +608,25 @@ ngx_rtmp_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
                 "playpath='%V' url='%V'",
                 &name, &target->app, &target->play_path,
                 &target->url.url);
+
+        error = 1;
+    }
+
+    if (relay) {
+        return NGX_AGAIN;
+    }
+
+    if (error) {
+        return NGX_ERROR;
     }
 
 next:
-    return next_publish(s, v);
+    return next_push(s);
 }
 
 
 static ngx_int_t
-ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
+ngx_rtmp_relay_play(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_relay_app_conf_t      *racf;
     ngx_rtmp_relay_target_t        *target, **t;
@@ -648,25 +639,12 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
-        if (ctx == NULL) {
-            return NGX_ERROR;
-        }
-        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
-    }
-
-    if (s->auto_pulled) {
-        goto next;
-    }
-
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
     if (racf == NULL || racf->pulls.nelts == 0) {
         goto next;
     }
 
-    name.len = ngx_strlen(v->name);
-    name.data = v->name;
+    name = s->name;
 
     t = racf->pulls.elts;
     for (n = 0; n < racf->pulls.nelts; ++n, ++t) {
@@ -679,7 +657,7 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         }
 
         if (ngx_rtmp_relay_pull(s, &name, target) == NGX_OK) {
-            continue;
+            return NGX_AGAIN;
         }
 
         ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
@@ -687,10 +665,12 @@ ngx_rtmp_relay_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
                 "playpath='%V' url='%V'",
                 &name, &target->app, &target->play_path,
                 &target->url.url);
+
+        return NGX_ERROR;
     }
 
 next:
-    return next_play(s, v);
+    return next_pull(s);
 }
 
 
@@ -1504,11 +1484,11 @@ ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf)
     *h = ngx_rtmp_relay_handshake_done;
 
 
-    next_publish = ngx_rtmp_publish;
-    ngx_rtmp_publish = ngx_rtmp_relay_publish;
+    next_push = ngx_rtmp_push;
+    ngx_rtmp_push = ngx_rtmp_relay_publish;
 
-    next_play = ngx_rtmp_play;
-    ngx_rtmp_play = ngx_rtmp_relay_play;
+    next_pull = ngx_rtmp_pull;
+    ngx_rtmp_pull = ngx_rtmp_relay_play;
 
 
     ch = ngx_array_push(&cmcf->amf);

@@ -269,6 +269,10 @@ ngx_live_put_relay_reconnect(ngx_relay_reconnect_t *rc)
         ngx_del_timer(&rc->reconnect);
     }
 
+    if (rc->reconnect.posted) {
+        ngx_delete_posted_event(&rc->reconnect);
+    }
+
     rc->next = lcf->free_reconnect;
     lcf->free_reconnect = rc;
     ++lcf->free_reconnect_count;

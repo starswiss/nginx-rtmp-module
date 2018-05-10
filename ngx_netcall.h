@@ -41,7 +41,6 @@ ngx_netcall_ctx_t *ngx_netcall_create_ctx(ngx_uint_t type, ngx_str_t *groupid,
 
 void ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log);
 void ngx_netcall_detach(ngx_netcall_ctx_t *nctx);
-void ngx_netcall_destroy(ngx_netcall_ctx_t *nctx);
 ngx_str_t *ngx_netcall_header(ngx_netcall_ctx_t *nctx, ngx_str_t *key);
 
 

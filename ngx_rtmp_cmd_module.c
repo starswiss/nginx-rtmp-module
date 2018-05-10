@@ -176,7 +176,7 @@ ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s)
     }
 }
 
-static void
+void
 ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
         unsigned publishing)
 {
@@ -229,12 +229,12 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     ngx_rtmp_oclp_pnotify_start(s, 1);
 
-    ngx_rtmp_cmd_stream_init(s, v->name, v->args, 1);
-
     if (s->relay) { /* relay pull */
         rc = s->live_stream->pull_reconnect;
         ngx_live_put_relay_reconnect(rc);
         s->live_stream->pull_reconnect = NULL;
+    } else {
+        ngx_rtmp_cmd_stream_init(s, v->name, v->args, 1);
     }
 
     return ngx_rtmp_publish(s, v);
@@ -255,8 +255,6 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     ngx_rtmp_oclp_pnotify_start(s, 0);
 
-    ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
-
     if (s->relay) { /* relay push */
         rc = s->live_stream->push_reconnect;
         --s->live_stream->push_count;
@@ -264,6 +262,8 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
             ngx_live_put_relay_reconnect(rc);
             s->live_stream->push_reconnect = NULL;
         }
+    } else {
+        ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
     }
 
     return ngx_rtmp_play(s, v);
@@ -297,6 +297,12 @@ ngx_rtmp_pull_reconnect(ngx_event_t *ev)
     st = rc->live_stream;
     ngx_live_put_relay_reconnect(rc);
     st->pull_reconnect = NULL;
+
+    if (st->publish_ctx) {
+        ngx_rtmp_finalize_session(st->publish_ctx->session);
+        st->publish_ctx = NULL;
+        st->pslot = -1;
+    }
 
     if (st->play_ctx == NULL) {
         ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
@@ -338,6 +344,8 @@ ngx_rtmp_push_filter(ngx_rtmp_session_t *s)
     ngx_relay_reconnect_t      *reconnect;
     ngx_int_t                   rc;
 
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "rtmp push filter");
+
     rc = ngx_rtmp_push(s);
 
     if (rc == NGX_AGAIN) {
@@ -377,6 +385,12 @@ ngx_rtmp_pull_filter(ngx_rtmp_session_t *s)
     ngx_relay_reconnect_t      *reconnect;
     ngx_int_t                   rc;
 
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "rtmp pull filter");
+
+    if (s->live_stream->publish_ctx) {
+        return NGX_OK;
+    }
+
     rc = ngx_rtmp_pull(s);
 
     if (rc == NGX_AGAIN) {
@@ -391,7 +405,7 @@ ngx_rtmp_pull_filter(ngx_rtmp_session_t *s)
         }
 
         reconnect = ngx_live_get_relay_reconnect();
-        st->push_reconnect = reconnect;
+        st->pull_reconnect = reconnect;
 
         reconnect->live_stream = st;
         reconnect->reconnect.data = reconnect;
@@ -402,6 +416,8 @@ ngx_rtmp_pull_filter(ngx_rtmp_session_t *s)
     }
 
     if (rc == NGX_ERROR) {
+        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+                "ngx rtmp pull failed");
         ngx_rtmp_finalize_session(s);
     }
 
@@ -733,6 +749,7 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
     ngx_rtmp_core_ctx_t                *ctx;
     ngx_live_stream_t                  *st;
+    ngx_relay_reconnect_t              *reconnect;
 
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0, "closeStream");
 
@@ -760,7 +777,23 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
             goto next;
         }
 
-        /* set reconnect push */
+        /* set reconnect pull */
+        st = s->live_stream;
+        reconnect = st->pull_reconnect;
+        if (reconnect) {
+            goto next;
+        }
+
+        reconnect = ngx_live_get_relay_reconnect();
+        st->pull_reconnect = reconnect;
+        st->pslot = -1;
+
+        reconnect->live_stream = st;
+        reconnect->reconnect.data = reconnect;
+        reconnect->reconnect.log = ngx_cycle->log;
+        reconnect->reconnect.handler = ngx_rtmp_pull_reconnect;
+
+        ngx_post_event(&reconnect->reconnect, &ngx_posted_events);
     } else { /* relay push */
         if (s->relay == 0) { /* not relay pull session */
             goto next;
@@ -770,7 +803,8 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
             goto next;
         }
 
-        /* set reconnect pull */
+        /* set reconnect push */
+
     }
 
 next:
@@ -959,8 +993,6 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                    v.name, v.args, (ngx_int_t) v.start,
                    (ngx_int_t) v.duration, (ngx_int_t) v.reset,
                    (ngx_int_t) v.silent);
-
-    ngx_rtmp_cmd_stream_init(s, v.name, v.args, 0);
 
     return ngx_rtmp_play_filter(s, &v);
 }

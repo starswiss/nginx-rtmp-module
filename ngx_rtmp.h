@@ -305,7 +305,36 @@ struct ngx_relay_reconnect_s {
     ngx_relay_reconnect_t  *next;
 };
 
-#define NGX_LIVE_MAX_PUSH   8
+#define NGX_RTMP_MAX_OCLP   8
+#define NGX_RTMP_MAX_PUSH   16
+
+typedef struct {
+    ngx_str_t                   name;
+    ngx_str_t                   url;
+    ngx_rtmp_session_t         *session;
+
+    ngx_str_t                   pargs; /* play or publish ctx */
+
+    ngx_str_t                   app;
+    ngx_str_t                   args;
+    ngx_str_t                   tc_url;
+    ngx_str_t                   page_url;
+    ngx_str_t                   swf_url;
+    ngx_str_t                   flash_ver;
+    uint32_t                    acodecs;
+    uint32_t                    vcodecs;
+
+    ngx_str_t                   play_path;
+    ngx_int_t                   live;
+    ngx_int_t                   start;
+    ngx_int_t                   stop;
+
+    void                       *tag;
+    void                       *data;
+
+    ngx_uint_t                  idx;
+    unsigned                    publishing:1;
+} ngx_rtmp_relay_ctx_t;
 
 struct ngx_live_stream_s {
     u_char                      name[NGX_LIVE_STREAM_LEN];
@@ -315,14 +344,18 @@ struct ngx_live_stream_s {
     ngx_rtmp_core_ctx_t        *publish_ctx;
     ngx_rtmp_core_ctx_t        *play_ctx;
 
-    /* oclp relay */
+    /* oclp */
     ngx_netcall_ctx_t          *stream_nctx;
     ngx_netcall_ctx_t          *pull_nctx;
-    ngx_netcall_ctx_t          *push_nctx[NGX_LIVE_MAX_PUSH];
+    ngx_netcall_ctx_t          *push_nctx[NGX_RTMP_MAX_OCLP];
+
+    /* relay reconnect */
+    ngx_rtmp_relay_ctx_t       *pull_ctx;
+    ngx_rtmp_relay_ctx_t       *push_ctx[NGX_RTMP_MAX_PUSH];
+    ngx_uint_t                  push_count;
 
     ngx_relay_reconnect_t      *pull_reconnect;
     ngx_relay_reconnect_t      *push_reconnect;
-    ngx_uint_t                  push_count;
 
     ngx_live_stream_t          *next;
 

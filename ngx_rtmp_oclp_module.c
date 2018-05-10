@@ -257,7 +257,7 @@ ngx_rtmp_oclp_create_app_conf(ngx_conf_t *cf)
     }
 
     for (n = 0; n < NGX_RTMP_OCLP_APP_MAX; ++n) {
-        if (ngx_array_init(&oacf->events[n], cf->pool, NGX_LIVE_MAX_PUSH,
+        if (ngx_array_init(&oacf->events[n], cf->pool, NGX_RTMP_MAX_OCLP,
             sizeof(ngx_rtmp_oclp_event_t)) == NGX_ERROR)
         {
             return NULL;
@@ -549,7 +549,7 @@ ngx_rtmp_oclp_on_app_event(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         break;
     }
 
-    if (oacf->events[n].nelts >= NGX_LIVE_MAX_PUSH) {
+    if (oacf->events[n].nelts >= NGX_RTMP_MAX_OCLP) {
         ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "too much %V events", name);
         return NGX_CONF_ERROR;
     }
@@ -1178,7 +1178,7 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
 
     oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
     if (oacf->events[NGX_RTMP_OCLP_PUSH].nelts == 0) {
-        return next_pull(s);
+        return next_push(s);
     }
 
     for (i = 0; i < oacf->events[NGX_RTMP_OCLP_PUSH].nelts; ++i) {

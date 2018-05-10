@@ -7,6 +7,23 @@
 
 
 static void
+ngx_netcall_destroy(ngx_netcall_ctx_t *nctx)
+{
+    if (nctx->ev.timer_set) {
+        ngx_del_timer(&nctx->ev);
+    }
+
+    if (nctx->ev.posted) {
+        ngx_delete_posted_event(&nctx->ev);
+    }
+
+    nctx->handler = NULL;
+    nctx->data = NULL;
+
+    ngx_destroy_pool(nctx->pool);
+}
+
+static void
 ngx_netcall_timeout(ngx_event_t *ev)
 {
     ngx_netcall_ctx_t          *nctx;
@@ -134,25 +151,11 @@ ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log)
 void
 ngx_netcall_detach(ngx_netcall_ctx_t *nctx)
 {
-    nctx->ev.handler = ngx_netcall_timeout;
-    nctx->handler = NULL;
-}
-
-void
-ngx_netcall_destroy(ngx_netcall_ctx_t *nctx)
-{
     if (nctx->ev.timer_set) {
         ngx_del_timer(&nctx->ev);
     }
-
-    if (nctx->ev.posted) {
-        ngx_delete_posted_event(&nctx->ev);
-    }
-
+    nctx->ev.handler = ngx_netcall_timeout;
     nctx->handler = NULL;
-    nctx->data = NULL;
-
-    ngx_destroy_pool(nctx->pool);
 }
 
 ngx_str_t *
