@@ -20,7 +20,6 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_notify_module                      \
                 ngx_rtmp_oclp_module                        \
                 ngx_rtmp_auto_pull_module                   \
-                ngx_rtmp_auth_request_module                \
                 ngx_rtmp_log_module                         \
                 ngx_rtmp_limit_module                       \
                 ngx_rtmp_hls_module                         \
@@ -106,7 +105,6 @@ RTMP_CORE_SRCS="                                                \
                 $ngx_addon_dir/ngx_rtmp_shared_module.c         \
                 $ngx_addon_dir/ngx_rtmp_gop_module.c            \
                 $ngx_addon_dir/ngx_rtmp_monitor_module.c        \
-                $ngx_addon_dir/ngx_rtmp_auth_request_module.c   \
                 $ngx_addon_dir/ngx_rtmp_dynamic.c               \
                 "
 
