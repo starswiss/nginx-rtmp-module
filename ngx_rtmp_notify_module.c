@@ -1072,7 +1072,7 @@ ngx_rtmp_notify_publish_handle(ngx_rtmp_session_t *s,
         return NGX_ERROR;
     }
 
-    ngx_rtmp_relay_push(s, &local_name, &target);
+    ngx_relay_push(s, &local_name, &target);
 
 next:
 
@@ -1151,7 +1151,7 @@ ngx_rtmp_notify_play_handle(ngx_rtmp_session_t *s,
         return NGX_ERROR;
     }
 
-    ngx_rtmp_relay_pull(s, &local_name, &target);
+    ngx_relay_pull(s, &local_name, &target);
 
 next:
 
@@ -1402,10 +1402,6 @@ ngx_rtmp_notify_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ngx_url_t                      *url;
 
     if (s->interprocess) {
-        goto next;
-    }
-
-    if (s->auto_pulled) {
         goto next;
     }
 

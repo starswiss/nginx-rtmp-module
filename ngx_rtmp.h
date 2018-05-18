@@ -236,13 +236,11 @@ typedef struct {
 
     /* auto-pushed? */
     unsigned                interprocess:1;
-    unsigned                auto_pulled:1;
     unsigned                relay:1;
     unsigned                played:1;
     unsigned                published:1;
     unsigned                closed:1;
     unsigned                publishing:1;
-    ngx_uint_t              idx;
 
     /* live type: 0- RTMP 1- http-flv 2- hls */
     unsigned                live_type:2;
@@ -306,7 +304,7 @@ struct ngx_relay_reconnect_s {
 };
 
 #define NGX_RTMP_MAX_OCLP   8
-#define NGX_RTMP_MAX_PUSH   16
+#define NGX_RTMP_MAX_PUSH   8
 
 typedef struct {
     ngx_str_t                   name;
@@ -329,11 +327,9 @@ typedef struct {
     ngx_int_t                   start;
     ngx_int_t                   stop;
 
+    unsigned                    relay_competion:1;
     void                       *tag;
-    void                       *data;
-
     ngx_uint_t                  idx;
-    unsigned                    publishing:1;
 } ngx_rtmp_relay_ctx_t;
 
 struct ngx_live_stream_s {
@@ -349,13 +345,16 @@ struct ngx_live_stream_s {
     ngx_netcall_ctx_t          *pull_nctx;
     ngx_netcall_ctx_t          *push_nctx[NGX_RTMP_MAX_OCLP];
 
-    /* relay reconnect */
-    ngx_rtmp_relay_ctx_t       *pull_ctx;
-    ngx_rtmp_relay_ctx_t       *push_ctx[NGX_RTMP_MAX_PUSH];
-    ngx_uint_t                  push_count;
+    /* auto pull */
+    ngx_rtmp_relay_ctx_t       *auto_pull_ctx;
 
+    /* relay */
+    ngx_rtmp_relay_ctx_t       *relay_ctx[NGX_RTMP_MAX_PUSH];
+
+    /* relay reconnect */
     ngx_relay_reconnect_t      *pull_reconnect;
     ngx_relay_reconnect_t      *push_reconnect;
+    ngx_uint_t                  push_count;
 
     ngx_live_stream_t          *next;
 

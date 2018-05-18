@@ -638,7 +638,6 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
     }
     rs->app_conf = cctx->app_conf;
     rs->relay = 1;
-    rs->idx = target->idx;
     rs->publishing = target->publishing;
 
     /* set parameters */
@@ -683,9 +682,6 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
     if (ngx_http_relay_copy_str(pool, &rctx->url, &target->url.url) != NGX_OK) {
         goto clear;
     }
-
-    rctx->tag = target->tag;
-    rctx->data = target->data;
 
 #define NGX_RTMP_RELAY_STR_COPY(to, from)                                     \
     if (ngx_http_relay_copy_str(pool, &rctx->to, &target->from) != NGX_OK) {  \
@@ -772,6 +768,8 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
         }
     }
 
+    rctx->tag = target->tag;
+    rctx->idx = target->idx;
     rctx->session = rs;
     ngx_rtmp_set_ctx(rs, rctx, ngx_rtmp_relay_module);
 

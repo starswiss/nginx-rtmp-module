@@ -1017,6 +1017,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         target.tc_url.len = p - local_name->data;
     }
 
+    target.tag = &ngx_rtmp_oclp_module;
     target.idx = nctx->idx;
 
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
@@ -1024,9 +1025,9 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
             &target.tc_url, &target.app, &target.name);
 
     if (nctx->type == NGX_RTMP_OCLP_PULL) {
-        ngx_rtmp_relay_pull(s, local_name, &target);
+        ngx_relay_pull(s, local_name, &target);
     } else {
-        ngx_rtmp_relay_push(s, local_name, &target);
+        ngx_relay_push(s, local_name, &target);
     }
 
 next:
@@ -1078,14 +1079,11 @@ ngx_rtmp_oclp_relay_start(ngx_rtmp_session_t *s, ngx_uint_t idx,
 }
 
 void
-ngx_rtmp_oclp_relay_done(ngx_rtmp_session_t *s)
+ngx_rtmp_oclp_relay_done(ngx_rtmp_session_t *s, ngx_netcall_ctx_t *nctx)
 {
-    ngx_netcall_ctx_t          *nctx;
-
     if (s->publishing) {
-        nctx = s->live_stream->push_nctx[s->idx];
         ngx_rtmp_oclp_common_done(s, nctx);
-        s->live_stream->push_nctx[s->idx] = NULL;
+        s->live_stream->push_nctx[nctx->idx] = NULL;
     } else {
         nctx = s->live_stream->pull_nctx;
         ngx_rtmp_oclp_common_done(s, nctx);
@@ -1232,7 +1230,7 @@ ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
 
     oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
     if (oacf->events[NGX_RTMP_OCLP_META].nelts == 0) {
-        return next_pull(s);
+        return next_push(s);
     }
 
     for (i = 0; i < oacf->events[NGX_RTMP_OCLP_META].nelts; ++i) {

@@ -13,6 +13,7 @@
 
 static ngx_rtmp_push_pt                 next_push;
 static ngx_rtmp_pull_pt                 next_pull;
+static ngx_rtmp_close_stream_pt         next_close_stream;
 
 
 static void *ngx_rtmp_auto_pull_create_app_conf(ngx_conf_t *cf);
@@ -106,7 +107,7 @@ ngx_rtmp_auto_pull_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 
 static ngx_int_t
 ngx_rtmp_auto_pull_target(ngx_rtmp_session_t *s,
-        ngx_rtmp_relay_target_t *target, ngx_int_t pslot)
+        ngx_rtmp_relay_target_t *target, ngx_int_t pslot, unsigned publishing)
 {
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_url_t                          *u;
@@ -124,7 +125,7 @@ ngx_rtmp_auto_pull_target(ngx_rtmp_session_t *s,
     target->swf_url = s->swf_url;
     target->flash_ver = s->flashver;
     target->tag = &ngx_rtmp_auto_pull_module;
-    target->data = s->live_stream;
+    target->publishing = publishing;
 
     ngx_memzero(u, sizeof(ngx_url_t));
     ngx_memzero(&port, sizeof(ngx_str_t));
@@ -156,10 +157,16 @@ ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_int_t                           pslot;
     ngx_rtmp_relay_target_t             target;
+    ngx_rtmp_relay_ctx_t               *ctx;
 
     apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
 
     if (!apcf->auto_pull || s->relay) {
+        goto next;
+    }
+
+    ctx = s->live_stream->auto_pull_ctx;
+    if (ctx && ctx->relay_competion) { /* relay push already complete */
         goto next;
     }
 
@@ -175,16 +182,28 @@ ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
             &s->stream, pslot, ngx_process_slot);
 
     if (pslot == ngx_process_slot) {
+        if (s->live_stream->auto_pull_ctx) {
+            ngx_rtmp_finalize_session(s->live_stream->auto_pull_ctx->session);
+            s->live_stream->auto_pull_ctx = NULL;
+        }
+
         goto next;
     }
 
-    if (ngx_rtmp_auto_pull_target(s, &target, pslot) == NGX_ERROR) {
+    if (ngx_rtmp_auto_pull_target(s, &target, pslot, 0) == NGX_ERROR) {
         return NGX_ERROR;
     }
 
-    ngx_rtmp_relay_push(s, &s->name, &target);
+    ctx = ngx_relay_push(s, &s->name, &target);
 
-    return NGX_AGAIN;
+    if (ctx == NULL) {
+        return NGX_ERROR;
+    }
+
+    if (s->live_stream->auto_pull_ctx) {
+        ngx_rtmp_finalize_session(s->live_stream->auto_pull_ctx->session);
+    }
+    s->live_stream->auto_pull_ctx = ctx;
 
 next:
     return next_push(s);
@@ -197,6 +216,7 @@ ngx_rtmp_auto_pull_pull(ngx_rtmp_session_t *s)
     ngx_rtmp_auto_pull_app_conf_t      *apcf;
     ngx_int_t                           pslot;
     ngx_rtmp_relay_target_t             target;
+    ngx_rtmp_relay_ctx_t               *ctx;
 
     apcf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_auto_pull_module);
 
@@ -224,17 +244,39 @@ ngx_rtmp_auto_pull_pull(ngx_rtmp_session_t *s)
         goto next;
     }
 
-    if (ngx_rtmp_auto_pull_target(s, &target, pslot) == NGX_ERROR) {
+    if (ngx_rtmp_auto_pull_target(s, &target, pslot, 1) == NGX_ERROR) {
         return NGX_ERROR;
     }
 
-    s->auto_pulled = 1;
-    ngx_rtmp_relay_pull(s, &s->name, &target);
+    ctx = ngx_relay_pull(s, &s->name, &target);
+    if (ctx == NULL) {
+        return NGX_ERROR;
+    }
 
     return NGX_AGAIN;
 
 next:
     return next_pull(s);
+}
+
+
+static ngx_int_t
+ngx_rtmp_auto_pull_close_stream(ngx_rtmp_session_t *s,
+        ngx_rtmp_close_stream_t *v)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->tag == &ngx_rtmp_auto_pull_module && s->publishing == 0) {
+        --s->live_stream->push_count;
+    }
+
+next:
+    return next_close_stream(s, v);
 }
 
 
@@ -248,6 +290,9 @@ ngx_rtmp_auto_pull_postconfiguration(ngx_conf_t *cf)
 
     next_pull = ngx_rtmp_pull;
     ngx_rtmp_pull = ngx_rtmp_auto_pull_pull;
+
+    next_close_stream = ngx_rtmp_close_stream;
+    ngx_rtmp_close_stream = ngx_rtmp_auto_pull_close_stream;
 
     return NGX_OK;
 }
