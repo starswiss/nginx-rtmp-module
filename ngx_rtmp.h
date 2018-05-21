@@ -327,7 +327,7 @@ typedef struct {
     ngx_int_t                   start;
     ngx_int_t                   stop;
 
-    unsigned                    relay_competion:1;
+    unsigned                    relay_completion:1;
     void                       *tag;
     ngx_uint_t                  idx;
 } ngx_rtmp_relay_ctx_t;

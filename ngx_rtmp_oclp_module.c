@@ -1218,6 +1218,7 @@ ngx_rtmp_oclp_pull(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
 {
+#if 0
     ngx_rtmp_oclp_app_conf_t   *oacf;
     ngx_netcall_ctx_t          *nctx;
     ngx_rtmp_codec_ctx_t       *cctx;
@@ -1242,7 +1243,7 @@ ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
         ++s->live_stream->push_count;
         ngx_rtmp_oclp_relay_start(s, i, 1);
     }
-
+#endif
     return NGX_OK;
 }
 

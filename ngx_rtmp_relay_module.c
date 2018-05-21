@@ -14,6 +14,7 @@
 
 static ngx_rtmp_push_pt             next_push;
 static ngx_rtmp_pull_pt             next_pull;
+static ngx_rtmp_close_stream_pt     next_close_stream;
 
 
 static ngx_int_t ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf);
@@ -578,26 +579,25 @@ ngx_rtmp_relay_push(ngx_rtmp_session_t *s)
         }
 
         ctx = s->live_stream->relay_ctx[n];
-        if (ctx && ctx->relay_competion) { /* relay push already complete */
+        if (ctx && ctx->relay_completion) { /* relay push already complete */
             continue;
-        }
-
-        if (ctx) {
-            ngx_rtmp_finalize_session(ctx->session);
         }
 
         ctx = ngx_relay_push(s, &name, target);
-        if (ctx) {
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "relay: push failed name='%V' app='%V' "
+                    "playpath='%V' url='%V'",
+                    &name, &target->app, &target->play_path,
+                    &target->url.url);
+
             continue;
         }
 
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "relay: push failed name='%V' app='%V' "
-                "playpath='%V' url='%V'",
-                &name, &target->app, &target->play_path,
-                &target->url.url);
-
-        return NGX_ERROR;
+        if (s->live_stream->relay_ctx[n]) {
+            ngx_rtmp_finalize_session(s->live_stream->relay_ctx[n]->session);
+        }
+        s->live_stream->relay_ctx[n] = ctx;
     }
 
 next:
@@ -636,7 +636,8 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s)
             continue;
         }
 
-        if (ngx_relay_pull(s, &name, target) == NGX_OK) {
+        ctx = ngx_relay_pull(s, &name, target);
+        if (ctx) {
             return NGX_AGAIN;
         }
 
@@ -651,6 +652,33 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s)
 
 next:
     return next_pull(s);
+}
+
+
+static ngx_int_t
+ngx_rtmp_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->tag != &ngx_rtmp_relay_module || s->publishing) {
+        goto next;
+    }
+
+    if (ctx == s->live_stream->relay_ctx[ctx->idx]) {
+        s->live_stream->relay_ctx[ctx->idx] = NULL;
+    }
+
+    if (!ctx->relay_completion) {
+        --s->live_stream->push_count;
+    }
+
+next:
+    return next_close_stream(s, v);
 }
 
 
@@ -1431,9 +1459,7 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     if (is_pull) {
         if (racf->pulls.nelts == NGX_RTMP_MAX_PUSH) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                    "too many pulls: %d", racf->pulls.nelts);
-            return NGX_CONF_ERROR;
+            return "too many pulls";
         }
 
         target->idx = racf->pulls.nelts;
@@ -1442,9 +1468,7 @@ ngx_rtmp_relay_push_pull(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     } else {
         if (racf->pushes.nelts == NGX_RTMP_MAX_PUSH) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                    "too many pushes: %d", racf->pushes.nelts);
-            return NGX_CONF_ERROR;
+            return "too many pushes";
         }
 
         target->idx = racf->pushes.nelts;
@@ -1480,6 +1504,9 @@ ngx_rtmp_relay_postconfiguration(ngx_conf_t *cf)
 
     next_pull = ngx_rtmp_pull;
     ngx_rtmp_pull = ngx_rtmp_relay_pull;
+
+    next_close_stream = ngx_rtmp_close_stream;
+    ngx_rtmp_close_stream = ngx_rtmp_relay_close_stream;
 
 
     ch = ngx_array_push(&cmcf->amf);

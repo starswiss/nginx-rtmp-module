@@ -166,7 +166,13 @@ ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
     }
 
     ctx = s->live_stream->auto_pull_ctx;
-    if (ctx && ctx->relay_competion) { /* relay push already complete */
+    if (ctx == NGX_CONF_UNSET_PTR) {
+        --s->live_stream->push_count;
+        s->live_stream->auto_pull_ctx = NULL;
+    }
+
+    ctx = s->live_stream->auto_pull_ctx;
+    if (ctx && ctx->relay_completion) { /* relay push already complete */
         goto next;
     }
 
@@ -184,7 +190,6 @@ ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
     if (pslot == ngx_process_slot) {
         if (s->live_stream->auto_pull_ctx) {
             ngx_rtmp_finalize_session(s->live_stream->auto_pull_ctx->session);
-            s->live_stream->auto_pull_ctx = NULL;
         }
 
         goto next;
@@ -195,9 +200,10 @@ ngx_rtmp_auto_pull_push(ngx_rtmp_session_t *s)
     }
 
     ctx = ngx_relay_push(s, &s->name, &target);
-
     if (ctx == NULL) {
-        return NGX_ERROR;
+        s->live_stream->auto_pull_ctx = NGX_CONF_UNSET_PTR;
+        ++s->live_stream->push_count;
+        return NGX_OK;
     }
 
     if (s->live_stream->auto_pull_ctx) {
@@ -250,7 +256,7 @@ ngx_rtmp_auto_pull_pull(ngx_rtmp_session_t *s)
 
     ctx = ngx_relay_pull(s, &s->name, &target);
     if (ctx == NULL) {
-        return NGX_ERROR;
+        s->live_stream->pslot = -1;
     }
 
     return NGX_AGAIN;
@@ -271,7 +277,15 @@ ngx_rtmp_auto_pull_close_stream(ngx_rtmp_session_t *s,
         goto next;
     }
 
-    if (ctx->tag == &ngx_rtmp_auto_pull_module && s->publishing == 0) {
+    if (ctx->tag != &ngx_rtmp_auto_pull_module || s->publishing) {
+        goto next;
+    }
+
+    if (ctx == s->live_stream->auto_pull_ctx) {
+        s->live_stream->auto_pull_ctx = NULL;
+    }
+
+    if (!ctx->relay_completion) {
         --s->live_stream->push_count;
     }
 

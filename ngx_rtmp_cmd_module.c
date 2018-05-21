@@ -233,7 +233,7 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     if (s->relay) { /* relay pull */
         ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-        ctx->relay_competion = 1;
+        ctx->relay_completion = 1;
 
         rc = s->live_stream->pull_reconnect;
         ngx_live_put_relay_reconnect(rc);
@@ -248,7 +248,6 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 ngx_int_t
 ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
-    ngx_relay_reconnect_t      *rc;
     ngx_rtmp_relay_ctx_t       *ctx;
 
     if (s->played) {
@@ -263,14 +262,9 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     if (s->relay) { /* relay push */
         ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
-        ctx->relay_competion = 1;
+        ctx->relay_completion = 1;
 
-        rc = s->live_stream->push_reconnect;
         --s->live_stream->push_count;
-        if (s->live_stream->push_count == 0) {
-            ngx_live_put_relay_reconnect(rc);
-            s->live_stream->push_reconnect = NULL;
-        }
     } else {
         ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
     }
@@ -369,7 +363,7 @@ ngx_rtmp_push_filter(ngx_rtmp_session_t *s)
         reconnect = st->push_reconnect;
         if (reconnect) {
             ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                    "relay pull reconnect exist %p", reconnect);
+                    "relay push reconnect exist %p", reconnect);
             ngx_live_put_relay_reconnect(reconnect);
         }
 
@@ -397,7 +391,9 @@ ngx_rtmp_pull_filter(ngx_rtmp_session_t *s)
     ngx_relay_reconnect_t      *reconnect;
     ngx_int_t                   rc;
 
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "rtmp pull filter");
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            "rtmp pull filter, %p %p %i", s->live_stream->play_ctx,
+            s->live_stream->publish_ctx, s->live_stream->push_count);
 
     if (s->live_stream->publish_ctx) {
         return NGX_OK;
@@ -815,7 +811,21 @@ ngx_rtmp_cmd_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         }
 
         /* set reconnect push */
+        st = s->live_stream;
+        reconnect = st->push_reconnect;
+        if (reconnect) {
+            goto next;
+        }
 
+        reconnect = ngx_live_get_relay_reconnect();
+        st->push_reconnect = reconnect;
+
+        reconnect->live_stream = st;
+        reconnect->reconnect.data = reconnect;
+        reconnect->reconnect.log = ngx_cycle->log;
+        reconnect->reconnect.handler = ngx_rtmp_push_reconnect;
+
+        ngx_post_event(&reconnect->reconnect, &ngx_posted_events);
     }
 
 next:
