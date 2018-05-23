@@ -7,8 +7,27 @@
 
 
 static void
+ngx_netcall_cleanup(void *data)
+{
+    ngx_netcall_ctx_t          *nctx;
+    ngx_http_request_t         *hcr;
+    ngx_http_client_ctx_t      *ctx;
+
+    hcr = data;
+    ctx = hcr->ctx[0];
+    nctx = ctx->request;
+
+    if (nctx) {
+        nctx->hcr = NULL;
+    }
+}
+
+static void
 ngx_netcall_destroy(ngx_netcall_ctx_t *nctx)
 {
+    ngx_http_request_t         *hcr;
+    ngx_http_client_ctx_t      *ctx;
+
     if (nctx->ev.timer_set) {
         ngx_del_timer(&nctx->ev);
     }
@@ -19,6 +38,12 @@ ngx_netcall_destroy(ngx_netcall_ctx_t *nctx)
 
     nctx->handler = NULL;
     nctx->data = NULL;
+
+    hcr = nctx->hcr;
+    if (hcr) {
+        ctx = hcr->ctx[0];
+        ctx->request = NULL;
+    }
 
     ngx_destroy_pool(nctx->pool);
 }
@@ -116,6 +141,7 @@ ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log)
     ngx_client_init_t          *ci;
     ngx_http_client_ctx_t      *ctx;
     ngx_http_request_t         *hcr;
+    ngx_http_cleanup_t         *cln;
 
     hcr = ngx_http_client_create_request(&nctx->url, NGX_HTTP_CLIENT_GET,
             NGX_HTTP_CLIENT_VERSION_10, NULL, log, ngx_netcall_handler, NULL);
@@ -138,6 +164,14 @@ ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log)
     }
 
     ngx_http_client_send(hcr, cs, nctx, log);
+
+    cln = ngx_http_cleanup_add(hcr, 0);
+    if (cln == NULL) {
+        ngx_http_client_finalize_request(hcr, 1);
+        return;
+    }
+    cln->handler = ngx_netcall_cleanup;
+    cln->data = hcr;
 
     if (nctx->hcr) {
         ngx_http_client_finalize_request(nctx->hcr, 1);

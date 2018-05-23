@@ -921,6 +921,7 @@ static void
 ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 {
     ngx_rtmp_relay_target_t     target;
+    ngx_rtmp_relay_ctx_t       *ctx;
     ngx_request_url_t           ru;
     ngx_url_t                  *u;
     ngx_str_t                  *local_name;
@@ -1075,9 +1076,31 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 
     if (nctx->type == NGX_RTMP_OCLP_PULL) {
         target.publishing = 1;
-        ngx_relay_pull(s, &target.name, &target);
+        ctx = ngx_relay_pull(s, &target.name, &target);
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "oclp relay pull, push failed name='%V' app='%V' "
+                    "playpath='%V' url='%V'",
+                    &target.name, &target.app, &target.play_path,
+                    &target.url.url);
+            return;
+        }
     } else {
-        ngx_relay_push(s, &target.name, &target);
+        ctx = ngx_relay_push(s, &target.name, &target);
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    "oclp relay push, push failed name='%V' app='%V' "
+                    "playpath='%V' url='%V'",
+                    &target.name, &target.app, &target.play_path,
+                    &target.url.url);
+            return;
+        }
+
+        if (s->live_stream->oclp_ctx[nctx->idx]) {
+            ngx_rtmp_finalize_session(
+                    s->live_stream->oclp_ctx[nctx->idx]->session);
+        }
+        s->live_stream->oclp_ctx[nctx->idx] = ctx;
     }
 
     return;

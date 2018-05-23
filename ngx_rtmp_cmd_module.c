@@ -211,6 +211,7 @@ ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
     s->live_stream = ngx_live_create_stream(&s->serverid, &s->stream);
 
     ngx_live_create_ctx(s, publishing);
+    s->publishing = publishing;
 
     ngx_rtmp_oclp_stream_start(s);
 }
