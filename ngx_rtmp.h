@@ -345,8 +345,12 @@ struct ngx_live_stream_s {
     ngx_netcall_ctx_t          *pull_nctx;
     ngx_netcall_ctx_t          *push_nctx[NGX_RTMP_MAX_OCLP];
 
+    /* relay push */
     /* auto pull */
     ngx_rtmp_relay_ctx_t       *auto_pull_ctx;
+
+    /* oclp */
+    ngx_rtmp_relay_ctx_t       *oclp_ctx[NGX_RTMP_MAX_OCLP];
 
     /* relay */
     ngx_rtmp_relay_ctx_t       *relay_ctx[NGX_RTMP_MAX_PUSH];

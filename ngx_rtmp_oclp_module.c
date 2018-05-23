@@ -16,8 +16,11 @@
 #include "ngx_netcall.h"
 
 
+static ngx_rtmp_publish_pt          next_publish;
+static ngx_rtmp_play_pt             next_play;
 static ngx_rtmp_push_pt             next_push;
 static ngx_rtmp_pull_pt             next_pull;
+static ngx_rtmp_close_stream_pt     next_close_stream;
 
 
 static ngx_int_t ngx_rtmp_oclp_init_process(ngx_cycle_t *cycle);
@@ -81,6 +84,19 @@ static char *ngx_rtmp_oclp_app_type[] = {
     "stream",
     "meta",
     "record",
+};
+
+typedef struct {
+    ngx_uint_t                  status;
+    char                       *code;
+    char                       *level;
+    char                       *desc;
+} ngx_rtmp_oclp_relay_error_t;
+
+static ngx_rtmp_oclp_relay_error_t ngx_rtmp_oclp_relay_errors[] = {
+    { 404, "NetStream.Play.StreamNotFound", "error", "No such stream" },
+    { 400, "NetStream.Publish.BadName",     "error", "Already publishing" },
+    { 0, NULL, NULL, NULL },
 };
 
 typedef struct {
@@ -709,7 +725,6 @@ ngx_rtmp_oclp_common_update_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                 "oclp %s update notify error: %i",
                 ngx_rtmp_oclp_app_type[nctx->type], code);
-        return;
     }
 
     ev = &nctx->ev;
@@ -879,6 +894,30 @@ ngx_rtmp_oclp_pnotify_done(ngx_rtmp_session_t *s)
 }
 
 static void
+ngx_rtmp_oclp_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
+{
+    ngx_rtmp_core_ctx_t        *cctx;
+    size_t                      i;
+
+    for (i = 0; ngx_rtmp_oclp_relay_errors[i].status; ++i) {
+        if (status != ngx_rtmp_oclp_relay_errors[i].status) {
+            continue;
+        }
+
+        if (s->publishing) {
+            cctx = s->live_stream->publish_ctx;
+        } else {
+            cctx = s->live_stream->play_ctx;
+        }
+
+        for (; cctx; cctx = cctx->next) {
+            cctx->session->status = status;
+            ngx_rtmp_finalize_session(cctx->session);
+        }
+    }
+}
+
+static void
 ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 {
     ngx_rtmp_relay_target_t     target;
@@ -907,6 +946,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         }
 
         s = st->publish_ctx->session;
+        --st->push_count;
     }
 
     if (code == -1) {
@@ -918,19 +958,23 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (code >= 400) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                 "oclp relay start notify error: %i", code);
+
         if (nctx->type == NGX_RTMP_OCLP_PULL) {
-            ngx_rtmp_relay_status_error(s, "status",
-                    "NetStream.Play.StreamNotFound", "error", "No such stream");
+            ngx_rtmp_oclp_relay_error(s, 404);
         } else {
-            ngx_rtmp_relay_status_error(s, "status",
-                    "NetStream.Publish.BadName", "error", "Already publishing");
+            ngx_rtmp_oclp_relay_error(s, 400);
         }
 
         return;
     }
 
     if (code == NGX_HTTP_OK) {
-        goto next;
+        if (s->publishing) {
+            s->live_stream->oclp_ctx[nctx->idx] = NGX_CONF_UNSET_PTR;
+        } else { /* relay pull */
+            ngx_live_put_relay_reconnect(s->live_stream->pull_reconnect);
+        }
+        return;
     }
 
     /* redirect */
@@ -938,8 +982,13 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (local_name == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                 "oclp relay start has no Location when redirect");
-        ngx_rtmp_relay_status_error(s, "status", "NetStream.Relay.ServerError",
-                "status", "Relay location error");
+
+        if (nctx->type == NGX_RTMP_OCLP_PULL) {
+            ngx_rtmp_oclp_relay_error(s, 404);
+        } else {
+            ngx_rtmp_oclp_relay_error(s, 400);
+        }
+
         return;
     }
 
@@ -1025,20 +1074,23 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
             &target.tc_url, &target.app, &target.name);
 
     if (nctx->type == NGX_RTMP_OCLP_PULL) {
-        ngx_relay_pull(s, local_name, &target);
+        target.publishing = 1;
+        ngx_relay_pull(s, &target.name, &target);
     } else {
-        ngx_relay_push(s, local_name, &target);
+        ngx_relay_push(s, &target.name, &target);
     }
 
-next:
-    ngx_rtmp_oclp_common_update_create(s, nctx);
     return;
 
 error:
     ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
             "oclp relay start Location format error: %V", &local_name);
-    ngx_rtmp_relay_status_error(s, "status", "NetStream.Relay.ServerError",
-            "status", "Relay location error");
+
+    if (nctx->type == NGX_RTMP_OCLP_PULL) {
+        ngx_rtmp_oclp_relay_error(s, 404);
+    } else {
+        ngx_rtmp_oclp_relay_error(s, 400);
+    }
 }
 
 static void
@@ -1078,16 +1130,22 @@ ngx_rtmp_oclp_relay_start(ngx_rtmp_session_t *s, ngx_uint_t idx,
     ngx_netcall_create(nctx, s->connection->log);
 }
 
-void
-ngx_rtmp_oclp_relay_done(ngx_rtmp_session_t *s, ngx_netcall_ctx_t *nctx)
+static void
+ngx_rtmp_oclp_relay_done(ngx_rtmp_session_t *s)
 {
-    if (s->publishing) {
-        ngx_rtmp_oclp_common_done(s, nctx);
-        s->live_stream->push_nctx[nctx->idx] = NULL;
-    } else {
+    ngx_rtmp_relay_ctx_t       *ctx;
+    ngx_netcall_ctx_t          *nctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+
+    if (s->publishing) { /* relay pull */
         nctx = s->live_stream->pull_nctx;
         ngx_rtmp_oclp_common_done(s, nctx);
         s->live_stream->pull_nctx = NULL;
+    } else { /* relay push */
+        nctx = s->live_stream->push_nctx[ctx->idx];
+        ngx_rtmp_oclp_common_done(s, nctx);
+        s->live_stream->push_nctx[ctx->idx] = NULL;
     }
 }
 
@@ -1168,9 +1226,54 @@ ngx_rtmp_oclp_stream_done(ngx_rtmp_session_t *s)
 }
 
 static ngx_int_t
+ngx_rtmp_oclp_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+    ngx_netcall_ctx_t          *nctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->tag != &ngx_rtmp_oclp_module) {
+        goto next;
+    }
+
+    nctx = s->live_stream->pull_nctx;
+    ngx_rtmp_oclp_common_update_create(s, nctx);
+
+next:
+    return next_publish(s, v);
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+    ngx_netcall_ctx_t          *nctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    if (ctx->tag != &ngx_rtmp_oclp_module) {
+        goto next;
+    }
+
+    nctx = s->live_stream->push_nctx[ctx->idx];
+    ngx_rtmp_oclp_common_update_create(s, nctx);
+
+next:
+    return next_play(s, v);
+}
+
+static ngx_int_t
 ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_oclp_app_conf_t   *oacf;
+    ngx_rtmp_relay_ctx_t       *ctx;
     ngx_netcall_ctx_t          *nctx;
     ngx_uint_t                  i;
 
@@ -1180,16 +1283,25 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
     }
 
     for (i = 0; i < oacf->events[NGX_RTMP_OCLP_PUSH].nelts; ++i) {
+        ctx = s->live_stream->oclp_ctx[i];
+        if (ctx == NGX_CONF_UNSET_PTR) {
+            continue;
+        }
+
+        if (ctx && ctx->relay_completion) { /* oclp push already complete */
+            continue;
+        }
+
         nctx = s->live_stream->push_nctx[i];
         if (nctx) {
-            continue;
+            ngx_netcall_detach(nctx);
         }
 
         ++s->live_stream->push_count;
         ngx_rtmp_oclp_relay_start(s, i, 1);
     }
 
-    return NGX_AGAIN;
+    return next_push(s);
 }
 
 static ngx_int_t
@@ -1205,9 +1317,7 @@ ngx_rtmp_oclp_pull(ngx_rtmp_session_t *s)
 
     nctx = s->live_stream->pull_nctx;
     if (nctx) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "nctx exist in oclp pull");
-        return NGX_ERROR;
+        ngx_netcall_detach(nctx);
     }
 
     ngx_rtmp_oclp_relay_start(s, 0, 0);
@@ -1248,6 +1358,34 @@ ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
 }
 
 static ngx_int_t
+ngx_rtmp_oclp_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
+{
+    ngx_rtmp_relay_ctx_t       *ctx;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    if (ctx == NULL) {
+        goto next;
+    }
+
+    ngx_rtmp_oclp_relay_done(s);
+
+    if (ctx->tag != &ngx_rtmp_oclp_module || s->publishing) {
+        goto next;
+    }
+
+    if (ctx == s->live_stream->oclp_ctx[ctx->idx]) {
+        s->live_stream->oclp_ctx[ctx->idx] = NULL;
+    }
+
+    if (!ctx->relay_completion) {
+        --s->live_stream->push_count;
+    }
+
+next:
+    return next_close_stream(s, v);
+}
+
+static ngx_int_t
 ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
 {
     ngx_rtmp_core_main_conf_t  *cmcf;
@@ -1261,11 +1399,20 @@ ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
     h = ngx_array_push(&cmcf->events[NGX_RTMP_MSG_VIDEO]);
     *h = ngx_rtmp_oclp_av;
 
+    next_publish = ngx_rtmp_publish;
+    ngx_rtmp_publish = ngx_rtmp_oclp_publish;
+
+    next_play = ngx_rtmp_play;
+    ngx_rtmp_play = ngx_rtmp_oclp_play;
+
     next_push = ngx_rtmp_push;
     ngx_rtmp_push = ngx_rtmp_oclp_push;
 
     next_pull = ngx_rtmp_pull;
     ngx_rtmp_pull = ngx_rtmp_oclp_pull;
+
+    next_close_stream = ngx_rtmp_close_stream;
+    ngx_rtmp_close_stream = ngx_rtmp_oclp_close_stream;
 
     return NGX_OK;
 }

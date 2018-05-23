@@ -233,6 +233,9 @@ ngx_rtmp_auto_pull_pull(ngx_rtmp_session_t *s)
     if (s->live_stream->pslot != -1) {
         ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
                 "auto pull, stream %V already in current process", &s->stream);
+        if (s->live_stream->pslot == ngx_process_slot) {
+            goto next;
+        }
         return NGX_OK;
     } else { /* first access for stream */
         pslot = ngx_stream_zone_insert_stream(&s->stream);
