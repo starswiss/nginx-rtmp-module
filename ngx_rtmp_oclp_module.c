@@ -99,9 +99,22 @@ static ngx_rtmp_oclp_relay_error_t ngx_rtmp_oclp_relay_errors[] = {
     { 0, NULL, NULL, NULL },
 };
 
+
 typedef struct {
     ngx_netcall_ctx_t          *pctx;   /* play or publish ctx */
 } ngx_rtmp_oclp_ctx_t;
+
+
+#define NGX_RTMP_OCLP_META_VIDEO    0
+#define NGX_RTMP_OCLP_META_AUDIO    1
+#define NGX_RTMP_OCLP_META_BOTH     2
+
+static ngx_conf_enum_t ngx_rtmp_oclp_meta_type[] = {
+    { ngx_string("video"),  NGX_RTMP_OCLP_META_VIDEO },
+    { ngx_string("audio"),  NGX_RTMP_OCLP_META_AUDIO },
+    { ngx_string("both"),   NGX_RTMP_OCLP_META_BOTH  },
+    { ngx_null_string,      0 }
+};
 
 typedef struct {
     ngx_str_t                   url;
@@ -122,6 +135,8 @@ typedef struct {
 } ngx_rtmp_oclp_srv_conf_t;
 
 typedef struct {
+    ngx_flag_t                  meta_once;
+    ngx_uint_t                  meta_type;
     ngx_array_t                 events[NGX_RTMP_OCLP_APP_MAX];
 } ngx_rtmp_oclp_app_conf_t;
 
@@ -190,6 +205,20 @@ static ngx_command_t ngx_rtmp_oclp_commands[] = {
       NGX_RTMP_APP_CONF_OFFSET,
       0,
       NULL },
+
+    { ngx_string("oclp_meta_once"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_1MORE,
+      ngx_conf_set_flag_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_oclp_app_conf_t, meta_once),
+      NULL },
+
+    { ngx_string("oclp_meta_type"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_1MORE,
+      ngx_conf_set_enum_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_oclp_app_conf_t, meta_type),
+      &ngx_rtmp_oclp_meta_type },
 
       ngx_null_command
 };
@@ -280,12 +309,22 @@ ngx_rtmp_oclp_create_app_conf(ngx_conf_t *cf)
         }
     }
 
+    oacf->meta_once = NGX_CONF_UNSET;
+    oacf->meta_type = NGX_CONF_UNSET_UINT;
+
     return oacf;
 }
 
 static char *
-ngx_rtmp_oclp_merge_app_conf(ngx_conf_t *cf, void *prev, void *conf)
+ngx_rtmp_oclp_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 {
+    ngx_rtmp_oclp_app_conf_t   *prev = parent;
+    ngx_rtmp_oclp_app_conf_t   *conf = child;
+
+    ngx_conf_merge_value(conf->meta_once, prev->meta_once, 1);
+    ngx_conf_merge_uint_value(conf->meta_type, prev->meta_type,
+                              NGX_RTMP_OCLP_META_VIDEO);
+
     return NGX_CONF_OK;
 }
 
@@ -953,6 +992,9 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (code == -1) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                 "oclp relay start notify timeout");
+        if (nctx->type != NGX_RTMP_OCLP_PULL) {
+            st->push_nctx[nctx->idx] = NULL;
+        }
         return;
     }
 
@@ -963,6 +1005,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         if (nctx->type == NGX_RTMP_OCLP_PULL) {
             ngx_rtmp_oclp_relay_error(s, 404);
         } else {
+            st->push_nctx[nctx->idx] = NULL;
             ngx_rtmp_oclp_relay_error(s, 400);
         }
 
@@ -1118,14 +1161,11 @@ error:
 
 static void
 ngx_rtmp_oclp_relay_start(ngx_rtmp_session_t *s, ngx_uint_t idx,
-    unsigned publishing)
+    unsigned publishing, ngx_uint_t type)
 {
     ngx_rtmp_oclp_app_conf_t   *oacf;
     ngx_rtmp_oclp_event_t      *event;
     ngx_netcall_ctx_t          *nctx;
-    ngx_uint_t                  type;
-
-    type = publishing? NGX_RTMP_OCLP_PUSH: NGX_RTMP_OCLP_PULL;
 
     oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
 
@@ -1298,14 +1338,19 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
     ngx_rtmp_oclp_app_conf_t   *oacf;
     ngx_rtmp_relay_ctx_t       *ctx;
     ngx_netcall_ctx_t          *nctx;
+    ngx_rtmp_codec_ctx_t       *cctx;
     ngx_uint_t                  i;
+    ngx_uint_t                  type;
+
+    cctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
+    type = cctx? NGX_RTMP_OCLP_META: NGX_RTMP_OCLP_PUSH;
 
     oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
-    if (oacf->events[NGX_RTMP_OCLP_PUSH].nelts == 0) {
+    if (oacf->events[type].nelts == 0) {
         return next_push(s);
     }
 
-    for (i = 0; i < oacf->events[NGX_RTMP_OCLP_PUSH].nelts; ++i) {
+    for (i = 0; i < oacf->events[type].nelts; ++i) {
         ctx = s->live_stream->oclp_ctx[i];
         if (ctx == NGX_CONF_UNSET_PTR) {
             continue;
@@ -1318,10 +1363,13 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
         nctx = s->live_stream->push_nctx[i];
         if (nctx) {
             ngx_netcall_detach(nctx);
+            if (ctx == NULL) { /* relay not create */
+                --s->live_stream->push_count;
+            }
         }
 
         ++s->live_stream->push_count;
-        ngx_rtmp_oclp_relay_start(s, i, 1);
+        ngx_rtmp_oclp_relay_start(s, i, 1, type);
     }
 
     return next_push(s);
@@ -1343,7 +1391,7 @@ ngx_rtmp_oclp_pull(ngx_rtmp_session_t *s)
         ngx_netcall_detach(nctx);
     }
 
-    ngx_rtmp_oclp_relay_start(s, 0, 0);
+    ngx_rtmp_oclp_relay_start(s, 0, 0, NGX_RTMP_OCLP_PULL);
 
     return NGX_AGAIN;
 }
@@ -1351,32 +1399,44 @@ ngx_rtmp_oclp_pull(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
 {
-#if 0
     ngx_rtmp_oclp_app_conf_t   *oacf;
-    ngx_netcall_ctx_t          *nctx;
-    ngx_rtmp_codec_ctx_t       *cctx;
-    ngx_uint_t                  i;
+#ifdef NGX_DEBUG
+    const char                 *type_s;
+#endif
 
-    cctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
-    if (cctx == NULL || cctx->meta == NULL) {
-        return NGX_OK;
-    }
+    if (ngx_rtmp_is_codec_header(in)) {
+#ifdef NGX_DEBUG
+        type_s = (h->type == NGX_RTMP_MSG_VIDEO? "video": "audio");
+        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+                "recv %s header", type_s);
+#endif
 
-    oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
-    if (oacf->events[NGX_RTMP_OCLP_META].nelts == 0) {
-        return next_push(s);
-    }
+        oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
 
-    for (i = 0; i < oacf->events[NGX_RTMP_OCLP_META].nelts; ++i) {
-        nctx = s->live_stream->push_nctx[i];
-        if (nctx) {
-            continue;
+        if (oacf->meta_once && s->live_stream->oclp_meta) {
+            return NGX_OK;
         }
 
-        ++s->live_stream->push_count;
-        ngx_rtmp_oclp_relay_start(s, i, 1);
+        switch (oacf->meta_type) {
+        case NGX_RTMP_OCLP_META_VIDEO:
+            if (h->type == NGX_RTMP_MSG_AUDIO) {
+                return NGX_OK;
+            }
+            break;
+        case NGX_RTMP_OCLP_META_AUDIO:
+            if (h->type == NGX_RTMP_MSG_VIDEO) {
+                return NGX_OK;
+            }
+            break;
+        default:
+            break;
+        }
+
+        s->live_stream->oclp_meta = 1;
+
+        ngx_rtmp_push_filter(s);
     }
-#endif
+
     return NGX_OK;
 }
 

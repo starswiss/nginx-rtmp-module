@@ -392,9 +392,7 @@ ngx_rtmp_pull_filter(ngx_rtmp_session_t *s)
     ngx_relay_reconnect_t      *reconnect;
     ngx_int_t                   rc;
 
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-            "rtmp pull filter, %p %p %i", s->live_stream->play_ctx,
-            s->live_stream->publish_ctx, s->live_stream->push_count);
+    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "rtmp pull filter");
 
     if (s->live_stream->publish_ctx) {
         return NGX_OK;
