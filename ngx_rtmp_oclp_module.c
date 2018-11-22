@@ -711,12 +711,13 @@ ngx_rtmp_oclp_init_process(ngx_cycle_t *cycle)
 
 static void
 ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
-    ngx_rtmp_oclp_event_t *event, ngx_netcall_ctx_t *nctx, ngx_uint_t stage)
+    ngx_rtmp_oclp_event_t *event, ngx_netcall_ctx_t *nctx, ngx_uint_t stage,
+    ngx_str_t *append_uri)
 {
     size_t                      len;
-    u_char                     *p;
+    u_char                     *p, *last;
 
-    len = event->url.len + sizeof("?call=&act=&domain=&app=&name=") - 1
+    len = event->url.len + sizeof("?call=&stage=&domain=&app=&name=") - 1
         + ngx_strlen(ngx_rtmp_oclp_app_type[nctx->type])
         + ngx_strlen(ngx_rtmp_oclp_stage[stage])
         + s->domain.len + s->app.len + s->name.len;
@@ -725,18 +726,35 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
         len += event->args.len + 1;
     }
 
+    if (s->pargs.len) {
+        len += s->pargs.len + 1;
+    }
+
+    if (append_uri) {
+        len += append_uri->len + 1;
+    }
+
     url->data = ngx_pcalloc(nctx->pool, len);
     if (url->data == NULL) {
         return;
     }
 
     p = url->data;
-    p = ngx_snprintf(p, len, "%V?call=%s&act=%s&domain=%V&app=%V&name=%V",
+    last = p + len;
+    p = ngx_slprintf(p, last, "%V?call=%s&stage=%s&domain=%V&app=%V&name=%V",
             &event->url, ngx_rtmp_oclp_app_type[nctx->type],
             ngx_rtmp_oclp_stage[stage], &s->domain, &s->app, &s->name);
 
+    if (append_uri && append_uri->len) {
+        p = ngx_slprintf(p, last, "&%V", append_uri);
+    }
+
     if (event->args.len) {
-        p = ngx_snprintf(p, len, "%s&%V", p, &event->args);
+        p = ngx_slprintf(p, last, "&%V", &event->args);
+    }
+
+    if (s->pargs.len) {
+        p = ngx_slprintf(p, last, "&%V", &s->pargs);
     }
 
     url->len = p - url->data;
@@ -749,7 +767,7 @@ ngx_rtmp_oclp_common_timer(ngx_event_t *ev)
 
     nctx = ev->data;
 
-    ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "oclp %s update create %V",
+    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0, "oclp %s update create %V",
             ngx_rtmp_oclp_app_type[nctx->type], &nctx->url);
 
     ngx_netcall_create(nctx, ngx_cycle->log);
@@ -787,7 +805,7 @@ ngx_rtmp_oclp_common_update_create(ngx_rtmp_session_t *s,
         event += nctx->idx;
 
         ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-                                 NGX_RTMP_OCLP_UPDATE);
+                                 NGX_RTMP_OCLP_UPDATE, NULL);
         nctx->handler = ngx_rtmp_oclp_common_update_handle;
 
         ev = &nctx->ev;
@@ -814,12 +832,11 @@ ngx_rtmp_oclp_common_done(ngx_rtmp_session_t *s, ngx_netcall_ctx_t *nctx)
         event = oacf->events[nctx->type].elts;
 
         ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-                                 NGX_RTMP_OCLP_DONE);
+                                 NGX_RTMP_OCLP_DONE, NULL);
 
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
                 "oclp %s done create %V %p",
                 ngx_rtmp_oclp_app_type[nctx->type], &nctx->url, nctx);
-
         if (nctx->ev.timer_set) {
             ngx_del_timer(&nctx->ev);
         }
@@ -905,7 +922,7 @@ ngx_rtmp_oclp_pnotify_start(ngx_rtmp_session_t *s, unsigned publishing)
                 event->stage, event->timeout, event->retries, event->update, 0);
 
         ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-                                 NGX_RTMP_OCLP_START);
+                                 NGX_RTMP_OCLP_START, NULL);
         nctx->handler = ngx_rtmp_oclp_pnotify_start_handle;
         nctx->data = s;
 
@@ -1000,7 +1017,8 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 
     if (code >= 400) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                "oclp relay start notify error: %i", code);
+                "oclp: relay_start_handle| "
+                "oclp error: %i", code);
 
         if (nctx->type == NGX_RTMP_OCLP_PULL) {
             ngx_rtmp_oclp_relay_error(s, 404);
@@ -1025,7 +1043,8 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     local_name = ngx_netcall_header(nctx, &location);
     if (local_name == NULL) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                "oclp relay start has no Location when redirect");
+                "oclp: relay_start_handle| "
+                "has no Location when redirect");
 
         if (nctx->type == NGX_RTMP_OCLP_PULL) {
             ngx_rtmp_oclp_relay_error(s, 404);
@@ -1055,7 +1074,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     u->url.data = local_name->data + 7;
     u->url.len = local_name->len - 7;
     u->uri_part = 1;
-    u->no_resolve = 1;
+    u->no_resolve = 0;
 
     if (ngx_parse_url(nctx->pool, u) != NGX_OK) {
         goto error;
@@ -1093,7 +1112,8 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     target.app.len = p - ru.path.data;
 
     /* name */
-    last = ru.uri_with_args.data + ru.uri_with_args.len;
+//    last = ru.uri_with_args.data + ru.uri_with_args.len;
+    last = ru.path.data + ru.path.len;
     target.name.data = p + 1;
     target.name.len = last - target.name.data;
 
@@ -1114,7 +1134,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     target.idx = nctx->idx;
 
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-            "oclp relay, tc_url: %V app: %V, name: %V",
+            "oclp: relay_start_handle| tc_url: %V app: %V, name: %V",
             &target.tc_url, &target.app, &target.name);
 
     if (nctx->type == NGX_RTMP_OCLP_PULL) {
@@ -1122,7 +1142,8 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         ctx = ngx_relay_pull(s, &target.name, &target);
         if (ctx == NULL) {
             ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                    "oclp relay pull, push failed name='%V' app='%V' "
+                    "oclp: relay_start_handle| "
+                    "pull failed name='%V' app='%V' "
                     "playpath='%V' url='%V'",
                     &target.name, &target.app, &target.play_path,
                     &target.url.url);
@@ -1132,7 +1153,8 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         ctx = ngx_relay_push(s, &target.name, &target);
         if (ctx == NULL) {
             ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                    "oclp relay push, push failed name='%V' app='%V' "
+                    "oclp: relay_start_handle| "
+                    "push failed name='%V' app='%V' "
                     "playpath='%V' url='%V'",
                     &target.name, &target.app, &target.play_path,
                     &target.url.url);
@@ -1176,7 +1198,7 @@ ngx_rtmp_oclp_relay_start(ngx_rtmp_session_t *s, ngx_uint_t idx,
             event->timeout, event->retries, event->update, idx);
 
     ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-            NGX_RTMP_OCLP_START);
+            NGX_RTMP_OCLP_START, NULL);
     nctx->handler = ngx_rtmp_oclp_relay_start_handle;
     nctx->data = s->live_stream;
 
@@ -1265,7 +1287,7 @@ ngx_rtmp_oclp_stream_start(ngx_rtmp_session_t *s)
                 event->stage, event->timeout, event->retries, event->update, 0);
 
         ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-                                 NGX_RTMP_OCLP_START);
+                                 NGX_RTMP_OCLP_START, NULL);
         nctx->handler = ngx_rtmp_oclp_stream_start_handle;
         nctx->data = s->live_stream;
 

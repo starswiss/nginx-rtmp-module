@@ -408,6 +408,10 @@ ngx_http_flv_live_parse(ngx_http_request_t *r, ngx_rtmp_session_t *s,
         return NGX_HTTP_BAD_REQUEST;
     }
 
+    if (hflcf->app.len) {
+        app = hflcf->app;
+    }
+
     s->app = app;
 
     if (ngx_http_arg(r, (u_char *) "flashver", 8, &s->flashver) != NGX_OK) {

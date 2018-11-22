@@ -239,11 +239,13 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     }
     pc->log = log;
 
-    daddr.socklen = ngx_dynamic_resolver_gethostbyname(&target->url.host,
-                                                       &sa);
+//    daddr.socklen = ngx_dynamic_resolver_gethostbyname(&target->url.host,
+//                                                       &sa);
+    daddr.socklen = 0;
     if (daddr.socklen == 0) { /* dynamic resolver sync failed */
         if (target->url.naddrs == 0) {
-            ngx_log_error(NGX_LOG_ERR, log, 0, "relay: no address");
+            ngx_log_error(NGX_LOG_ERR, log, 0, "rtmp-relay: create_connection| "
+                            "no address, naddrs %d", target->url.naddrs);
             goto clear;
         }
 
@@ -513,8 +515,8 @@ ngx_rtmp_relay_create(ngx_rtmp_session_t *s, ngx_str_t *name,
                     ngx_min(sizeof(pargs) - 1, ctx->pargs.len))) = 0;
     }
 
-    ngx_rtmp_cmd_stream_init(ctx->session, pname, pargs,
-                             ctx->session->publishing);
+    ngx_rtmp_cmd_session_set(ctx->session, pname, pargs);
+    ngx_rtmp_cmd_stream_init(ctx->session, ctx->session->publishing);
 
     return ctx;
 }
@@ -525,7 +527,8 @@ ngx_relay_pull(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_target_t *target)
 {
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "relay: create pull name='%V' app='%V' playpath='%V' url='%V'",
+            "relay: pull| "
+            "create pull name='%V' app='%V' playpath='%V' url='%V'",
             name, &target->app, &target->play_path, &target->url.url);
 
     return ngx_rtmp_relay_create(s, name, target,
@@ -539,7 +542,8 @@ ngx_relay_push(ngx_rtmp_session_t *s, ngx_str_t *name,
         ngx_rtmp_relay_target_t *target)
 {
     ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
-            "relay: create push name='%V' app='%V' playpath='%V' url='%V'",
+            "relay: push| "
+            "create push name='%V' app='%V' playpath='%V' url='%V'",
             name, &target->app, &target->play_path, &target->url.url);
 
     return ngx_rtmp_relay_create(s, name, target,

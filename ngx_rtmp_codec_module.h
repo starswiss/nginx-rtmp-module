@@ -13,39 +13,6 @@
 #include "ngx_rtmp.h"
 
 
-/* Audio codecs */
-enum {
-    /* Uncompressed codec id is actually 0,
-     * but we use another value for consistency */
-    NGX_RTMP_AUDIO_UNCOMPRESSED     = 16,
-    NGX_RTMP_AUDIO_ADPCM            = 1,
-    NGX_RTMP_AUDIO_MP3              = 2,
-    NGX_RTMP_AUDIO_LINEAR_LE        = 3,
-    NGX_RTMP_AUDIO_NELLY16          = 4,
-    NGX_RTMP_AUDIO_NELLY8           = 5,
-    NGX_RTMP_AUDIO_NELLY            = 6,
-    NGX_RTMP_AUDIO_G711A            = 7,
-    NGX_RTMP_AUDIO_G711U            = 8,
-    NGX_RTMP_AUDIO_AAC              = 10,
-    NGX_RTMP_AUDIO_SPEEX            = 11,
-    NGX_RTMP_AUDIO_MP3_8            = 14,
-    NGX_RTMP_AUDIO_DEVSPEC          = 15,
-};
-
-
-/* Video codecs */
-enum {
-    NGX_RTMP_VIDEO_JPEG             = 1,
-    NGX_RTMP_VIDEO_SORENSON_H263    = 2,
-    NGX_RTMP_VIDEO_SCREEN           = 3,
-    NGX_RTMP_VIDEO_ON2_VP6          = 4,
-    NGX_RTMP_VIDEO_ON2_VP6_ALPHA    = 5,
-    NGX_RTMP_VIDEO_SCREEN2          = 6,
-    NGX_RTMP_VIDEO_H264             = 7,
-    NGX_RTMP_VIDEO_H265             = 12
-};
-
-
 /* hevc nal type */
 enum {
     NAL_TRAIL_N    = 0,

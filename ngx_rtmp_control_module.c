@@ -363,9 +363,14 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r, ngx_live_server_t *srv)
         name.len = 0;
     }
 
-    stream.len = app.len + 1 + name.len; /* app/name */
+    serverid.data = srv->serverid;
+    serverid.len = ngx_strlen(srv->serverid);
+
+    stream.len = serverid.len + 1 + app.len + 1 + name.len; /* srv/app/name */
     stream.data = ngx_pcalloc(r->pool, stream.len);
     p = stream.data;
+    p = ngx_copy(p, serverid.data, serverid.len);
+    *p++ = '/';
     p = ngx_copy(p, app.data, app.len);
     *p++ = '/';
     p = ngx_copy(p, name.data, name.len);
@@ -382,8 +387,6 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r, ngx_live_server_t *srv)
             }
         }
     } else {
-        serverid.data = srv->serverid;
-        serverid.len = ngx_strlen(srv->serverid);
         st = ngx_live_fetch_stream(&serverid, &stream);
         if (st) {
             s = ngx_rtmp_control_walk_stream(r, st);
@@ -597,8 +600,9 @@ ngx_rtmp_control_redirect(ngx_http_request_t *r, ngx_str_t *method)
 
     len = NGX_INT_T_LEN;
 
-    p = ngx_palloc(r->connection->pool, len);
+    p = ngx_pcalloc(r->connection->pool, len);
     if (p == NULL) {
+        msg = "ngx_palloc failed";
         goto error;
     }
 
@@ -609,6 +613,7 @@ ngx_rtmp_control_redirect(ngx_http_request_t *r, ngx_str_t *method)
 
     b = ngx_calloc_buf(r->pool);
     if (b == NULL) {
+        msg = "calloc buf failed";
         goto error;
     }
 
@@ -625,6 +630,8 @@ ngx_rtmp_control_redirect(ngx_http_request_t *r, ngx_str_t *method)
     return ngx_http_output_filter(r, &cl);
 
 error:
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+        "rtmp-control: redirect| %s", msg);
     return NGX_HTTP_INTERNAL_SERVER_ERROR;
 }
 
@@ -665,7 +672,7 @@ ngx_rtmp_control_handler(ngx_http_request_t *r)
         method.len  = r->uri.data + r->uri.len - method.data;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, r->connection->log, 0,
+    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                    "rtmp_control: section='%V' method='%V'",
                    &section, &method);
 

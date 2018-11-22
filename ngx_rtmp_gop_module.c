@@ -49,6 +49,7 @@ typedef struct {
     ngx_msec_t                  cache_time;
     ngx_flag_t                  low_latency;
     ngx_flag_t                  send_all;
+    ngx_msec_t                  fix_timestamp;
 } ngx_rtmp_gop_app_conf_t;
 
 
@@ -73,6 +74,13 @@ static ngx_command_t  ngx_rtmp_gop_commands[] = {
       ngx_conf_set_flag_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_gop_app_conf_t, send_all),
+      NULL },
+
+    { ngx_string("fix_timestamp"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_gop_app_conf_t, fix_timestamp),
       NULL },
 
       ngx_null_command
@@ -120,6 +128,7 @@ ngx_rtmp_gop_create_app_conf(ngx_conf_t *cf)
     gacf->cache_time = NGX_CONF_UNSET_MSEC;
     gacf->low_latency = NGX_CONF_UNSET;
     gacf->send_all = NGX_CONF_UNSET;
+    gacf->fix_timestamp = NGX_CONF_UNSET_MSEC;
 
     return gacf;
 }
@@ -133,6 +142,7 @@ ngx_rtmp_gop_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_msec_value(conf->cache_time, prev->cache_time, 0);
     ngx_conf_merge_value(conf->low_latency, prev->low_latency, 0);
     ngx_conf_merge_value(conf->send_all, prev->send_all, 0);
+    ngx_conf_merge_msec_value(conf->fix_timestamp, prev->fix_timestamp, 10000);
 
     return NGX_CONF_OK;
 }
@@ -140,10 +150,50 @@ ngx_rtmp_gop_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 static ngx_int_t
 ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 {
-    ngx_uint_t                  nmsg;
+    ngx_uint_t                      nmsg;
+    ngx_rtmp_live_chunk_stream_t   *cs;
+    ngx_uint_t                      csidx;
+    ngx_rtmp_live_ctx_t            *lctx;
+    uint32_t                        delta;
+    ngx_rtmp_gop_app_conf_t        *gacf;
 
     if (frame == NULL) {
         return NGX_OK;
+    }
+
+    gacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_gop_module);
+    if (gacf->fix_timestamp) {
+        lctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_live_module);
+        csidx = !(frame->hdr.type == NGX_RTMP_MSG_VIDEO);
+
+        cs  = &lctx->cs[csidx];
+
+        delta = frame->hdr.timestamp > cs->last_timestamp ?
+            frame->hdr.timestamp - cs->last_timestamp :
+            cs->last_timestamp - frame->hdr.timestamp;
+
+        if (delta > gacf->fix_timestamp) {
+            delta = 0;
+        }
+
+        if (cs->timestamp == 0) {
+            cs->timestamp = frame->hdr.timestamp;
+        } else if (frame->hdr.timestamp > cs->last_timestamp) {
+            cs->timestamp += delta;
+        } else if (cs->timestamp >= delta) {
+            cs->timestamp -= delta;
+        }
+
+        cs->last_timestamp = frame->hdr.timestamp;
+
+        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            "gop: link_frame| type %d, delta %d, timestamp %uD, fixed timestamp %uD",
+            frame->hdr.type, delta, frame->hdr.timestamp, cs->timestamp);
+
+        frame->hdr.timestamp = cs->timestamp;
+        if (frame->hdr.type == NGX_RTMP_MSG_AMF_META) {
+            frame->hdr.timestamp = 0;
+        }
     }
 
     nmsg = (s->out_last - s->out_pos) % s->out_queue + 1;

@@ -225,8 +225,10 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         if (ctx->sample_rate == 0) {
             ctx->sample_rate = sample_rates[(fmt & 0x0c) >> 2];
         }
+        s->acodec = ctx->audio_codec_id;
     } else {
         ctx->video_codec_id = (fmt & 0x0f);
+        s->vcodec = ctx->video_codec_id;
     }
 
     /* save AVC/AAC header */

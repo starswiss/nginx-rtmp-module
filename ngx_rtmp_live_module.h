@@ -19,6 +19,7 @@
 typedef struct {
     unsigned                            active:1;
     uint32_t                            timestamp;
+    uint32_t                            last_timestamp;
     uint32_t                            csid;
     uint32_t                            dropped;
 } ngx_rtmp_live_chunk_stream_t;
@@ -51,6 +52,7 @@ typedef struct {
     ngx_flag_t                          publish_notify;
     ngx_flag_t                          play_restart;
     ngx_flag_t                          idle_streams;
+    ngx_flag_t                          fix_timestamp;
     ngx_msec_t                          buflen;
 } ngx_rtmp_live_app_conf_t;
 
