@@ -617,10 +617,19 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s)
     ngx_str_t                       name;
     size_t                          n;
     ngx_rtmp_relay_ctx_t           *ctx;
+    ngx_int_t                       rc;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
     if (ctx && s->relay) {
         goto next;
+    }
+
+    if (!ctx){
+        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_relay_ctx_t));
+        if (ctx == NULL) {
+            goto next;
+        }
+        ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_relay_module);
     }
 
     racf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_relay_module);
@@ -631,8 +640,12 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s)
     name = s->name;
 
     t = racf->pulls.elts;
-    for (n = 0; n < racf->pulls.nelts; ++n, ++t) {
+
+    rc = NGX_DECLINED;
+    for (n = ctx->pull_idx; n < racf->pulls.nelts; ++n, ++t) {
         target = *t;
+
+        rc = NGX_AGAIN;
 
         if (target->name.len && (name.len != target->name.len ||
             ngx_memcmp(name.data, target->name.data, name.len)))
@@ -641,17 +654,24 @@ ngx_rtmp_relay_pull(ngx_rtmp_session_t *s)
         }
 
         ctx = ngx_relay_pull(s, &name, target);
-        if (ctx) {
-            return NGX_AGAIN;
-        }
-
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        if (!ctx) {
+            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
                 "relay: pull failed name='%V' app='%V' "
                 "playpath='%V' url='%V'",
-                &name, &target->app, &target->play_path,
-                &target->url.url);
+                &name, &target->app, &target->play_path, &target->url.url);
+            continue;
+        }
 
-        return NGX_ERROR;
+        ctx->pull_idx = (n + 1) % racf->pulls.nelts;
+
+        ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+                "relay: pull| name='%V' app='%V' "
+                "playpath='%V' url='%V'",
+                &name, &target->app, &target->play_path, &target->url.url);
+    }
+
+    if (rc != NGX_DECLINED) {
+        return rc;
     }
 
 next:

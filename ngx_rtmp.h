@@ -367,6 +367,8 @@ typedef struct {
     unsigned                    relay_completion:1;
     void                       *tag;
     ngx_uint_t                  idx;
+
+    ngx_int_t                   pull_idx;
 } ngx_rtmp_relay_ctx_t;
 
 struct ngx_live_stream_s {
