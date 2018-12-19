@@ -141,8 +141,8 @@ ngx_rtmp_mpegts_crc32(u_char *crc_buf, const u_char *data, int len)
 ngx_int_t
 ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec, u_char *pmt)
 {
-    u_char     *p, crc_buf[4], *pmt_pos;
-    ngx_int_t   vpid = -1, apid = -1;
+    u_char                      *p, crc_buf[4], *pmt_pos;
+    ngx_int_t                    vpid = -1, apid = -1;
 
     if (vcodec == acodec && vcodec == 0) {
         return NGX_ERROR;
@@ -153,6 +153,7 @@ ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec, u_char *pmt)
     pmt_pos = p;
 
     p = ngx_cpymem(p, ngx_mpegts_pmt_header, sizeof(ngx_mpegts_pmt_header));
+#if 0
     if (vcodec == NGX_RTMP_VIDEO_H264) {
         vpid = NGX_RTMP_MPEGTS_PID_H264;
     } else if (vcodec == NGX_RTMP_VIDEO_H265) {
@@ -164,6 +165,10 @@ ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec, u_char *pmt)
     } else if (acodec == NGX_RTMP_AUDIO_MP3) {
         apid = NGX_RTMP_MPEGTS_PID_MP3;
     }
+#else
+    vpid = vcodec;
+    apid = acodec;
+#endif
 
     if (vpid != -1) {
         p = ngx_cpymem(p, ngx_mpegts_pid[vpid], 5);

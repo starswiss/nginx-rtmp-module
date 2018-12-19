@@ -2031,6 +2031,9 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_uint_t                      nal_bytes;
     ngx_int_t                       aud_sent, sps_pps_sent, boundary;
     static u_char                   buffer[NGX_RTMP_HLS_BUFSIZE];
+    ngx_rtmp_core_app_conf_t       *cacf;
+
+    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
 
     hacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_hls_module);
 
@@ -2046,7 +2049,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     /* Only H264 is supported */
     if (codec_ctx->video_codec_id != NGX_RTMP_VIDEO_H264 &&
-        codec_ctx->video_codec_id != NGX_RTMP_VIDEO_H265)
+        codec_ctx->video_codec_id != cacf->hevc_codec)
     {
         return NGX_OK;
     }

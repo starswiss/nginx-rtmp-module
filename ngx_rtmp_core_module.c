@@ -206,6 +206,13 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       offsetof(ngx_rtmp_core_srv_conf_t, serverid),
       NULL },
 
+    { ngx_string("hevc_codecid"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, hevc_codec),
+      NULL },
+
       ngx_null_command
 };
 
@@ -437,6 +444,7 @@ ngx_rtmp_core_create_app_conf(ngx_conf_t *cf)
 
     conf->push_reconnect = NGX_CONF_UNSET_MSEC;
     conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
+    conf->hevc_codec = NGX_CONF_UNSET_UINT;
 
     return conf;
 }
@@ -450,6 +458,7 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 
     ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
     ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
+    ngx_conf_merge_uint_value(conf->hevc_codec, prev->hevc_codec, 12);
 
     return NGX_CONF_OK;
 }

@@ -195,6 +195,7 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
     ngx_rtmp_core_srv_conf_t           *cscf;
+    ngx_rtmp_core_app_conf_t           *cacf;
     ngx_rtmp_codec_ctx_t               *ctx;
     ngx_rtmp_frame_t                  **header;
     uint8_t                             fmt;
@@ -242,6 +243,7 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
     header = NULL;
 
     if (h->type == NGX_RTMP_MSG_AUDIO) {
@@ -253,7 +255,7 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         if (ctx->video_codec_id == NGX_RTMP_VIDEO_H264) {
             header = &ctx->avc_header;
             ngx_rtmp_codec_parse_avc_header(s, in);
-        } else if (ctx->video_codec_id == NGX_RTMP_VIDEO_H265) {
+        } else if (ctx->video_codec_id == cacf->hevc_codec) {
             header = &ctx->avc_header;
             ngx_rtmp_codec_parse_hevc_header(s, in);
         }
