@@ -440,15 +440,15 @@ ngx_http_flv_client_cleanup(void *data)
         return;
     }
 
+    ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
+            "http flv client, cleanup");
+
     if (s) {
         if (s->close.posted) {
             ngx_delete_posted_event(&s->close);
         }
         ngx_rtmp_finalize_fake_session(s);
     }
-
-    ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
-            "http flv client, cleanup");
 }
 
 static void
@@ -635,10 +635,12 @@ ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
     addr_ctx->main_conf = cctx->main_conf;
     addr_ctx->srv_conf  = cctx->srv_conf;
 
-    rs = ngx_rtmp_init_fake_session(cs->connection, addr_conf);
+    rs = ngx_rtmp_create_session(addr_conf);
     if (rs == NULL) {
         goto clear;
     }
+    rs->connection = cs->connection;
+
     rs->app_conf = cctx->app_conf;
     rs->relay = 1;
     rs->publishing = target->publishing;

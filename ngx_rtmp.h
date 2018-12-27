@@ -172,6 +172,8 @@ typedef struct {
 
     ngx_event_t             close;
 
+    ngx_pool_t             *pool;
+
     ngx_rtmp_addr_conf_t   *addr_conf;
 
     void                  **ctx;
@@ -648,9 +650,10 @@ char* ngx_rtmp_user_message_type(uint16_t evt);
 #endif
 
 void ngx_rtmp_init_connection(ngx_connection_t *c);
-ngx_rtmp_session_t * ngx_rtmp_init_session(ngx_connection_t *c,
-     ngx_rtmp_addr_conf_t *addr_conf);
+ngx_rtmp_session_t *ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf);
+ngx_int_t ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c);
 void ngx_rtmp_finalize_session(ngx_rtmp_session_t *s);
+void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_handshake(ngx_rtmp_session_t *s);
 void ngx_rtmp_client_handshake(ngx_rtmp_session_t *s, unsigned async);
 void ngx_rtmp_free_handshake_buffers(ngx_rtmp_session_t *s);
@@ -658,10 +661,6 @@ void ngx_rtmp_cycle(ngx_rtmp_session_t *s);
 void ngx_rtmp_reset_ping(ngx_rtmp_session_t *s);
 ngx_int_t ngx_rtmp_fire_event(ngx_rtmp_session_t *s, ngx_uint_t evt,
         ngx_rtmp_header_t *h, ngx_chain_t *in);
-
-void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);
-ngx_rtmp_session_t *ngx_rtmp_init_fake_session(ngx_connection_t *c,
-     ngx_rtmp_addr_conf_t *addr_conf);
 
 ngx_int_t ngx_rtmp_set_chunk_size(ngx_rtmp_session_t *s, ngx_uint_t size);
 

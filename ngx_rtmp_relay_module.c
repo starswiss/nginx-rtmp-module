@@ -301,11 +301,16 @@ ngx_rtmp_relay_create_connection(ngx_rtmp_session_t *s,
     addr_ctx->srv_conf  = cctx->srv_conf;
     ngx_str_set(&addr_conf->addr_text, "ngx-relay");
 
-    rs = ngx_rtmp_init_session(c, addr_conf);
+    rs = ngx_rtmp_create_session(addr_conf);
     if (rs == NULL) {
         /* no need to destroy pool */
         return NULL;
     }
+
+    if (ngx_rtmp_init_session(rs, c) == NGX_ERROR) {
+        return NULL;
+    }
+
     rs->app_conf = cctx->app_conf;
     rs->relay = 1;
     rs->publishing = target->publishing;

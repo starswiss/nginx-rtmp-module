@@ -482,6 +482,9 @@ ngx_http_flv_live_cleanup(void *data)
         return;
     }
 
+    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+            "http flv live, cleanup");
+
     if (ctx->session) {
         if (ctx->session->close.posted) {
             ngx_delete_posted_event(&ctx->session->close);
@@ -489,9 +492,6 @@ ngx_http_flv_live_cleanup(void *data)
         ngx_rtmp_finalize_fake_session(ctx->session);
         ctx->session = NULL;
     }
-
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-            "http flv live, cleanup");
 }
 
 static ngx_int_t
@@ -530,10 +530,11 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     }
 
     /* create fake session */
-    s = ngx_rtmp_init_fake_session(r->connection, addr_conf);
+    s = ngx_rtmp_create_session(addr_conf);
     if (s == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+    s->connection = r->connection;
     ctx->session = s;
 
     /* get host, app, stream name */
