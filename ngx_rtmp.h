@@ -461,6 +461,7 @@ typedef struct {
     ngx_array_t             applications; /* ngx_rtmp_core_app_conf_t */
     ngx_str_t               name;
     ngx_uint_t              merge_frame;
+    ngx_flag_t              tcp_nodelay;
     ngx_msec_t              pull_reconnect;
     ngx_msec_t              push_reconnect;
     void                  **app_conf;

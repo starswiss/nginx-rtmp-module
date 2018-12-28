@@ -577,7 +577,9 @@ static ngx_int_t
 ngx_rtmp_cmd_connect(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_rtmp_core_app_conf_t   *cacf;
     ngx_rtmp_header_t           h;
+    int                         tcp_nodelay;
 
     static double               trans;
     static double               capabilities = NGX_RTMP_CAPABILITIES;
@@ -639,6 +641,27 @@ ngx_rtmp_cmd_connect(ngx_rtmp_session_t *s, ngx_rtmp_connect_t *v)
     }
 
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+    /* set tcp_nodelay */
+    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
+    if (cacf->tcp_nodelay &&
+            s->connection->tcp_nodelay == NGX_TCP_NODELAY_UNSET)
+    {
+        ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+                "tcp_nodelay");
+
+        tcp_nodelay = 1;
+
+        if (setsockopt(s->connection->fd, IPPROTO_TCP, TCP_NODELAY,
+                       (const void *) &tcp_nodelay, sizeof(int)) == -1)
+        {
+            ngx_connection_error(s->connection, ngx_socket_errno,
+                                 "setsockopt(TCP_NODELAY) failed");
+            return NGX_ERROR;
+        }
+
+        s->connection->tcp_nodelay = NGX_TCP_NODELAY_SET;
+    }
 
     trans = v->trans;
 
