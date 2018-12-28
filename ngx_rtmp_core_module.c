@@ -33,6 +33,11 @@ static char *ngx_rtmp_core_application(ngx_conf_t *cf, ngx_command_t *cmd,
 static void *ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf);
 static char *ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf);
 
+static char *ngx_rtmp_merge_frame(ngx_conf_t *cf, void *post, void *data);
+
+static ngx_conf_post_handler_pt  ngx_rtmp_merge_frame_p =
+    ngx_rtmp_merge_frame;
+
 ngx_rtmp_core_main_conf_t      *ngx_rtmp_core_main_conf;
 
 
@@ -148,6 +153,13 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       NGX_RTMP_SRV_CONF_OFFSET,
       offsetof(ngx_rtmp_core_srv_conf_t, out_queue),
       NULL },
+
+    { ngx_string("merge_frame"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_RTMP_SRV_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, merge_frame),
+      &ngx_rtmp_merge_frame_p },
 
     { ngx_string("out_cork"),
       NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
@@ -427,6 +439,7 @@ ngx_rtmp_core_create_app_conf(ngx_conf_t *cf)
         return NULL;
     }
 
+    conf->merge_frame = NGX_CONF_UNSET_UINT;
     conf->push_reconnect = NGX_CONF_UNSET_MSEC;
     conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
 
@@ -440,6 +453,7 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_core_app_conf_t *prev = parent;
     ngx_rtmp_core_app_conf_t *conf = child;
 
+    ngx_conf_merge_msec_value(conf->merge_frame, prev->merge_frame, 32);
     ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
     ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
 
@@ -463,6 +477,24 @@ ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf)
 static char *
 ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf)
 {
+    return NGX_CONF_OK;
+}
+
+
+static char *
+ngx_rtmp_merge_frame(ngx_conf_t *cf, void *post, void *data)
+{
+    ngx_uint_t                 *mfp;
+
+    mfp = data;
+
+    if (*mfp > NGX_RTMP_MAX_MERGE_FRAME) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "the merge_frame must be no larger than %ui",
+                           NGX_RTMP_MAX_MERGE_FRAME);
+        return NGX_CONF_ERROR;
+    }
+
     return NGX_CONF_OK;
 }
 

@@ -214,14 +214,11 @@ ngx_rtmp_close_session(ngx_rtmp_session_t *s)
 
     ngx_rtmp_free_handshake_buffers(s);
 
+    ngx_rtmp_free_merge_frame(s);
+
     while (s->out_pos != s->out_last) {
         ngx_rtmp_shared_free_frame(s->out[s->out_pos++]);
         s->out_pos %= s->out_queue;
-    }
-
-    if (s->out_chain) {
-        ngx_put_chainbufs(s->out_chain);
-        s->out_chain = NULL;
     }
 
     NGX_DESTROY_POOL(s->pool);

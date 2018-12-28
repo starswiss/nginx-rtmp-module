@@ -163,11 +163,17 @@ struct ngx_mpegts_frame_s {
 #define NGX_HTTP_FLV_LIVE   1
 #define NGX_HLS_LIVE        2
 
+typedef struct ngx_rtmp_session_s  ngx_rtmp_session_t;
+
+#define NGX_RTMP_MAX_MERGE_FRAME    64
+
+typedef ngx_chain_t * (* ngx_rtmp_prepared_pt)(ngx_rtmp_session_t *s);
+
 typedef struct ngx_live_stream_s    ngx_live_stream_t;
 typedef struct ngx_live_server_s    ngx_live_server_t;
 typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 
-typedef struct {
+struct ngx_rtmp_session_s {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
 
     ngx_event_t             close;
@@ -272,6 +278,12 @@ typedef struct {
 
     ngx_connection_t       *connection;
 
+    /* merge frame and send */
+    ngx_rtmp_frame_t       *prepare_frame[NGX_RTMP_MAX_MERGE_FRAME];
+    ngx_chain_t            *merge[NGX_RTMP_MAX_MERGE_FRAME];
+    ngx_uint_t              nframe;
+    ngx_rtmp_prepared_pt    prepare_handler;
+
     /* circular buffer of RTMP message pointers */
     ngx_msec_t              timeout;
     uint32_t                out_bytes;
@@ -281,7 +293,7 @@ typedef struct {
     size_t                  out_queue;
     size_t                  out_cork;
     ngx_rtmp_frame_t       *out[0];
-} ngx_rtmp_session_t;
+};
 
 /* live stream manage */
 #define NGX_LIVE_SERVERID_LEN   512
@@ -448,6 +460,7 @@ extern ngx_rtmp_core_main_conf_t   *ngx_rtmp_core_main_conf;
 typedef struct {
     ngx_array_t             applications; /* ngx_rtmp_core_app_conf_t */
     ngx_str_t               name;
+    ngx_uint_t              merge_frame;
     ngx_msec_t              pull_reconnect;
     ngx_msec_t              push_reconnect;
     void                  **app_conf;
@@ -710,6 +723,9 @@ ngx_int_t ngx_rtmp_amf_shared_object_handler(ngx_rtmp_session_t *s,
 
 
 /* Shared output buffers */
+
+ngx_int_t ngx_rtmp_prepare_merge_frame(ngx_rtmp_session_t *s);
+void ngx_rtmp_free_merge_frame(ngx_rtmp_session_t *s);
 
 void ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
         ngx_chain_t *cl, ngx_flag_t mandatory);

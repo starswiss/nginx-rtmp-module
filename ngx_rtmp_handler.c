@@ -495,9 +495,10 @@ ngx_rtmp_relative_timestamp(ngx_rtmp_session_t *s, ngx_rtmp_header_t *lh)
 }
 
 static ngx_chain_t *
-ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
+ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_rtmp_frame_t           *frame;
     ngx_chain_t                *head, *l, **ll;
     uint32_t                    mlen, timestamp, ext_timestamp;
     uint8_t                     fmt, hsize, thsize;
@@ -507,6 +508,9 @@ ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
     u_char                      th[7], *p, *pp;
 
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
+
+    frame = s->out[s->out_pos];
+    head = NULL;
 
     if (frame->hdr.csid >= (uint32_t)cscf->max_streams) {
         ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
@@ -655,6 +659,8 @@ ngx_rtmp_prepare_out_chain(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
     return head;
 
 failed:
+    ngx_put_chainbufs(head);
+
     ngx_rtmp_finalize_session(s);
     return NULL;
 }
@@ -687,8 +693,13 @@ ngx_rtmp_send(ngx_event_t *wev)
         ngx_del_timer(wev);
     }
 
-    if (s->out_chain == NULL && s->out_pos != s->out_last) {
-        s->out_chain = ngx_rtmp_prepare_out_chain(s, s->out[s->out_pos]);
+    if (s->prepare_handler == NULL) {
+        s->prepare_handler = ngx_rtmp_prepare_out_chain;
+    }
+
+    if (ngx_rtmp_prepare_merge_frame(s) == NGX_ERROR) {
+        ngx_rtmp_finalize_session(s);
+        return;
     }
 
     while (s->out_chain) {
@@ -706,7 +717,7 @@ ngx_rtmp_send(ngx_event_t *wev)
 
         for (cl = s->out_chain; cl != chain;) {
             s->out_chain = cl->next;
-            ngx_put_chainbuf(cl);
+            ngx_free_chain(s->connection->pool, cl);
             cl = s->out_chain;
         }
 
@@ -722,13 +733,10 @@ ngx_rtmp_send(ngx_event_t *wev)
         s->ping_reset = 1;
         ngx_rtmp_update_bandwidth(&ngx_rtmp_bw_out, n);
 
-        ngx_rtmp_shared_free_frame(s->out[s->out_pos]);
-        ++s->out_pos;
-        s->out_pos %= s->out_queue;
-        if (s->out_pos == s->out_last) {
-            break;
+        if (ngx_rtmp_prepare_merge_frame(s) == NGX_ERROR) {
+            ngx_rtmp_finalize_session(s);
+            return;
         }
-        s->out_chain = ngx_rtmp_prepare_out_chain(s, s->out[s->out_pos]);
     }
 
     if (wev->active) {
