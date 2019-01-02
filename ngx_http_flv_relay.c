@@ -444,9 +444,7 @@ ngx_http_flv_client_cleanup(void *data)
             "http flv client, cleanup");
 
     if (s) {
-        if (s->close.posted) {
-            ngx_delete_posted_event(&s->close);
-        }
+        s->request = NULL;
         ngx_rtmp_finalize_fake_session(s);
     }
 }

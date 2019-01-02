@@ -487,11 +487,8 @@ ngx_http_flv_live_cleanup(void *data)
             "http flv live, cleanup");
 
     if (ctx->session) {
-        if (ctx->session->close.posted) {
-            ngx_delete_posted_event(&ctx->session->close);
-        }
+        ctx->session->request = NULL;
         ngx_rtmp_finalize_fake_session(ctx->session);
-        ctx->session = NULL;
     }
 }
 

@@ -200,6 +200,10 @@ ngx_rtmp_close_connection(ngx_connection_t *c)
 static void
 ngx_rtmp_close_session(ngx_rtmp_session_t *s)
 {
+    if (s->close.posted) {
+        ngx_delete_posted_event(&s->close);
+    }
+
     if (s->ping_evt.timer_set) {
         ngx_del_timer(&s->ping_evt);
     }
@@ -253,6 +257,10 @@ ngx_rtmp_async_finalize_http_client(ngx_event_t *ev)
     s = ev->data;
     hcr = s->request;
 
+    if (hcr == NULL) {
+        return;
+    }
+
     ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
             "asyn finalize http client");
 
@@ -270,6 +278,10 @@ ngx_rtmp_async_finalize_http_request(ngx_event_t *ev)
 
     s = ev->data;
     r = s->request;
+
+    if (r == NULL) {
+        return;
+    }
 
     ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
             "asyn finalize http request");
