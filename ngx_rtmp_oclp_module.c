@@ -829,7 +829,7 @@ ngx_rtmp_oclp_common_done(ngx_rtmp_session_t *s, ngx_netcall_ctx_t *nctx)
         ngx_post_event(&nctx->ev, &ngx_posted_events);
     }
 
-    ngx_netcall_detach(nctx);
+    ngx_netcall_destroy(nctx);
 }
 
 static void
@@ -1362,7 +1362,7 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
 
         nctx = s->live_stream->push_nctx[i];
         if (nctx) {
-            ngx_netcall_detach(nctx);
+            ngx_netcall_destroy(nctx);
             if (ctx == NULL) { /* relay not create */
                 --s->live_stream->push_count;
             }
@@ -1388,7 +1388,7 @@ ngx_rtmp_oclp_pull(ngx_rtmp_session_t *s)
 
     nctx = s->live_stream->pull_nctx;
     if (nctx) {
-        ngx_netcall_detach(nctx);
+        ngx_netcall_destroy(nctx);
     }
 
     ngx_rtmp_oclp_relay_start(s, 0, 0, NGX_RTMP_OCLP_PULL);
