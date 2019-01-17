@@ -181,7 +181,7 @@ static ngx_int_t
 ngx_rtmp_access_found(ngx_rtmp_session_t *s, ngx_uint_t deny)
 {
     if (deny) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "access forbidden by rule");
         return NGX_ERROR;
     }
@@ -202,7 +202,7 @@ ngx_rtmp_access_inet(ngx_rtmp_session_t *s, in_addr_t addr, ngx_uint_t flag)
     rule = ascf->rules.elts;
     for (i = 0; i < ascf->rules.nelts; i++) {
 
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, s->connection->log, 0,
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, s->log, 0,
                        "access: %08XD %08XD %08XD",
                        addr, rule[i].mask, rule[i].addr);
 
@@ -241,7 +241,7 @@ ngx_rtmp_access_inet6(ngx_rtmp_session_t *s, u_char *p, ngx_uint_t flag)
         ml = ngx_inet6_ntop(rule6[i].mask.s6_addr, mt, NGX_INET6_ADDRSTRLEN);
         al = ngx_inet6_ntop(rule6[i].addr.s6_addr, at, NGX_INET6_ADDRSTRLEN);
 
-        ngx_log_debug6(NGX_LOG_DEBUG_HTTP, s->connection->log, 0,
+        ngx_log_debug6(NGX_LOG_DEBUG_HTTP, s->log, 0,
                        "access: %*s %*s %*s", cl, ct, ml, mt, al, at);
         }
 #endif
@@ -279,7 +279,7 @@ ngx_rtmp_access(ngx_rtmp_session_t *s, ngx_uint_t flag)
 
     ascf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_access_module);
     if (ascf == NULL) {
-        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, s->connection->log, 0,
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, s->log, 0,
                        "access: NULL app conf");
         return NGX_ERROR;
     }

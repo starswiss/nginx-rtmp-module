@@ -179,6 +179,7 @@ struct ngx_rtmp_session_s {
     ngx_event_t             close;
 
     ngx_pool_t             *pool;
+    ngx_log_t              *log;
 
     ngx_rtmp_addr_conf_t   *addr_conf;
 
@@ -301,7 +302,6 @@ struct ngx_rtmp_session_s {
 
 typedef struct ngx_rtmp_core_ctx_s      ngx_rtmp_core_ctx_t;
 typedef struct ngx_rtmp_live_ctx_s      ngx_rtmp_live_ctx_t;
-typedef struct ngx_relay_reconnect_s    ngx_relay_reconnect_t;
 
 struct ngx_rtmp_core_ctx_s {
     ngx_rtmp_core_ctx_t    *next;
@@ -310,12 +310,6 @@ struct ngx_rtmp_core_ctx_s {
     unsigned                publishing:1;
 };
 
-struct ngx_relay_reconnect_s {
-    ngx_event_t             reconnect;
-    ngx_live_stream_t      *live_stream;
-
-    ngx_relay_reconnect_t  *next;
-};
 
 #define NGX_RTMP_MAX_OCLP   8
 #define NGX_RTMP_MAX_PUSH   8
@@ -356,23 +350,6 @@ struct ngx_live_stream_s {
 
     /* oclp */
     ngx_netcall_ctx_t          *stream_nctx;
-    ngx_netcall_ctx_t          *pull_nctx;
-    ngx_netcall_ctx_t          *push_nctx[NGX_RTMP_MAX_OCLP];
-
-    /* relay push */
-    /* auto pull */
-    ngx_rtmp_relay_ctx_t       *auto_pull_ctx;
-
-    /* oclp */
-    ngx_rtmp_relay_ctx_t       *oclp_ctx[NGX_RTMP_MAX_OCLP];
-
-    /* relay */
-    ngx_rtmp_relay_ctx_t       *relay_ctx[NGX_RTMP_MAX_PUSH];
-
-    /* relay reconnect */
-    ngx_relay_reconnect_t      *pull_reconnect;
-    ngx_relay_reconnect_t      *push_reconnect;
-    ngx_uint_t                  push_count;
 
     ngx_live_stream_t          *next;
 
@@ -398,9 +375,6 @@ struct ngx_live_server_s {
     ngx_live_stream_t         **streams;
 };
 
-
-ngx_relay_reconnect_t *ngx_live_get_relay_reconnect();
-void ngx_live_put_relay_reconnect(ngx_relay_reconnect_t *rc);
 
 ngx_live_server_t *ngx_live_create_server(ngx_str_t *serverid);
 ngx_live_server_t *ngx_live_fetch_server(ngx_str_t *serverid);
@@ -462,8 +436,6 @@ typedef struct {
     ngx_str_t               name;
     ngx_uint_t              merge_frame;
     ngx_flag_t              tcp_nodelay;
-    ngx_msec_t              pull_reconnect;
-    ngx_msec_t              push_reconnect;
     void                  **app_conf;
 } ngx_rtmp_core_app_conf_t;
 
@@ -665,7 +637,10 @@ char* ngx_rtmp_user_message_type(uint16_t evt);
 
 void ngx_rtmp_init_connection(ngx_connection_t *c);
 ngx_rtmp_session_t *ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf);
-ngx_int_t ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c);
+ngx_rtmp_session_t *ngx_rtmp_create_relay_session(ngx_rtmp_session_t *s,
+    void *tag);
+void ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c);
+void ngx_rtmp_close_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_finalize_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_handshake(ngx_rtmp_session_t *s);

@@ -150,7 +150,7 @@ ngx_rtmp_monitor_consume(ngx_event_t *ev)
 
 next:
     if (ctx->frame_rate == 0) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "monitor, frame rate error, stream: %V, frame rate: %.2f",
                 &s->stream, ctx->frame_rate);
         return;
@@ -242,7 +242,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_monitor_module);
 
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_monitor_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_monitor_ctx_t));
         if (ctx == NULL) {
             return;
         }
@@ -252,7 +252,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ctx->publishing = publishing;
 
         ctx->consume.data = s;
-        ctx->consume.log = s->connection->log;
+        ctx->consume.log = s->log;
         ctx->consume.handler = ngx_rtmp_monitor_consume;
         ngx_add_timer(&ctx->consume, 1000);
     }

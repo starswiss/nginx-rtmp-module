@@ -207,7 +207,7 @@ ngx_rtmp_codec_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_codec_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_codec_ctx_t));
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_codec_module);
     }
 
@@ -350,7 +350,7 @@ ngx_rtmp_codec_parse_aac_header(ngx_rtmp_session_t *s, ngx_chain_t *in)
        var bits: AOT Specific Config
      */
 
-    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "codec: aac header profile=%ui, "
                    "sample_rate=%ui, chan_conf=%ui",
                    ctx->aac_profile, ctx->sample_rate, ctx->aac_chan_conf);
@@ -406,7 +406,7 @@ ngx_rtmp_codec_parse_hevc_nal_to_rbsp(ngx_rtmp_session_t *s, u_char *p,
 
     ngx_rtmp_bit_read(br, 1);
     if (ngx_rtmp_bit_read(br, 6) != nal_unit_type) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "nal_unit_type not expect %ui", nal_unit_type);
         return NGX_ERROR;
     }
@@ -418,13 +418,13 @@ ngx_rtmp_codec_parse_hevc_nal_to_rbsp(ngx_rtmp_session_t *s, u_char *p,
     for (i = 0; i < nal_unit_len; ++i) {
         if (count == 2) { /* already 0x0000 */
             if (br->pos[i] < 0x03) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "three bytes sequence error");
                 return NGX_ERROR;
             }
 
             if (br->pos[i] == 0x03 && br->pos[i + 1] > 0x03) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "four bytes sequence error");
                 return NGX_ERROR;
             }
@@ -505,7 +505,7 @@ ngx_rtmp_codec_parse_hevc_ptl(ngx_rtmp_session_t *s, ngx_rtmp_bit_reader_t *br,
     for (i = 0; i < maxNumSubLayersMinus1; ++i) {
         slppf[i] = ngx_rtmp_bit_read(br, 1);
         sllpf[i] = ngx_rtmp_bit_read(br, 1);
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "%d sub_layer_profile_present_flag:%d, "
                 "sub_layer_level_present_flag:%d", i, slppf[i], sllpf[i]);
     }
@@ -513,7 +513,7 @@ ngx_rtmp_codec_parse_hevc_ptl(ngx_rtmp_session_t *s, ngx_rtmp_bit_reader_t *br,
     if (maxNumSubLayersMinus1 > 0) {
         for (i = maxNumSubLayersMinus1; i < 8; ++i) {
             ngx_uint_t t = ngx_rtmp_bit_read(br, 2);
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "zero bit %d", t);
+            ngx_log_error(NGX_LOG_ERR, s->log, 0, "zero bit %d", t);
         }
     }
 
@@ -597,14 +597,14 @@ ngx_rtmp_codec_parse_hevc_sps(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *ctx,
      */
     psi = ngx_rtmp_bit_read_golomb(&br);
     if (psi > 16 || br.err) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "read sps_seq_parameter_set_id error: %ui", psi);
         return;
     }
 
     cfi = ngx_rtmp_bit_read_golomb(&br);
     if (cfi > 3 || br.err) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "read chroma_format_idc error: %ui", cfi);
         return;
     }
@@ -615,13 +615,13 @@ ngx_rtmp_codec_parse_hevc_sps(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *ctx,
 
     width = (ngx_uint_t) ngx_rtmp_bit_read_golomb(&br);
     if (br.err) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "read width error");
+        ngx_log_error(NGX_LOG_ERR, s->log, 0, "read width error");
         return;
     }
 
     height = (ngx_uint_t) ngx_rtmp_bit_read_golomb(&br);
     if (br.err) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0, "read height error");
+        ngx_log_error(NGX_LOG_ERR, s->log, 0, "read height error");
         return;
     }
 
@@ -752,7 +752,7 @@ ngx_rtmp_codec_parse_hevc_header(ngx_rtmp_session_t *s, ngx_chain_t *in)
         }
     }
 
-    ngx_log_debug7(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug7(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "codec: hevc header "
                    "profile=%ui, compat=%ui, level=%ui, "
                    "nal_bytes=%ui, ref_frames=%ui, width=%ui, height=%ui",
@@ -931,7 +931,7 @@ ngx_rtmp_codec_parse_avc_header(ngx_rtmp_session_t *s, ngx_chain_t *in)
     ctx->height = (2 - frame_mbs_only) * (height + 1) * 16 -
                   (crop_top + crop_bottom) * 2;
 
-    ngx_log_debug7(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug7(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "codec: avc header "
                    "profile=%ui, compat=%ui, level=%ui, "
                    "nal_bytes=%ui, ref_frames=%ui, width=%ui, height=%ui",
@@ -959,7 +959,7 @@ ngx_rtmp_codec_dump_header(ngx_rtmp_session_t *s, const char *type,
 
     *pp = 0;
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "codec: %s header %s", type, buf);
 }
 #endif
@@ -1239,7 +1239,7 @@ ngx_rtmp_codec_meta_data(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_codec_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_codec_ctx_t));
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_codec_module);
     }
 
@@ -1255,7 +1255,7 @@ ngx_rtmp_codec_meta_data(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     if (ngx_rtmp_receive_amf(s, in, in_elts + skip,
                 sizeof(in_elts) / sizeof(in_elts[0]) - skip))
     {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "codec: error parsing data frame");
         return NGX_OK;
     }
@@ -1273,7 +1273,7 @@ ngx_rtmp_codec_meta_data(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_memcpy(ctx->profile, v.profile, sizeof(v.profile));
     ngx_memcpy(ctx->level, v.level, sizeof(v.level));
 
-    ngx_log_debug8(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug8(NGX_LOG_DEBUG_RTMP, s->log, 0,
             "codec: data frame: "
             "width=%ui height=%ui duration=%ui frame_rate=%ui "
             "video=%s (%ui) audio=%s (%ui)",

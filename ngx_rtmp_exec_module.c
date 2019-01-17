@@ -9,6 +9,7 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_record_module.h"
 #include "ngx_rtmp_eval.h"
+#include "ngx_poold.h"
 #include <stdlib.h>
 
 #ifdef NGX_LINUX
@@ -908,7 +909,7 @@ ngx_rtmp_exec_init_ctx(ngx_rtmp_session_t *s, u_char name[NGX_RTMP_MAX_NAME],
         goto done;
     }
 
-    ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_exec_ctx_t));
+    ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_exec_ctx_t));
 
     if (ctx == NULL) {
         return NGX_ERROR;
@@ -924,7 +925,7 @@ ngx_rtmp_exec_init_ctx(ngx_rtmp_session_t *s, u_char name[NGX_RTMP_MAX_NAME],
 
     if (push_conf->nelts > 0) {
 
-        if (ngx_array_init(&ctx->push_exec, s->connection->pool,
+        if (ngx_array_init(&ctx->push_exec, s->pool,
                            push_conf->nelts,
                            sizeof(ngx_rtmp_exec_t)) != NGX_OK)
         {
@@ -943,7 +944,7 @@ ngx_rtmp_exec_init_ctx(ngx_rtmp_session_t *s, u_char name[NGX_RTMP_MAX_NAME],
             ngx_memzero(e, sizeof(*e));
             e->conf = ec;
             e->managed = 1;
-            e->log = s->connection->log;
+            e->log = s->log;
             e->eval = ngx_rtmp_exec_push_eval;
             e->eval_ctx = s;
             e->kill_signal = emcf->kill_signal;
@@ -1007,7 +1008,7 @@ ngx_rtmp_exec_init_pull_ctx(ngx_rtmp_session_t *s,
         }
     }
 
-    pool = ngx_create_pool(4096, emcf->log);
+    pool = NGX_CREATE_POOL(4096, emcf->log);
     if (pool == NULL) {
         return NGX_ERROR;
     }
@@ -1071,7 +1072,7 @@ done:
 
 error:
 
-    ngx_destroy_pool(pool);
+    NGX_DESTROY_POOL(pool);
 
     return NGX_ERROR;
 }
@@ -1115,7 +1116,7 @@ ngx_rtmp_exec_unmanaged(ngx_rtmp_session_t *s, ngx_array_t *e, const char *op)
         return;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "exec: %s %uz unmanaged command(s)", op, e->nelts);
 
     ec = e->elts;
@@ -1129,7 +1130,7 @@ ngx_rtmp_exec_unmanaged(ngx_rtmp_session_t *s, ngx_array_t *e, const char *op)
         en.conf = ec;
         en.eval = ngx_rtmp_exec_event_eval;
         en.eval_ctx = s;
-        en.log = s->connection->log;
+        en.log = s->log;
 
         ngx_rtmp_exec_run(&en);
     }
@@ -1146,7 +1147,7 @@ ngx_rtmp_exec_managed(ngx_rtmp_session_t *s, ngx_array_t *e, const char *op)
         return;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "exec: %s %uz managed command(s)", op, e->nelts);
 
     en = e->elts;
@@ -1260,7 +1261,7 @@ ngx_rtmp_exec_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     ctx->flags = 0;
 
     if (ctx->push_exec.nelts > 0) {
-        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "exec: delete %uz push command(s)",
                        ctx->push_exec.nelts);
 
@@ -1273,7 +1274,7 @@ ngx_rtmp_exec_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     pctx = ctx->pull;
 
     if (pctx && --pctx->counter == 0) {
-        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "exec: delete %uz pull command(s)",
                        pctx->pull_exec.nelts);
 
@@ -1292,7 +1293,7 @@ ngx_rtmp_exec_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
             }
         }
 
-        ngx_destroy_pool(pctx->pool);
+        NGX_DESTROY_POOL(pctx->pool);
     }
 
     ctx->pull = NULL;

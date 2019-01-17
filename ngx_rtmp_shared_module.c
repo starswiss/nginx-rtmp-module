@@ -111,7 +111,7 @@ ngx_rtmp_prepare_merge_frame(ngx_rtmp_session_t *s)
 
         // normal link to chain all merge frames
         for (ll = s->merge[n]; ll; ll = ll->next, ln = &(*ln)->next) {
-            *ln = ngx_alloc_chain_link(s->connection->pool);
+            *ln = ngx_alloc_chain_link(s->pool);
             (*ln)->next = NULL;
             if (*ln == NULL) {
                 s->nframe = n;

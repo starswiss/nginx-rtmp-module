@@ -323,7 +323,7 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         /* NGX_OK */
         for (cl = s->out_chain; cl;) {
             s->out_chain = cl->next;
-            ngx_free_chain(s->connection->pool, cl);
+            ngx_free_chain(s->pool, cl);
             cl = s->out_chain;
         }
 
@@ -536,6 +536,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     s->connection = r->connection;
+    s->log = r->connection->log;
     ctx->session = s;
 
     /* get host, app, stream name */
@@ -571,7 +572,7 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     if (s->app_conf == NULL) {
 
         if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
-            ngx_log_error(NGX_LOG_INFO, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                     "http flv live, application not found '%V'", &s->app);
             return NGX_HTTP_NOT_FOUND;
         }

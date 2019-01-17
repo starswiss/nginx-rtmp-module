@@ -8,7 +8,6 @@
 #include <ngx_core.h>
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_cmd_module.h"
-#include "ngx_rtmp_netcall_module.h"
 #include "ngx_rtmp_codec_module.h"
 #include "ngx_rtmp_record_module.h"
 
@@ -292,7 +291,7 @@ ngx_rtmp_record_open(ngx_rtmp_session_t *s, ngx_uint_t n, ngx_str_t *path)
     ngx_rtmp_record_rec_ctx_t      *rctx;
     ngx_int_t                       rc;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: #%ui manual open", n);
 
     rctx = ngx_rtmp_record_get_node_ctx(s, n);
@@ -320,7 +319,7 @@ ngx_rtmp_record_close(ngx_rtmp_session_t *s, ngx_uint_t n, ngx_str_t *path)
     ngx_rtmp_record_rec_ctx_t      *rctx;
     ngx_int_t                       rc;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: #%ui manual close", n);
 
     rctx = ngx_rtmp_record_get_node_ctx(s, n);
@@ -409,7 +408,7 @@ ngx_rtmp_record_make_path(ngx_rtmp_session_t *s,
     path->data = pbuf;
     path->len  = p - pbuf;
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: %V path: '%V'", &rracf->id, path);
 }
 
@@ -450,7 +449,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
         return NGX_AGAIN;
     }
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: %V opening", &rracf->id);
 
     ngx_memzero(rctx, sizeof(*rctx));
@@ -465,7 +464,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
 
     ngx_memzero(&rctx->file, sizeof(rctx->file));
     rctx->file.offset = 0;
-    rctx->file.log = s->connection->log;
+    rctx->file.log = s->log;
     rctx->file.fd = ngx_open_file(path.data, mode, create_mode,
                                   NGX_FILE_DEFAULT_ACCESS);
     ngx_str_set(&rctx->file.name, "recorded");
@@ -474,7 +473,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
         err = ngx_errno;
 
         if (err != NGX_ENOENT) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, err,
+            ngx_log_error(NGX_LOG_CRIT, s->log, err,
                           "record: %V failed to open file '%V'",
                           &rracf->id, &path);
         }
@@ -488,13 +487,13 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
     if (rracf->lock_file) {
         err = ngx_lock_fd(rctx->file.fd);
         if (err) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, err,
+            ngx_log_error(NGX_LOG_CRIT, s->log, err,
                           "record: %V lock failed", &rracf->id);
         }
     }
 #endif
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: %V opened '%V'", &rracf->id, &path);
 
     if (rracf->notify) {
@@ -521,7 +520,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
         file_size = lseek(rctx->file.fd, 0, SEEK_END);
 #endif
         if (file_size == (off_t) -1) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_CRIT, s->log, ngx_errno,
                           "record: %V seek failed", &rracf->id);
             goto done;
         }
@@ -531,7 +530,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
         }
 
         if (ngx_read_file(&rctx->file, buf, 4, file_size - 4) != 4) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_CRIT, s->log, ngx_errno,
                           "record: %V tag size read failed", &rracf->id);
             goto done;
         }
@@ -549,7 +548,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
 
         if (ngx_read_file(&rctx->file, buf, 8, file_size - tag_size - 4) != 8)
         {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_CRIT, s->log, ngx_errno,
                           "record: %V tag read failed", &rracf->id);
             goto done;
         }
@@ -561,7 +560,7 @@ ngx_rtmp_record_node_open(ngx_rtmp_session_t *s,
         p[3] = 0;
 
         if (tag_size != mlen + 11) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_CRIT, s->log, ngx_errno,
                           "record: %V tag size mismatch: "
                           "tag_size=%uD, mlen=%uD", &rracf->id, tag_size, mlen);
             goto done;
@@ -577,7 +576,7 @@ done:
         rctx->file.offset = file_size;
         rctx->time_shift = timestamp;
 
-        ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "record: append offset=%O, time=%uD, tag_size=%uD",
                        file_size, timestamp, tag_size);
     }
@@ -606,7 +605,7 @@ ngx_rtmp_record_init(ngx_rtmp_session_t *s)
         return NGX_OK;
     }
 
-    ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_record_ctx_t));
+    ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_record_ctx_t));
 
     if (ctx == NULL) {
         return NGX_ERROR;
@@ -614,7 +613,7 @@ ngx_rtmp_record_init(ngx_rtmp_session_t *s)
 
     ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_record_module);
 
-    if (ngx_array_init(&ctx->rec, s->connection->pool, racf->rec.nelts,
+    if (ngx_array_init(&ctx->rec, s->pool, racf->rec.nelts,
                        sizeof(ngx_rtmp_record_rec_ctx_t))
         != NGX_OK)
     {
@@ -658,7 +657,7 @@ ngx_rtmp_record_start(ngx_rtmp_session_t *s)
         return;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: start");
 
     rctx = ctx->rec.elts;
@@ -689,7 +688,7 @@ ngx_rtmp_record_stop(ngx_rtmp_session_t *s)
         return;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: stop");
 
     rctx = ctx->rec.elts;
@@ -720,7 +719,7 @@ ngx_rtmp_record_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         return NGX_ERROR;
     }
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: publish %ui nodes",
                    racf->rec.nelts);
 
@@ -754,7 +753,7 @@ ngx_rtmp_record_stream_begin(ngx_rtmp_session_t *s, ngx_rtmp_stream_begin_t *v)
         goto next;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: stream_begin");
 
     ngx_rtmp_record_start(s);
@@ -771,7 +770,7 @@ ngx_rtmp_record_stream_eof(ngx_rtmp_session_t *s, ngx_rtmp_stream_begin_t *v)
         goto next;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: stream_eof");
 
     ngx_rtmp_record_stop(s);
@@ -810,14 +809,14 @@ ngx_rtmp_record_node_close(ngx_rtmp_session_t *s,
         }
 
         if (ngx_write_file(&rctx->file, &av, 1, 4) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_CRIT, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_CRIT, s->log, ngx_errno,
                           "record: %V error writing av mask", &rracf->id);
         }
     }
 
     if (ngx_close_file(rctx->file.fd) == NGX_FILE_ERROR) {
         err = ngx_errno;
-        ngx_log_error(NGX_LOG_CRIT, s->connection->log, err,
+        ngx_log_error(NGX_LOG_CRIT, s->log, err,
                       "record: %V error closing file", &rracf->id);
 
         ngx_rtmp_record_notify_error(s, rctx);
@@ -825,7 +824,7 @@ ngx_rtmp_record_node_close(ngx_rtmp_session_t *s,
 
     rctx->file.fd = NGX_INVALID_FILE;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: %V closed", &rracf->id);
 
     if (rracf->notify) {
@@ -858,7 +857,7 @@ ngx_rtmp_record_close_stream(ngx_rtmp_session_t *s,
         goto next;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: close_stream");
 
     ngx_rtmp_record_stop(s);
@@ -880,7 +879,7 @@ ngx_rtmp_record_write_frame(ngx_rtmp_session_t *s,
 
     rracf = rctx->conf;
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: %V frame: mlen=%uD",
                    &rracf->id, h->mlen);
 
@@ -893,7 +892,7 @@ ngx_rtmp_record_write_frame(ngx_rtmp_session_t *s,
     timestamp = h->timestamp - rctx->epoch;
 
     if ((int32_t) timestamp < 0) {
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "record: %V cut timestamp=%D", &rracf->id, timestamp);
 
         timestamp = 0;
@@ -1107,7 +1106,7 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
         if (!rctx->aac_header_sent && codec_ctx->aac_header &&
            (rracf->flags & NGX_RTMP_RECORD_AUDIO))
         {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "record: %V writing AAC header", &rracf->id);
 
             ch.type = NGX_RTMP_MSG_AUDIO;
@@ -1129,7 +1128,7 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
            (rracf->flags & (NGX_RTMP_RECORD_VIDEO|
                             NGX_RTMP_RECORD_KEYFRAMES)))
         {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "record: %V writing AVC header", &rracf->id);
 
             ch.type = NGX_RTMP_MSG_VIDEO;
@@ -1151,7 +1150,7 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
         if (codec_ctx && codec_ctx->video_codec_id == NGX_RTMP_VIDEO_H264 &&
             !rctx->avc_header_sent)
         {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "record: %V skipping until H264 header", &rracf->id);
             return NGX_OK;
         }
@@ -1164,7 +1163,7 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
         }
 
         if (!rctx->video_key_sent) {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "record: %V skipping until keyframe", &rracf->id);
             return NGX_OK;
         }
@@ -1173,7 +1172,7 @@ ngx_rtmp_record_node_av(ngx_rtmp_session_t *s, ngx_rtmp_record_rec_ctx_t *rctx,
         if (codec_ctx && codec_ctx->audio_codec_id == NGX_RTMP_AUDIO_AAC &&
             !rctx->aac_header_sent)
         {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "record: %V skipping until AAC header", &rracf->id);
             return NGX_OK;
         }
