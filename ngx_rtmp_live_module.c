@@ -421,7 +421,7 @@ static void
 ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
 {
     ngx_rtmp_live_ctx_t            *ctx;
-    ngx_live_stream_t             **stream;
+    ngx_live_stream_t              *st;
     ngx_rtmp_live_app_conf_t       *lacf;
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
@@ -448,11 +448,9 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "live: join '%s'", name);
 
-    stream = &(s->live_stream);
+    st = s->live_stream;
 
-    if (stream == NULL ||
-        !(publisher || (*stream)->publishing || lacf->idle_streams))
-    {
+    if (!(publisher || st->publish_ctx || lacf->idle_streams)) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "live: stream not found");
 
@@ -466,7 +464,7 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
     }
 
     if (publisher) {
-        if ((*stream)->publishing) {
+        if (st->publishing) {
             ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "live: already publishing");
 
@@ -476,14 +474,14 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
             return;
         }
 
-        (*stream)->publishing = 1;
+        st->publishing = 1;
     }
 
-    ctx->stream = *stream;
+    ctx->stream = st;
     ctx->publishing = publisher;
-    ctx->next = (*stream)->ctx;
+    ctx->next = st->ctx;
 
-    (*stream)->ctx = ctx;
+    st->ctx = ctx;
 
     if (lacf->buflen) {
         s->out_buffer = 1;
