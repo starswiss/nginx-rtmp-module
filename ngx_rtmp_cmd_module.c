@@ -223,8 +223,6 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     s->published = 1;
 
-    ngx_rtmp_oclp_pnotify_start(s, 1);
-
     if (!s->relay) { /* relay pull */
         ngx_rtmp_cmd_stream_init(s, v->name, v->args, 1);
     }
@@ -243,8 +241,6 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "rtmp play filter");
 
     s->played = 1;
-
-    ngx_rtmp_oclp_pnotify_start(s, 0);
 
     if (!s->relay) { /* relay push */
         ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
@@ -276,8 +272,6 @@ ngx_rtmp_close_stream_filter(ngx_rtmp_session_t *s,
         ngx_rtmp_oclp_stream_done(s);
         ngx_live_delete_stream(&s->serverid, &s->stream);
     }
-
-    ngx_rtmp_oclp_pnotify_done(s);
 
     return ngx_rtmp_close_stream(s, v);
 }

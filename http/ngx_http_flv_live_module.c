@@ -276,18 +276,20 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         ngx_del_timer(wev);
     }
 
-    rc = ngx_http_flv_live_send_header(r);
-    if (rc == NGX_ERROR || rc > NGX_OK) {
-        ngx_http_finalize_request(r, rc);
-        return;
-    }
-
     ctx = ngx_http_get_module_ctx(r, ngx_http_flv_live_module);
     s = ctx->session;
 
     if (ngx_rtmp_prepare_merge_frame(s) == NGX_ERROR) {
         ngx_http_finalize_request(r, NGX_ERROR);
         return;
+    }
+
+    if (s->out_chain) {
+        rc = ngx_http_flv_live_send_header(r);
+        if (rc == NGX_ERROR || rc > NGX_OK) {
+            ngx_http_finalize_request(r, rc);
+            return;
+        }
     }
 
     while (s->out_chain) {

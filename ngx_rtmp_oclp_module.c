@@ -8,10 +8,16 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include "ngx_rtmp.h"
+#include "ngx_rtmp_cmd_module.h"
 #include "ngx_live_relay.h"
 #include "ngx_dynamic_resolver.h"
 #include "ngx_toolkit_misc.h"
 #include "ngx_netcall.h"
+
+
+static ngx_rtmp_publish_pt          next_publish;
+static ngx_rtmp_play_pt             next_play;
+static ngx_rtmp_close_stream_pt     next_close_stream;
 
 
 static ngx_live_push_pt             next_push;
@@ -137,6 +143,9 @@ typedef struct {
     ngx_rtmp_oclp_event_t      *event;
     ngx_uint_t                  type;
     ngx_live_relay_t           *relay;
+
+    ngx_rtmp_publish_t          publish_v;
+    ngx_rtmp_play_t             play_v;
 } ngx_rtmp_oclp_ctx_t;
 
 
@@ -815,85 +824,97 @@ static void
 ngx_rtmp_oclp_pnotify_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 {
     ngx_rtmp_session_t         *s;
+    ngx_rtmp_oclp_ctx_t        *octx;
 
     s = nctx->data;
 
-    if (code != NGX_HTTP_OK) {
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+
+    if (code < NGX_HTTP_OK || code > NGX_HTTP_SPECIAL_RESPONSE) {
         ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
                 "oclp %s start notify error: %i",
                ngx_rtmp_oclp_app_type[nctx->type], code);
 
         if (code != -1) {
-            if (nctx->type == NGX_RTMP_OCLP_PUBLISH) {
-                ngx_rtmp_send_status(s, "NetStream.Publish.Forbidden", "status",
-                        "Publish stream Forbidden");
-            } else {
-                s->status = 403;
-                ngx_rtmp_send_status(s, "NetStream.Play.Forbidden", "status",
-                        "Play stream Forbidden");
-            }
-            ngx_rtmp_finalize_session(s);
+            goto error;
         }
 
-        return;
+        goto next;
+    }
+
+next:
+    if (octx->type == NGX_RTMP_OCLP_PUBLISH) {
+        if (next_publish(s, &octx->publish_v) != NGX_OK) {
+            goto error;
+        }
+    } else {
+        if (next_play(s, &octx->play_v) != NGX_OK) {
+            goto error;
+        }
     }
 
     ngx_rtmp_oclp_common_update_create(s, nctx);
+
+    return;
+
+error:
+    if (octx->type == NGX_RTMP_OCLP_PUBLISH) {
+        ngx_rtmp_send_status(s, "NetStream.Publish.Forbidden", "status",
+                "Publish stream Forbidden");
+    } else {
+        s->status = 403;
+        ngx_rtmp_send_status(s, "NetStream.Play.Forbidden", "status",
+                "Play stream Forbidden");
+    }
+    ngx_rtmp_finalize_session(s);
 }
 
-void
-ngx_rtmp_oclp_pnotify_start(ngx_rtmp_session_t *s, unsigned publishing)
+static ngx_int_t
+ngx_rtmp_oclp_pnotify_start(ngx_rtmp_session_t *s, ngx_uint_t type)
 {
     ngx_rtmp_oclp_app_conf_t   *oacf;
     ngx_rtmp_oclp_event_t      *event;
     ngx_rtmp_oclp_ctx_t        *ctx;
     ngx_netcall_ctx_t          *nctx;
-    ngx_uint_t                  type;
-
-    if (s->relay || s->interprocess) {
-        return;
-    }
-
-    type = publishing? NGX_RTMP_OCLP_PUBLISH: NGX_RTMP_OCLP_PLAY;
 
     oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
 
     if (oacf->events[type].nelts == 0) {
-        return;
+        return NGX_DECLINED;
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
     if (ctx == NULL) {
         ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_oclp_ctx_t));
         if (ctx == NULL) {
-            return;
+            ngx_log_error(NGX_LOG_ERR, s->log, 0, "palloc oclp ctx failed");
+            return NGX_ERROR;
         }
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_oclp_module);
     }
 
     event = oacf->events[type].elts;
 
-    if (oacf->events[type].nelts &&
-        (event->stage & NGX_RTMP_OCLP_START) == NGX_RTMP_OCLP_START)
-    {
-        nctx = ngx_netcall_create_ctx(type, &event->groupid,
-                event->stage, event->timeout, event->update, 0);
+    nctx = ngx_netcall_create_ctx(type, &event->groupid,
+            event->stage, event->timeout, event->update, 0);
 
-        ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
-                                 NGX_RTMP_OCLP_START);
-        nctx->handler = ngx_rtmp_oclp_pnotify_start_handle;
-        nctx->data = s;
+    ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
+            NGX_RTMP_OCLP_START);
+    nctx->handler = ngx_rtmp_oclp_pnotify_start_handle;
+    nctx->data = s;
 
-        ctx->nctx = nctx;
+    ctx->nctx = nctx;
+    ctx->type = type;
 
-        ngx_log_error(NGX_LOG_INFO, s->log, 0, "oclp %s start create %V",
-                ngx_rtmp_oclp_app_type[nctx->type], &nctx->url);
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "oclp %s start create %V",
+            ngx_rtmp_oclp_app_type[nctx->type], &nctx->url);
 
-        ngx_netcall_create(nctx, s->log);
-    }
+    ngx_netcall_create(nctx, s->log);
+
+    return NGX_OK;
 }
 
-void
+static void
 ngx_rtmp_oclp_pnotify_done(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_oclp_ctx_t        *ctx;
@@ -1460,6 +1481,73 @@ ngx_rtmp_oclp_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
 }
 
 static ngx_int_t
+ngx_rtmp_oclp_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
+{
+    ngx_rtmp_oclp_ctx_t        *octx;
+
+    if (s->relay || s->interprocess) {
+        goto next;
+    }
+
+    switch (ngx_rtmp_oclp_pnotify_start(s, NGX_RTMP_OCLP_PUBLISH)) {
+    case NGX_OK:
+        break;
+    case NGX_DECLINED:
+        goto next;
+    default:
+        return NGX_ERROR;
+    }
+
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+    ngx_memcpy(&octx->publish_v, v, sizeof(ngx_rtmp_publish_t));
+
+    return NGX_OK;
+
+next:
+    return next_publish(s, v);
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
+{
+    ngx_rtmp_oclp_ctx_t        *octx;
+
+    if (s->relay || s->interprocess) {
+        goto next;
+    }
+
+    switch (ngx_rtmp_oclp_pnotify_start(s, NGX_RTMP_OCLP_PLAY)) {
+    case NGX_OK:
+        break;
+    case NGX_DECLINED:
+        goto next;
+    default:
+        return NGX_ERROR;
+    }
+
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+    ngx_memcpy(&octx->play_v, v, sizeof(ngx_rtmp_play_t));
+
+    return NGX_OK;
+
+next:
+    return next_play(s, v);
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
+{
+    if (s->relay || s->interprocess) {
+        goto next;
+    }
+
+    ngx_rtmp_oclp_pnotify_done(s);
+
+next:
+    return next_close_stream(s, v);
+}
+
+static ngx_int_t
 ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
 {
     ngx_rtmp_core_main_conf_t  *cmcf;
@@ -1484,6 +1572,15 @@ ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
 
     next_pull_close = ngx_live_pull_close;
     ngx_live_pull_close = ngx_rtmp_oclp_pull_close;
+
+    next_publish = ngx_rtmp_publish;
+    ngx_rtmp_publish = ngx_rtmp_oclp_publish;
+
+    next_play = ngx_rtmp_play;
+    ngx_rtmp_play = ngx_rtmp_oclp_play;
+
+    next_close_stream = ngx_rtmp_close_stream;
+    ngx_rtmp_close_stream = ngx_rtmp_oclp_close_stream;
 
     return NGX_OK;
 }

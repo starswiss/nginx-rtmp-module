@@ -220,6 +220,9 @@ ngx_rtmp_close_session_handler(ngx_event_t *e)
 
     s = e->data;
     c = s->connection;
+    if (c) {
+        c->destroyed = 1;
+    }
 
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "async close session");
 
@@ -336,9 +339,6 @@ ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
         return;
     }
 
-    if (c) {
-        c->destroyed = 1;
-    }
     e = &s->close;
     e->data = s;
     e->handler = ngx_rtmp_close_session_handler;
