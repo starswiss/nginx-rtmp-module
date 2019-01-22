@@ -708,12 +708,16 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     ngx_rtmp_oclp_event_t *event, ngx_netcall_ctx_t *nctx, ngx_uint_t stage)
 {
     size_t                      len;
-    u_char                     *p;
+    u_char                     *p, *buf;
 
     len = event->url.len + sizeof("?call=&act=&domain=&app=&name=") - 1
         + ngx_strlen(ngx_rtmp_oclp_app_type[nctx->type])
         + ngx_strlen(ngx_rtmp_oclp_stage[stage])
         + s->domain.len + s->app.len + s->name.len;
+
+    if (event->groupid.len) {
+        len += sizeof("&groupid=") - 1 + event->groupid.len;
+    }
 
     if (event->args.len) {
         len += event->args.len + 1;
@@ -724,13 +728,23 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
         return;
     }
 
-    p = url->data;
-    p = ngx_snprintf(p, len, "%V?call=%s&act=%s&domain=%V&app=%V&name=%V",
+    buf = url->data;
+    p = ngx_snprintf(buf, len, "%V?call=%s&act=%s&domain=%V&app=%V&name=%V",
             &event->url, ngx_rtmp_oclp_app_type[nctx->type],
             ngx_rtmp_oclp_stage[stage], &s->domain, &s->app, &s->name);
+    len -= p - buf;
+    buf = p;
+
+    if (event->groupid.len) {
+        p = ngx_snprintf(buf, len, "&groupid=%V", &event->groupid);
+        len -= p - buf;
+        buf = p;
+    }
 
     if (event->args.len) {
-        p = ngx_snprintf(p, len, "%s&%V", p, &event->args);
+        p = ngx_snprintf(buf, len, "&%V", p, &event->args);
+        len -= p - buf;
+        buf = p;
     }
 
     url->len = p - url->data;
@@ -1190,6 +1204,7 @@ ngx_rtmp_oclp_relay_start(ngx_rtmp_session_t *s, ngx_rtmp_oclp_event_t *event,
         return NGX_DECLINED;
     }
     rs->publishing = publishing;
+    rs->groupid = event->groupid;
     rs->live_stream = s->live_stream;
     ngx_live_create_ctx(rs, publishing);
 

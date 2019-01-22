@@ -204,6 +204,8 @@ struct ngx_rtmp_session_s {
     uint32_t                buflen;
     uint32_t                ack_size;
 
+    ngx_str_t               groupid;
+
     /* app/name */
     ngx_str_t               stream;
 

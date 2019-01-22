@@ -720,10 +720,10 @@ ngx_rtmp_cmd_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     ngx_log_error(NGX_LOG_INFO, s->log, 0,
             "publish: name='%V' pargs='%V' app='%V' args='%V' flashver='%V' "
             "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
-            "scheme='%V' domain='%V' serverid='%V' stream='%V'",
+            "scheme='%V' domain='%V' serverid='%V' stream='%V' groupid='%V'",
             &s->name, &s->pargs, &s->app, &s->args, &s->flashver,
             &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
-            &s->scheme, &s->domain, &s->serverid, &s->stream);
+            &s->scheme, &s->domain, &s->serverid, &s->stream, &s->groupid);
 
     return NGX_OK;
 }
@@ -789,10 +789,10 @@ ngx_rtmp_cmd_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ngx_log_error(NGX_LOG_INFO, s->log, 0,
             "play: name='%V' pargs='%V' app='%V' args='%V' flashver='%V' "
             "swf_url='%V' tc_url='%V' page_url='%V' acodecs=%uD vcodecs=%uD "
-            "scheme='%V' domain='%V' serverid='%V' stream='%V'",
+            "scheme='%V' domain='%V' serverid='%V' stream='%V' groupid='%V'",
             &s->name, &s->pargs, &s->app, &s->args, &s->flashver,
             &s->swf_url, &s->tc_url, &s->page_url, s->acodecs, s->vcodecs,
-            &s->scheme, &s->domain, &s->serverid, &s->stream);
+            &s->scheme, &s->domain, &s->serverid, &s->stream, &s->groupid);
 
     return NGX_OK;
 }
