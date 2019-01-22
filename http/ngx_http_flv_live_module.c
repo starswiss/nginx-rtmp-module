@@ -49,7 +49,7 @@ typedef struct {
 static ngx_command_t  ngx_http_flv_live_commands[] = {
 
     { ngx_string("flv_live"),
-      NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
+      NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_http_flv_live,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
@@ -630,7 +630,6 @@ ngx_http_flv_live(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_http_core_loc_conf_t           *clcf;
     ngx_http_flv_live_loc_conf_t       *hflcf;
     ngx_str_t                          *value;
-    ngx_uint_t                          n;
 
     clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
     clcf->handler = ngx_http_flv_live_handler;
@@ -641,29 +640,6 @@ ngx_http_flv_live(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     hflcf->ls = ngx_rtmp_find_relation_port(cf->cycle, &value[1]);
     if (hflcf->ls == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
-    for (n = 2; n < cf->args->nelts; ++n) {
-#define PARSE_CONF_ARGS(conf, arg)                              \
-        {                                                       \
-        size_t len = sizeof(#arg"=") - 1;                       \
-        if (ngx_memcmp(value[n].data, #arg"=", len) == 0) {     \
-            conf->arg.data = value[n].data + len;               \
-            conf->arg.len = value[n].len - len;                 \
-            continue;                                           \
-        }                                                       \
-        }
-
-        PARSE_CONF_ARGS(hflcf, app);
-        PARSE_CONF_ARGS(hflcf, flashver);
-        PARSE_CONF_ARGS(hflcf, swf_url);
-        PARSE_CONF_ARGS(hflcf, tc_url);
-        PARSE_CONF_ARGS(hflcf, page_url);
-#undef PARSE_CONF_ARGS
-
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                "\"%V\" para not support", &value[n]);
         return NGX_CONF_ERROR;
     }
 
