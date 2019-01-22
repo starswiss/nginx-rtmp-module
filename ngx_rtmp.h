@@ -640,7 +640,6 @@ ngx_rtmp_session_t *ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf);
 ngx_rtmp_session_t *ngx_rtmp_create_relay_session(ngx_rtmp_session_t *s,
     void *tag);
 void ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c);
-void ngx_rtmp_close_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_finalize_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_handshake(ngx_rtmp_session_t *s);

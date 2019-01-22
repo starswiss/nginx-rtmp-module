@@ -213,6 +213,38 @@ ngx_rtmp_close_connection(ngx_connection_t *c)
 
 
 static void
+ngx_rtmp_close_session(ngx_rtmp_session_t *s)
+{
+    if (s->ping_evt.timer_set) {
+        ngx_del_timer(&s->ping_evt);
+    }
+
+    if (s->in_old_pool) {
+        NGX_DESTROY_POOL(s->in_old_pool);
+    }
+
+    if (s->in_pool) {
+        NGX_DESTROY_POOL(s->in_pool);
+    }
+
+    if (s->live_type == NGX_HTTP_FLV_LIVE) {
+        ngx_put_chainbufs(s->in_streams[0].in);
+    }
+
+    ngx_rtmp_free_handshake_buffers(s);
+
+    ngx_rtmp_free_merge_frame(s);
+
+    while (s->out_pos != s->out_last) {
+        ngx_rtmp_shared_free_frame(s->out[s->out_pos++]);
+        s->out_pos %= s->out_queue;
+    }
+
+    NGX_DESTROY_POOL(s->pool);
+}
+
+
+static void
 ngx_rtmp_close_session_handler(ngx_event_t *e)
 {
     ngx_rtmp_session_t                 *s;
@@ -276,38 +308,6 @@ ngx_rtmp_async_finalize_http_request(ngx_event_t *ev)
             ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
         }
     }
-}
-
-
-void
-ngx_rtmp_close_session(ngx_rtmp_session_t *s)
-{
-    if (s->ping_evt.timer_set) {
-        ngx_del_timer(&s->ping_evt);
-    }
-
-    if (s->in_old_pool) {
-        NGX_DESTROY_POOL(s->in_old_pool);
-    }
-
-    if (s->in_pool) {
-        NGX_DESTROY_POOL(s->in_pool);
-    }
-
-    if (s->live_type == NGX_HTTP_FLV_LIVE) {
-        ngx_put_chainbufs(s->in_streams[0].in);
-    }
-
-    ngx_rtmp_free_handshake_buffers(s);
-
-    ngx_rtmp_free_merge_frame(s);
-
-    while (s->out_pos != s->out_last) {
-        ngx_rtmp_shared_free_frame(s->out[s->out_pos++]);
-        s->out_pos %= s->out_queue;
-    }
-
-    NGX_DESTROY_POOL(s->pool);
 }
 
 
