@@ -859,7 +859,7 @@ ngx_rtmp_log_set_names(ngx_rtmp_session_t *s, u_char *name, u_char *args)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_log_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_log_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_log_ctx_t));
         if (ctx == NULL) {
             return NULL;
         }
@@ -867,7 +867,7 @@ ngx_rtmp_log_set_names(ngx_rtmp_session_t *s, u_char *name, u_char *args)
         lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_log_module);
 
         if (lacf->logs) {
-            if (ngx_array_init(&ctx->timers, s->connection->pool,
+            if (ngx_array_init(&ctx->timers, s->pool,
                 lacf->logs->nelts, sizeof(ngx_rtmp_log_timer_ctx_t)) != NGX_OK)
             {
                 return NULL;
@@ -911,14 +911,14 @@ ngx_rtmp_log_write(ngx_rtmp_session_t *s, ngx_rtmp_log_t *log, u_char *buf,
         }
 
         if (now - log->error_log_time > 59) {
-            ngx_log_error(NGX_LOG_ALERT, s->connection->log, err,
+            ngx_log_error(NGX_LOG_ALERT, s->log, err,
                           ngx_write_fd_n " to \"%s\" failed", name);
             log->error_log_time = now;
         }
     }
 
     if (now - log->error_log_time > 59) {
-        ngx_log_error(NGX_LOG_ALERT, s->connection->log, err,
+        ngx_log_error(NGX_LOG_ALERT, s->log, err,
                       ngx_write_fd_n " to \"%s\" was incomplete: %z of %uz",
                       name, n, len);
         log->error_log_time = now;
@@ -947,7 +947,7 @@ ngx_rtmp_log_pre_write(ngx_rtmp_session_t *s, ngx_rtmp_log_t *log)
     len += NGX_LINEFEED_SIZE;
 
     if (len > MAX_ACCESS_LOG_LINE_LEN) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "Access line len %z greater than %d",
                 len, MAX_ACCESS_LOG_LINE_LEN);
         ngx_rtmp_finalize_session(s);
@@ -1000,7 +1000,7 @@ ngx_rtmp_log_add_trunc_timer(ngx_rtmp_session_t *s, ngx_rtmp_log_ctx_t *ctx,
     e = &ltctx->event;
 
     e->data = ltctx;
-    e->log = s->connection->log;
+    e->log = s->log;
     e->handler = ngx_rtmp_log_trunc_timer;
 
     t = log->trunc_timer - ngx_current_msec % log->trunc_timer;

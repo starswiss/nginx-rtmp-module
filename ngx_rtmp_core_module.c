@@ -204,20 +204,6 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       offsetof(ngx_rtmp_core_srv_conf_t, buflen),
       NULL },
 
-    { ngx_string("push_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_core_app_conf_t, push_reconnect),
-      NULL },
-
-    { ngx_string("pull_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_core_app_conf_t, pull_reconnect),
-      NULL },
-
       ngx_null_command
 };
 
@@ -448,8 +434,6 @@ ngx_rtmp_core_create_app_conf(ngx_conf_t *cf)
 
     conf->merge_frame = NGX_CONF_UNSET_UINT;
     conf->tcp_nodelay = NGX_CONF_UNSET;
-    conf->push_reconnect = NGX_CONF_UNSET_MSEC;
-    conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
 
     return conf;
 }
@@ -463,8 +447,6 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 
     ngx_conf_merge_uint_value(conf->merge_frame, prev->merge_frame, 32);
     ngx_conf_merge_value(conf->tcp_nodelay, prev->tcp_nodelay, 1);
-    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
-    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
 
     return NGX_CONF_OK;
 }

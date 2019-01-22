@@ -118,7 +118,7 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
     if (*ll) {
         ll = &(*ll)->next;
     }
-    *ll = ngx_rbuf_state(r);
+    *ll = ngx_rbuf_state(r, detail);
 
     if (*ll) {
         ll = &(*ll)->next;

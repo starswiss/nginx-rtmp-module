@@ -149,7 +149,7 @@ ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
     nmsg = (s->out_last - s->out_pos) % s->out_queue + 1;
 
     if (nmsg >= s->out_queue) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "link frame nmsg(%ui) >= out_queue(%O)", nmsg, s->out_queue);
         return NGX_AGAIN;
     }
@@ -324,7 +324,7 @@ ngx_rtmp_gop_print_cache(ngx_rtmp_session_t *s, ngx_rtmp_gop_ctx_t *ctx)
         *p++ = ' ';
     }
 
-    ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->log, 0,
             "[%z %z] [%p %p] %s", ctx->gop_pos, ctx->gop_last, ctx->aac_header,
             ctx->avc_header, content);
 #endif
@@ -345,7 +345,7 @@ ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_gop_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_gop_ctx_t)
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_gop_ctx_t)
                           + s->out_queue * sizeof(ngx_rtmp_frame_t *));
         if (ctx == NULL) {
             return NGX_ERROR;
@@ -355,14 +355,14 @@ ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 
     nmsg = (ctx->gop_last - ctx->gop_pos) % s->out_queue + 1;
     if (nmsg >= s->out_queue) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "cache frame nmsg(%ui) >= out_queue(%z)", nmsg, s->out_queue);
         return NGX_AGAIN;
     }
 
     ngx_rtmp_gop_set_avframe_tag(frame);
 
-    ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->log, 0,
             "cache frame: %ud[%d %d], %ud, %ud",
             frame->hdr.type, frame->keyframe, frame->av_header,
             frame->hdr.timestamp, frame->hdr.mlen);
@@ -514,7 +514,7 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
     ssctx = ngx_rtmp_get_module_ctx(ss, ngx_rtmp_gop_module);
     if (ssctx == NULL) {
-        ssctx = ngx_pcalloc(ss->connection->pool, sizeof(ngx_rtmp_gop_ctx_t));
+        ssctx = ngx_pcalloc(ss->pool, sizeof(ngx_rtmp_gop_ctx_t));
         if (ssctx == NULL) {
             return NGX_ERROR;
         }

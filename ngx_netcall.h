@@ -35,8 +35,7 @@ struct ngx_netcall_ctx_s {
 
 
 ngx_netcall_ctx_t *ngx_netcall_create_ctx(ngx_uint_t type, ngx_str_t *groupid,
-    ngx_uint_t stage, ngx_msec_t timeout, ngx_int_t retries, ngx_msec_t update,
-    ngx_uint_t idx);
+    ngx_uint_t stage, ngx_msec_t timeout, ngx_msec_t update, ngx_uint_t idx);
 
 void ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log);
 void ngx_netcall_destroy(ngx_netcall_ctx_t *nctx);
