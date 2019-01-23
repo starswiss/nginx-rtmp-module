@@ -19,6 +19,14 @@ static void ngx_rtmp_close_connection(ngx_connection_t *c);
 static u_char * ngx_rtmp_log_error(ngx_log_t *log, u_char *buf, size_t len);
 
 
+typedef struct {
+    ngx_str_t              *client;
+    ngx_rtmp_session_t     *session;
+    void                   *data;       // combined log
+    ngx_log_handler_pt      handler;    // combined log handler
+} ngx_rtmp_error_log_ctx_t;
+
+
 void
 ngx_rtmp_init_connection(ngx_connection_t *c)
 {
@@ -185,6 +193,12 @@ ngx_rtmp_log_error(ngx_log_t *log, u_char *buf, size_t len)
         p = ngx_snprintf(buf, len, ", stream: %V", &s->stream);
         len -= p - buf;
         buf = p;
+    }
+
+    if (ctx->data) { // combined log
+        log->data = ctx->data;
+        p = ctx->handler(log, p, len);
+        log->data = ctx;
     }
 
     return p;
@@ -357,6 +371,17 @@ ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s)
     ngx_rtmp_fire_event(s, NGX_RTMP_DISCONNECT, NULL, NULL);
 
     ngx_rtmp_close_session(s);
+}
+
+
+void
+ngx_rtmp_set_combined_log(ngx_rtmp_session_t *s, void *d, ngx_log_handler_pt h)
+{
+    ngx_rtmp_error_log_ctx_t       *ctx;
+
+    ctx = s->log->data;
+    ctx->data = d;
+    ctx->handler = h;
 }
 
 

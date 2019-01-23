@@ -569,12 +569,6 @@ typedef struct {
 
 
 typedef struct {
-    ngx_str_t              *client;
-    ngx_rtmp_session_t     *session;
-} ngx_rtmp_error_log_ctx_t;
-
-
-typedef struct {
     ngx_int_t             (*preconfiguration)(ngx_conf_t *cf);
     ngx_int_t             (*postconfiguration)(ngx_conf_t *cf);
 
@@ -641,6 +635,9 @@ void ngx_rtmp_init_connection(ngx_connection_t *c);
 ngx_rtmp_session_t *ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf);
 ngx_rtmp_session_t *ngx_rtmp_create_relay_session(ngx_rtmp_session_t *s,
     void *tag);
+
+void ngx_rtmp_set_combined_log(ngx_rtmp_session_t *s, void *d,
+    ngx_log_handler_pt h);
 void ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c);
 void ngx_rtmp_finalize_session(ngx_rtmp_session_t *s);
 void ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s);

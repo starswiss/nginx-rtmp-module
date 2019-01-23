@@ -551,6 +551,8 @@ ngx_live_relay_httpflv_send_request(ngx_rtmp_session_t *s,
     s->live_type = NGX_HTTP_FLV_LIVE;
 
     s->connection = hcr->connection;
+    ngx_rtmp_set_combined_log(s, hcr->connection->log->data,
+            hcr->connection->log->handler);
     s->log->connection = s->connection->number;
 
     return NGX_OK;
