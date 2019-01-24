@@ -707,13 +707,26 @@ static void
 ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     ngx_rtmp_oclp_event_t *event, ngx_netcall_ctx_t *nctx, ngx_uint_t stage)
 {
+    ngx_request_url_t           ru;
     size_t                      len;
     u_char                     *p, *buf;
+    unsigned                    fill = 0;
+
+    ngx_memzero(&ru, sizeof(ngx_request_url_t));
+    ngx_parse_request_url(&ru, &event->url);
 
     len = event->url.len + sizeof("?call=&act=&domain=&app=&name=") - 1
         + ngx_strlen(ngx_rtmp_oclp_app_type[nctx->type])
         + ngx_strlen(ngx_rtmp_oclp_stage[stage])
         + s->domain.len + s->app.len + s->name.len;
+
+    if (ru.args.len == 0 && ru.path.len == 0) { // no args and no path
+        p = event->url.data + event->url.len - 1;
+        if (*p != '/') { // need fill '/' at end of url
+            fill = 1;
+            ++len;
+        }
+    }
 
     if (event->groupid.len) {
         len += sizeof("&groupid=") - 1 + event->groupid.len;
@@ -729,9 +742,22 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     }
 
     buf = url->data;
-    p = ngx_snprintf(buf, len, "%V?call=%s&act=%s&domain=%V&app=%V&name=%V",
-            &event->url, ngx_rtmp_oclp_app_type[nctx->type],
-            ngx_rtmp_oclp_stage[stage], &s->domain, &s->app, &s->name);
+    p = ngx_snprintf(buf, len , "%V", &event->url);
+    if (fill) {
+        *p++ = '/';
+    }
+    len -= p - buf;
+    buf = p;
+
+    if (ru.args.len) { // url already has args
+        p = ngx_snprintf(buf, len, "&call=%s&act=%s&domain=%V&app=%V&name=%V",
+                ngx_rtmp_oclp_app_type[nctx->type],
+                ngx_rtmp_oclp_stage[stage], &s->domain, &s->app, &s->name);
+    } else {
+        p = ngx_snprintf(buf, len, "?call=%s&act=%s&domain=%V&app=%V&name=%V",
+                ngx_rtmp_oclp_app_type[nctx->type],
+                ngx_rtmp_oclp_stage[stage], &s->domain, &s->app, &s->name);
+    }
     len -= p - buf;
     buf = p;
 
@@ -742,7 +768,7 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     }
 
     if (event->args.len) {
-        p = ngx_snprintf(buf, len, "&%V", p, &event->args);
+        p = ngx_snprintf(buf, len, "&%V", &event->args);
         len -= p - buf;
         buf = p;
     }
