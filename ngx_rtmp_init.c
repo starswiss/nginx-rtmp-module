@@ -483,6 +483,98 @@ destroy:
 }
 
 
+ngx_rtmp_session_t *
+ngx_rtmp_create_static_session(ngx_live_relay_t *relay,
+        ngx_rtmp_addr_conf_t *addr_conf, void *tag)
+{
+    ngx_rtmp_session_t         *rs;
+    ngx_live_relay_ctx_t       *rctx;
+    ngx_uint_t                  n;
+    ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_rtmp_core_app_conf_t  **cacfp;
+
+    rs = ngx_rtmp_create_session(addr_conf);
+    if (rs == NULL) {
+        return NULL;
+    }
+
+    rs->static_pull = 1;
+    rs->relay = 1;
+
+    // clone para from origin session
+#define NGX_RTMP_RELAY_SESSION_COPY_PARA(to, from)                  \
+    if (ngx_copy_str(rs->pool, &rs->to, &relay->from) != NGX_OK) {  \
+        goto destroy;                                               \
+    }
+
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(app, app);
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(name, name);
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(pargs, pargs);
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(page_url, referer);
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(flashver, user_agent);
+
+    NGX_RTMP_RELAY_SESSION_COPY_PARA(stream, stream);
+#undef NGX_RTMP_RELAY_SESSION_COPY_PARA
+
+    rs->tc_url.len = sizeof("rtmp://") - 1 + relay->domain.len
+                   + sizeof("/") - 1 + relay->app.len;
+    rs->tc_url.data = ngx_pcalloc(rs->pool, rs->tc_url.len);
+    if (rs->tc_url.data == NULL) {
+        goto destroy;
+    }
+    ngx_snprintf(rs->tc_url.data, rs->tc_url.len, "rtmp://%V/%V",
+            &relay->domain, &relay->app);
+
+    ngx_rtmp_cmd_middleware_init(rs);
+
+    if (ngx_rtmp_set_virtual_server(rs, &rs->domain)) {
+        goto destroy;
+    }
+    cscf = ngx_rtmp_get_module_srv_conf(rs, ngx_rtmp_core_module);
+
+    rs->live_server = ngx_live_create_server(&rs->serverid);
+
+    cacfp = cscf->applications.elts;
+    for (n = 0; n < cscf->applications.nelts; ++n, ++cacfp) {
+        if ((*cacfp)->name.len == rs->app.len &&
+            ngx_strncmp((*cacfp)->name.data, rs->app.data, rs->app.len) == 0)
+        {
+            /* found app! */
+            rs->app_conf = (*cacfp)->app_conf;
+            break;
+        }
+    }
+
+    // create relay ctx
+    rctx = ngx_pcalloc(rs->pool, sizeof(ngx_live_relay_ctx_t));
+    if (rctx == NULL) {
+        goto destroy;
+    }
+    rctx->domain = rs->domain;
+    rctx->app = rs->app;
+    rctx->args = rs->args;
+    rctx->name = rs->name;
+    rctx->pargs = rs->pargs;
+
+    rctx->referer = rs->page_url;
+    rctx->user_agent = rs->flashver;
+    rctx->swf_url = rs->swf_url;
+    rctx->acodecs = rs->acodecs;
+    rctx->vcodecs = rs->vcodecs;
+
+    rctx->tag = tag;
+
+    ngx_rtmp_set_ctx(rs, rctx, ngx_live_relay_module);
+
+    return rs;
+
+destroy:
+    ngx_rtmp_close_session(rs);
+
+    return NULL;
+}
+
+
 // if return NULL, memory must be error
 ngx_rtmp_session_t *
 ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf)

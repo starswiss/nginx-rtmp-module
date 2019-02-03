@@ -1393,7 +1393,7 @@ ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
         goto next;
     }
 
-    if (s->relay) {
+    if (s->relay && s->static_pull == 0) {
         goto next;
     }
 

@@ -1259,9 +1259,8 @@ ngx_rtmp_regex_compile(ngx_conf_t *cf, ngx_regex_compile_t *rc)
 #endif
 
 static ngx_int_t
-ngx_rtmp_find_virtual_server(ngx_connection_t *c,
-    ngx_rtmp_virtual_names_t *virtual_names, ngx_str_t *host,
-    ngx_rtmp_session_t *s, ngx_rtmp_core_srv_conf_t **cscfp)
+ngx_rtmp_find_virtual_server(ngx_rtmp_virtual_names_t *virtual_names,
+    ngx_str_t *host, ngx_rtmp_session_t *s, ngx_rtmp_core_srv_conf_t **cscfp)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
 
@@ -1322,8 +1321,7 @@ ngx_rtmp_set_virtual_server(ngx_rtmp_session_t *s, ngx_str_t *host)
 
     addr_conf = s->addr_conf;
 
-    rc = ngx_rtmp_find_virtual_server(s->connection, addr_conf->virtual_names,
-                                      host, s, &cscf);
+    rc = ngx_rtmp_find_virtual_server(addr_conf->virtual_names, host, s, &cscf);
 
     if (rc == NGX_ERROR) {
         return NGX_ERROR;

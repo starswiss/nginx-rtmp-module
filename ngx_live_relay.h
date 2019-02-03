@@ -62,20 +62,6 @@ typedef struct {
 
 
 typedef struct {
-    ngx_array_t                 urls; // ngx_live_relay_url_t
-
-    ngx_str_t                   domain;
-    ngx_str_t                   app;
-    ngx_str_t                   name;
-    ngx_str_t                   pargs;
-    ngx_str_t                   referer;    // rtmp page_url
-    ngx_str_t                   user_agent; // rtmp flashver
-
-    void                       *tag; // module create relay
-} ngx_live_relay_t;
-
-
-typedef struct {
     ngx_msec_t                  failed_reconnect;
     ngx_msec_t                  relay_reconnect;
 } ngx_live_relay_app_conf_t;

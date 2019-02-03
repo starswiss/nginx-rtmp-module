@@ -15,9 +15,6 @@
 
 
 static char *ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static char *ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd,
-       void *conf);
-
 static void *ngx_rtmp_control_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_rtmp_control_merge_loc_conf(ngx_conf_t *cf,
        void *parent, void *child);
@@ -51,8 +48,6 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t                      control;
-
-    ngx_listening_t                *ls;
 } ngx_rtmp_control_loc_conf_t;
 
 
@@ -73,13 +68,6 @@ static ngx_command_t  ngx_rtmp_control_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_rtmp_control_loc_conf_t, control),
       ngx_rtmp_control_masks },
-
-    { ngx_string("rtmp_control_port"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
-      ngx_rtmp_control_port,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      0,
-      NULL },
 
       ngx_null_command
 };
@@ -737,23 +725,4 @@ ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     clcf->handler = ngx_rtmp_control_handler;
 
     return ngx_conf_set_bitmask_slot(cf, cmd, conf);
-}
-
-
-static char *
-ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    ngx_rtmp_control_loc_conf_t        *rclcf;
-    ngx_str_t                          *value;
-
-    rclcf = conf;
-
-    value = cf->args->elts;
-
-    rclcf->ls = ngx_rtmp_find_relation_port(cf->cycle, &value[1]);
-    if (rclcf->ls == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
-    return NGX_CONF_OK;
 }

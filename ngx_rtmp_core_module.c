@@ -993,14 +993,12 @@ ngx_rtmp_core_server_name(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     return NGX_CONF_OK;
 }
 
-ngx_rtmp_addr_conf_t *
-ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
+static ngx_rtmp_addr_conf_t *
+ngx_rtmp_get_addr_conf(ngx_listening_t *ls, struct sockaddr *sa, socklen_t len)
 {
     ngx_uint_t                  i;
     ngx_rtmp_addr_conf_t       *addr_conf;
     ngx_rtmp_port_t            *port;
-    struct sockaddr             sa;
-    socklen_t                   len;
     struct sockaddr_in         *sin;
     ngx_rtmp_in_addr_t         *addr;
 #if (NGX_HAVE_INET6)
@@ -1011,16 +1009,11 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
     port = ls->servers;
     addr_conf = NULL;
 
-    len = sizeof(struct sockaddr);
-    if (getsockname(c->fd, &sa, &len) != 0) {
-        return NULL;
-    }
-
     if (port->naddrs > 1) {
-        switch (sa.sa_family) {
+        switch (sa->sa_family) {
 #if (NGX_HAVE_INET6)
         case AF_INET6:
-            sin6 = (struct sockaddr_in6 *) &sa;
+            sin6 = (struct sockaddr_in6 *) sa;
 
             addr6 = port->addrs;
 
@@ -1037,7 +1030,7 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
             break;
 #endif
         default:
-            sin = (struct sockaddr_in *) &sa;
+            sin = (struct sockaddr_in *) sa;
 
             addr = port->addrs;
 
@@ -1055,7 +1048,7 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
         }
     } else {
 
-        switch (sa.sa_family) {
+        switch (sa->sa_family) {
 #if (NGX_HAVE_INET6)
         case AF_INET6:
             addr6 = port->addrs;
@@ -1073,8 +1066,8 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
     return addr_conf;
 }
 
-ngx_listening_t *
-ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
+ngx_rtmp_addr_conf_t *
+ngx_rtmp_find_related_addr_conf(ngx_cycle_t *cycle, ngx_str_t *addr)
 {
     ngx_url_t                   u;
     ngx_listening_t            *ls;
@@ -1082,14 +1075,14 @@ ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
 
     ngx_memzero(&u, sizeof(ngx_url_t));
 
-    u.url = *url;
+    u.url = *addr;
     u.listen = 1;
     u.default_port = 0;
 
     if (ngx_parse_url(cycle->pool, &u) != NGX_OK) {
         if (u.err) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
-                    "Relation port err: %V", url);
+                    "Relation port err: %V", addr);
         }
 
         return NULL;
@@ -1097,19 +1090,19 @@ ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
 
     ls = cycle->listening.elts;
 
-    for (i = 0; i < cycle->listening.nelts; ++i) {
+    for (i = 0; i < cycle->listening.nelts; ++i, ++ls) {
 
-        if (ls[i].handler == ngx_rtmp_init_connection
-            && ls[i].socklen == u.socklen
-                && ngx_memcmp(ls[i].sockaddr, (u_char *) &u.sockaddr,
+        if (ls->handler == ngx_rtmp_init_connection
+            && ls->socklen == u.socklen
+                && ngx_memcmp(ls->sockaddr, (u_char *) &u.sockaddr,
                     u.socklen) == 0)
         {
-            return &ls[i];
+            return ngx_rtmp_get_addr_conf(ls, &u.sockaddr.sockaddr, u.socklen);
         }
     }
 
     ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
-            "Can not find relation port: %V", url);
+            "Can not find relation port: %V", addr);
 
     return NULL;
 }

@@ -245,7 +245,7 @@ ngx_live_relay_simple_push(ngx_rtmp_session_t *s)
         goto next;
     }
 
-    if (s->relay) {
+    if (s->relay && s->static_pull == 0) {
         goto next;
     }
 

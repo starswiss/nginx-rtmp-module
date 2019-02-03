@@ -247,6 +247,7 @@ struct ngx_rtmp_session_s {
 
     /* auto-pushed? */
     unsigned                interprocess:1;
+    unsigned                static_pull:1;
     unsigned                relay:1;
     unsigned                played:1;
     unsigned                published:1;
@@ -615,6 +616,11 @@ typedef struct {
 #define ngx_rtmp_conf_get_module_app_conf(cf, module)                        \
     ((ngx_rtmp_conf_ctx_t *) cf->ctx)->app_conf[module.ctx_index]
 
+#define ngx_rtmp_cycle_get_module_main_conf(cycle, module)                   \
+    (cycle->conf_ctx[ngx_rtmp_module.index] ?                                \
+        ((ngx_rtmp_conf_ctx_t *) cycle->conf_ctx[ngx_rtmp_module.index])     \
+            ->main_conf[module.ctx_index]:                                   \
+        NULL)
 
 /* for virtual server */
 #if (NGX_PCRE)
@@ -631,10 +637,29 @@ char* ngx_rtmp_message_type(uint8_t type);
 char* ngx_rtmp_user_message_type(uint16_t evt);
 #endif
 
+
+typedef struct {
+    ngx_array_t                 urls; // ngx_live_relay_url_t
+
+    ngx_str_t                   domain;
+    ngx_str_t                   app;
+    ngx_str_t                   name;
+    ngx_str_t                   pargs;
+    ngx_str_t                   referer;    // rtmp page_url
+    ngx_str_t                   user_agent; // rtmp flashver
+
+    ngx_str_t                   stream;
+
+    void                       *tag; // module create relay
+} ngx_live_relay_t;
+
+
 void ngx_rtmp_init_connection(ngx_connection_t *c);
 ngx_rtmp_session_t *ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf);
 ngx_rtmp_session_t *ngx_rtmp_create_relay_session(ngx_rtmp_session_t *s,
     void *tag);
+ngx_rtmp_session_t *ngx_rtmp_create_static_session(ngx_live_relay_t *relay,
+    ngx_rtmp_addr_conf_t *addr_conf, void *tag);
 
 void ngx_rtmp_set_combined_log(ngx_rtmp_session_t *s, void *d,
     ngx_log_handler_pt h);
@@ -728,10 +753,8 @@ ngx_int_t ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame);
 ngx_int_t ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss);
 
 /* RTMP Relation server */
-ngx_rtmp_addr_conf_t *ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls,
-        ngx_connection_t *c);
-ngx_listening_t *ngx_rtmp_find_relation_port(ngx_cycle_t *cycle,
-        ngx_str_t *url);
+ngx_rtmp_addr_conf_t *ngx_rtmp_find_related_addr_conf(ngx_cycle_t *cycle,
+        ngx_str_t *addr);
 
 /* Note on priorities:
  * the bigger value the lower the priority.

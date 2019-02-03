@@ -42,7 +42,7 @@ typedef struct {
     ngx_str_t                   tc_url;
     ngx_str_t                   page_url;
 
-    ngx_listening_t            *ls;
+    ngx_rtmp_addr_conf_t       *addr_conf;
 } ngx_http_flv_live_loc_conf_t;
 
 
@@ -503,7 +503,6 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     ngx_rtmp_play_t                     v;
     ngx_int_t                           rc;
     ngx_uint_t                          n;
-    ngx_rtmp_addr_conf_t               *addr_conf;
     ngx_rtmp_core_srv_conf_t           *cscf;
     ngx_rtmp_core_app_conf_t          **cacfp;
     ngx_http_cleanup_t                 *cln;
@@ -524,13 +523,8 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
 
     hflcf = ngx_http_get_module_loc_conf(r, ngx_http_flv_live_module);
 
-    addr_conf = ngx_rtmp_get_addr_conf_by_listening(hflcf->ls, r->connection);
-    if (addr_conf == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
     /* create fake session */
-    s = ngx_rtmp_create_session(addr_conf);
+    s = ngx_rtmp_create_session(hflcf->addr_conf);
     if (s == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -640,8 +634,8 @@ ngx_http_flv_live(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     value = cf->args->elts;
 
-    hflcf->ls = ngx_rtmp_find_relation_port(cf->cycle, &value[1]);
-    if (hflcf->ls == NULL) {
+    hflcf->addr_conf = ngx_rtmp_find_related_addr_conf(cf->cycle, &value[1]);
+    if (hflcf->addr_conf == NULL) {
         return NGX_CONF_ERROR;
     }
 

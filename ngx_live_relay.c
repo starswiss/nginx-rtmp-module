@@ -357,7 +357,7 @@ ngx_live_relay_pull_close(ngx_rtmp_session_t *s)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_live_relay_module);
 
-    if (s->live_stream->play_ctx) { // has player in stream
+    if (s->live_stream->play_ctx || s->static_pull) { // has player in stream
         // ctx is NULL, s is a normal publisher
         // ctx is not NULL, s is a puller, if giveup flag set
         //      no need to create pull reconnect
