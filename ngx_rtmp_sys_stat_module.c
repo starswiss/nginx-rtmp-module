@@ -20,6 +20,9 @@
 static char *ngx_rtmp_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
+extern ngx_chain_t *ngx_live_relay_static_state(ngx_http_request_t *r);
+
+
 static ngx_command_t  ngx_rtmp_sys_stat_commands[] = {
 
     { ngx_string("sys_stat"),
@@ -109,6 +112,11 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
         ll = &(*ll)->next;
     }
     *ll = ngx_live_state(r);
+
+    if (*ll) {
+        ll = &(*ll)->next;
+    }
+    *ll = ngx_live_relay_static_state(r);
 
     if (*ll) {
         ll = &(*ll)->next;

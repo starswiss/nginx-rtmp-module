@@ -603,3 +603,40 @@ ngx_live_relay_static_postconfiguration(ngx_conf_t *cf)
 
     return NGX_OK;
 }
+
+
+ngx_chain_t *
+ngx_live_relay_static_state(ngx_http_request_t *r)
+{
+    ngx_live_relay_static_main_conf_t  *rsmcf;
+    ngx_chain_t                        *cl;
+    ngx_buf_t                          *b;
+    size_t                              len;
+
+    rsmcf = ngx_rtmp_cycle_get_module_main_conf(ngx_cycle,
+                                                ngx_live_relay_static_module);
+
+    len = sizeof("##########rtmp live relay static##########\n") - 1
+        + sizeof("relay_static alloc frame: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("relay_static free frame: \n") - 1 + NGX_OFF_T_LEN;
+
+    cl = ngx_alloc_chain_link(r->pool);
+    if (cl == NULL) {
+        return NULL;
+    }
+    cl->next = NULL;
+
+    b = ngx_create_temp_buf(r->pool, len);
+    if (b == NULL) {
+        return NULL;
+    }
+    cl->buf = b;
+
+    b->last = ngx_snprintf(b->last, len,
+            "##########rtmp live relay static##########\n"
+            "relay_static alloc frame: %ui\n"
+            "relay_static free frame: %ui\n",
+            rsmcf->nalloc, rsmcf->nfree);
+
+    return cl;
+}
