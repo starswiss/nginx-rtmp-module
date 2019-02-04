@@ -218,6 +218,7 @@ ngx_live_get_stream(ngx_str_t *stream)
     *ngx_cpymem(st->name, stream->data, stream->len) = 0;
     st->pslot = -1;
     st->epoch = ngx_current_msec;
+    ngx_map_init(&st->pubctx, ngx_map_hash_int, ngx_cmp_int);
 
     return st;
 }

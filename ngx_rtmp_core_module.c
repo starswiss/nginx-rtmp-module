@@ -1106,3 +1106,45 @@ ngx_rtmp_find_related_addr_conf(ngx_cycle_t *cycle, ngx_str_t *addr)
 
     return NULL;
 }
+
+
+ngx_int_t
+ngx_rtmp_arg(ngx_rtmp_session_t *s, u_char *name, size_t len, ngx_str_t *value)
+{
+    u_char                     *p, *last;
+
+    if (s->pargs.len == 0) {
+        return NGX_DECLINED;
+    }
+
+    p = s->pargs.data;
+    last = p + s->pargs.len;
+
+    for ( /* void */ ; p < last; p++) {
+
+        /* we need '=' after name, so drop one char from last */
+
+        p = ngx_strlcasestrn(p, last - 1, name, len - 1);
+
+        if (p == NULL) {
+            return NGX_DECLINED;
+        }
+
+        if ((p == s->pargs.data || *(p - 1) == '&') && *(p + len) == '=') {
+
+            value->data = p + len + 1;
+
+            p = ngx_strlchr(p, last, '&');
+
+            if (p == NULL) {
+                p = s->pargs.data + s->pargs.len;
+            }
+
+            value->len = p - value->data;
+
+            return NGX_OK;
+        }
+    }
+
+    return NGX_DECLINED;
+}

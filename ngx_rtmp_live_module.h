@@ -14,6 +14,7 @@
 #include "ngx_rtmp_cmd_module.h"
 #include "ngx_rtmp_bandwidth.h"
 #include "ngx_rtmp_streams.h"
+#include "ngx_map.h"
 
 
 typedef struct {
@@ -25,6 +26,8 @@ typedef struct {
 
 
 struct ngx_rtmp_live_ctx_s {
+    ngx_map_node_t                      node;
+    ngx_int_t                           pubpri;
     ngx_rtmp_session_t                 *session;
     ngx_live_stream_t                  *stream;
     ngx_rtmp_live_ctx_t                *next;

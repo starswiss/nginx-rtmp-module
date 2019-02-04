@@ -423,6 +423,7 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
     ngx_rtmp_live_ctx_t            *ctx;
     ngx_live_stream_t              *st;
     ngx_rtmp_live_app_conf_t       *lacf;
+    ngx_str_t                       pubpri;
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
     if (lacf == NULL) {
@@ -464,7 +465,20 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
     }
 
     if (publisher) {
-        if (st->publishing) {
+        // set publish priority
+        if (s->relay) { // relay pull
+            ctx->pubpri = -1;
+        } else {
+            if (ngx_rtmp_arg(s, (u_char *) "pubpri", 6, &pubpri) == NGX_OK) {
+                ctx->pubpri = ngx_atoi(pubpri.data, pubpri.len);
+                if (ctx->pubpri == NGX_ERROR) { // invalid publish priority
+                    ctx->pubpri = 0;
+                }
+            }
+        }
+
+        // duplicate publish priority
+        if (ngx_map_find(&st->pubctx, (intptr_t) ctx->pubpri)) {
             ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "live: already publishing");
 
@@ -473,6 +487,9 @@ ngx_rtmp_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
 
             return;
         }
+
+        ctx->node.raw_key = (intptr_t) ctx->pubpri;
+        ngx_map_insert(&st->pubctx, &ctx->node, 0);
 
         st->publishing = 1;
     }
@@ -521,6 +538,10 @@ ngx_rtmp_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "live: leave '%s'", ctx->stream->name);
+
+    if (s->publishing) {
+        ngx_map_delete(&s->live_stream->pubctx, (intptr_t) ctx->pubpri);
+    }
 
     if (ctx->stream->publishing && ctx->publishing) {
         ctx->stream->publishing = 0;
@@ -772,7 +793,13 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     /* broadcast to all subscribers */
 
     for (pctx = ctx->stream->ctx; pctx; pctx = pctx->next) {
-        if (pctx == ctx || pctx->paused) {
+        // not the highest priority
+        if (ngx_map_rbegin(&ctx->stream->pubctx) != &ctx->node) {
+            break;
+        }
+
+        // do not send to publish session
+        if (pctx->publishing || pctx->paused) {
             continue;
         }
 

@@ -19,6 +19,7 @@
 #include "ngx_rtmp_bandwidth.h"
 #include "ngx_http_client.h"
 #include "ngx_netcall.h"
+#include "ngx_map.h"
 
 
 #if (NGX_WIN32)
@@ -357,6 +358,7 @@ struct ngx_live_stream_s {
     ngx_live_stream_t          *next;
 
     /* for live */
+    ngx_map_t                   pubctx;
     ngx_rtmp_live_ctx_t        *ctx;
     ngx_rtmp_bandwidth_t        bw_in;
     ngx_rtmp_bandwidth_t        bw_in_audio;
@@ -755,6 +757,10 @@ ngx_int_t ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss);
 /* RTMP Relation server */
 ngx_rtmp_addr_conf_t *ngx_rtmp_find_related_addr_conf(ngx_cycle_t *cycle,
         ngx_str_t *addr);
+
+/* core */
+ngx_int_t ngx_rtmp_arg(ngx_rtmp_session_t *s, u_char *name, size_t len,
+        ngx_str_t *value);
 
 /* Note on priorities:
  * the bigger value the lower the priority.
