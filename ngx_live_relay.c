@@ -139,6 +139,7 @@ ngx_live_relay_create(ngx_rtmp_session_t *rs, ngx_live_relay_t *relay)
     if (ctx->idx >= relay->urls.nelts) {
         ctx->idx = 0;
     }
+    ctx->failed_delay = 0;
 
     url = relay->urls.elts;
     url += ctx->idx;

@@ -193,7 +193,7 @@ ngx_live_relay_static_relay(ngx_rtmp_session_t *s,
     sctx = ngx_pcalloc(rs->pool, sizeof(ngx_live_relay_static_ctx_t));
     if (sctx == NULL) {
         ngx_log_error(NGX_LOG_ERR, rs->log, 0,
-                "relay simple, create simple relay ctx failed");
+                "relay static, create static relay ctx failed");
         ngx_rtmp_finalize_session(rs);
 
         return NGX_OK;
