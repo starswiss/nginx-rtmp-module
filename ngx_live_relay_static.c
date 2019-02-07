@@ -471,9 +471,13 @@ ngx_live_relay_static_init_main_dconf(ngx_conf_t *cf, void *conf)
 error:
     // recycle static relay resource
     node = ngx_map_begin(&rsmcf->pulls[used]);
-    for (; node; node = ngx_map_next(node)) {
+    while (node) {
         srelay = (ngx_live_relay_static_relay_t *) node;
+        node = ngx_map_next(node);
         ngx_live_relay_put_static_relay(rsmcf, srelay);
+
+        ngx_map_delete(&rsmcf->pulls[used],
+                       (intptr_t) &srelay->relay->stream);
     }
 
     return rc;
