@@ -176,6 +176,12 @@ ngx_live_relay_static_relay(ngx_rtmp_session_t *s,
                                                 ngx_live_relay_static_module);
     addr_conf = ngx_rtmp_find_related_addr_conf((ngx_cycle_t *) ngx_cycle,
                                                 &rsmcf->pull_port);
+    if (addr_conf == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "relay static, find related add_conf for %V failed",
+                &rsmcf->pull_port);
+        return NGX_DECLINED;
+    }
 
     rs = ngx_rtmp_create_static_session(relay, addr_conf,
                                         &ngx_live_relay_static_module);
