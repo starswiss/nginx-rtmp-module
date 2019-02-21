@@ -14,7 +14,7 @@
 
 
 typedef struct {
-    ngx_flag_t                  open;
+    unsigned                    open; /* 0 close, 1 open, 2 wait for key */
 
     time_t                      last_time;
 
@@ -50,6 +50,10 @@ extern ngx_live_record_done_pt      ngx_live_record_done;
 
 
 extern ngx_module_t                 ngx_live_record_module;
+
+
+const char *ngx_live_record_open(ngx_rtmp_session_t *s);
+const char *ngx_live_record_close(ngx_rtmp_session_t *s);
 
 
 #endif

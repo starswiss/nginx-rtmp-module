@@ -351,6 +351,10 @@ ngx_live_record_open_index(ngx_rtmp_session_t *s)
 static void
 ngx_live_record_close_index(ngx_rtmp_session_t *s, ngx_live_record_ctx_t *ctx)
 {
+    if (ctx->index.fd == -1 || ctx->file.fd == -1) {
+        return;
+    }
+
     ngx_live_record_write_index(s, ctx, 0);
 
     ngx_close_file(ctx->file.fd);
@@ -652,6 +656,40 @@ ngx_live_record_aac(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_OK;
     }
 
+    if (ctx->open == 2) {
+        if (codec_ctx->avc_header == NULL) { // pure audio
+            ctx->open = 1;
+        } else {
+            return NGX_OK;
+        }
+    }
+
+    lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
+
+    if (ctx->last_time == 0) {
+        ctx->publish_epoch = ngx_current_msec;
+        ctx->last_time = ngx_time() - ngx_time() % (lracf->interval / 1000);
+        ctx->basetime = ctx->publish_epoch - h->timestamp;
+
+        ctx->starttime = ngx_current_msec;
+        ctx->endtime = ngx_current_msec;
+
+        // open new index and file
+        if (ngx_live_record_open_index(s) == NGX_ERROR) {
+            ctx->last_time = 0;
+
+            if (ctx->index.fd != -1) {
+                ngx_close_file(ctx->index.fd);
+            }
+
+            if (ctx->file.fd != -1) {
+                ngx_close_file(ctx->file.fd);
+            }
+
+            return NGX_OK;
+        }
+    }
+
     /*
      * FLV Audio data config
      *  SoundFormat 4bits, SoundRate 2bits, SoundSize 1bit, SoundType 1bit
@@ -708,8 +746,6 @@ ngx_live_record_aac(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     // reopen index and ts file
     curr_time = ctx->basetime + h->timestamp;
     if (codec_ctx->avc_header == NULL) { // no video
-        lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
-
         last_time = curr_time / 1000 - (curr_time / 1000)
                                      % (lracf->interval / 1000);
         if (curr_time > ctx->starttime + lracf->min_fraglen) {
@@ -781,6 +817,40 @@ ngx_live_record_avc(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
      *  5: video info/command frame
      */
     ftype = (fmt & 0xf0) >> 4;
+
+    if (ctx->open == 2) { // wait for key frame
+        if (ftype == 1) {
+            ctx->open = 1;
+        } else {
+            return NGX_OK;
+        }
+    }
+
+    lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
+
+    if (ctx->last_time == 0) {
+        ctx->publish_epoch = ngx_current_msec;
+        ctx->last_time = ngx_time() - ngx_time() % (lracf->interval / 1000);
+        ctx->basetime = ctx->publish_epoch - h->timestamp;
+
+        ctx->starttime = ngx_current_msec;
+        ctx->endtime = ngx_current_msec;
+
+        // open new index and file
+        if (ngx_live_record_open_index(s) == NGX_ERROR) {
+            ctx->last_time = 0;
+
+            if (ctx->index.fd != -1) {
+                ngx_close_file(ctx->index.fd);
+            }
+
+            if (ctx->file.fd != -1) {
+                ngx_close_file(ctx->file.fd);
+            }
+
+            return NGX_OK;
+        }
+    }
 
     if (ngx_live_record_copy(s, NULL, &p, 1, &in) != NGX_OK) {
         return NGX_ERROR;
@@ -901,8 +971,6 @@ ngx_live_record_avc(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     // reopen index and ts file
-    lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
-
     curr_time = ctx->basetime + h->timestamp;
     last_time = curr_time / 1000 - (curr_time / 1000)
                                  % (lracf->interval / 1000);
@@ -954,7 +1022,6 @@ static ngx_int_t
 ngx_live_record_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ngx_chain_t *in)
 {
-    ngx_live_record_app_conf_t     *lracf;
     ngx_live_record_ctx_t          *ctx;
     ngx_rtmp_codec_ctx_t           *codec_ctx;
 
@@ -965,33 +1032,6 @@ ngx_live_record_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     if (ngx_rtmp_is_codec_header(in)) {
         return NGX_OK;
-    }
-
-    lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
-
-    // ignore cts here
-    if (ctx->last_time == 0) {
-        ctx->publish_epoch = ngx_current_msec;
-        ctx->last_time = ngx_time() - ngx_time() % (lracf->interval / 1000);
-        ctx->basetime = ctx->publish_epoch - h->timestamp;
-
-        ctx->starttime = ngx_current_msec;
-        ctx->endtime = ngx_current_msec;
-
-        // open new index and file
-        if (ngx_live_record_open_index(s) == NGX_ERROR) {
-            ctx->last_time = 0;
-
-            if (ctx->index.fd != -1) {
-                ngx_close_file(ctx->index.fd);
-            }
-
-            if (ctx->file.fd != -1) {
-                ngx_close_file(ctx->file.fd);
-            }
-
-            return NGX_OK;
-        }
     }
 
     codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
@@ -1050,6 +1090,55 @@ next:
 }
 
 
+const char *
+ngx_live_record_open(ngx_rtmp_session_t *s)
+{
+    ngx_live_record_ctx_t          *ctx;
+
+    if (s->interprocess) {
+        return "interprocess";
+    }
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
+
+    if (ctx->open) {
+        return NGX_CONF_OK;
+    }
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "record: open %V:", &s->stream);
+
+    ctx->open = 2;
+
+    return NGX_CONF_OK;
+}
+
+
+const char *
+ngx_live_record_close(ngx_rtmp_session_t *s)
+{
+    ngx_live_record_ctx_t          *ctx;
+
+    if (s->interprocess) {
+        return "interprocess";
+    }
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
+
+    if (ctx->open == 0) {
+        return NGX_CONF_OK;
+    }
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "record: close %V:", &s->stream);
+
+    ngx_live_record_close_index(s, ctx);
+
+    ctx->open = 0;
+    ctx->last_time = 0;
+
+    return NGX_CONF_OK;
+}
+
+
 static ngx_int_t
 ngx_live_record_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 {
@@ -1067,7 +1156,10 @@ ngx_live_record_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     ngx_rtmp_set_ctx(s, ctx, ngx_live_record_module);
 
     lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
-    ctx->open = lracf->record;
+
+    if (lracf->record) {
+        ctx->open = 1;
+    }
     ctx->pubv = *v;
     ctx->index.fd = -1;
     ctx->file.fd = -1;
