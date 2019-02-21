@@ -16,6 +16,7 @@
 typedef struct {
     ngx_fd_t    fd;
     ngx_log_t  *log;
+    off_t       file_size;
     unsigned    encrypt:1;
     unsigned    size:4;
     u_char      buf[16];
@@ -39,6 +40,7 @@ ngx_int_t ngx_rtmp_mpegts_init_encryption(ngx_rtmp_mpegts_file_t *file,
 ngx_int_t ngx_rtmp_mpegts_open_file(ngx_rtmp_mpegts_file_t *file, u_char *path,
     ngx_log_t *log);
 ngx_int_t ngx_rtmp_mpegts_close_file(ngx_rtmp_mpegts_file_t *file);
+ngx_int_t ngx_rtmp_mpegts_write_header(ngx_rtmp_mpegts_file_t *file);
 ngx_int_t ngx_rtmp_mpegts_write_frame(ngx_rtmp_mpegts_file_t *file,
     ngx_rtmp_mpegts_frame_t *f, ngx_buf_t *b);
 

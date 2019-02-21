@@ -94,6 +94,8 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
             return NGX_ERROR;
         }
 
+        file->file_size += rc;
+
         return NGX_OK;
     }
 
@@ -154,7 +156,7 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_rtmp_mpegts_write_header(ngx_rtmp_mpegts_file_t *file)
 {
     return ngx_rtmp_mpegts_write_file(file, ngx_rtmp_mpegts_header,
