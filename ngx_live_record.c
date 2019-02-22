@@ -372,8 +372,11 @@ ngx_live_record_reopen_index(ngx_rtmp_session_t *s, ngx_live_record_ctx_t *ctx,
     // close old index and file
     ngx_live_record_close_index(s, ctx);
 
+    ngx_live_record_update(s);
+
     ctx->last_time = last_time;
 
+    ctx->begintime = curr_time;
     ctx->starttime = curr_time;
     ctx->endtime = curr_time;
 
@@ -671,6 +674,7 @@ ngx_live_record_aac(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ctx->last_time = ngx_time() - ngx_time() % (lracf->interval / 1000);
         ctx->basetime = ctx->publish_epoch - h->timestamp;
 
+        ctx->begintime = ngx_current_msec;
         ctx->starttime = ngx_current_msec;
         ctx->endtime = ngx_current_msec;
 
@@ -833,6 +837,7 @@ ngx_live_record_avc(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ctx->last_time = ngx_time() - ngx_time() % (lracf->interval / 1000);
         ctx->basetime = ctx->publish_epoch - h->timestamp;
 
+        ctx->begintime = ngx_current_msec;
         ctx->starttime = ngx_current_msec;
         ctx->endtime = ngx_current_msec;
 
@@ -1073,20 +1078,7 @@ ngx_live_record_update_handle(ngx_rtmp_session_t *s)
 static ngx_int_t
 ngx_live_record_done_handle(ngx_rtmp_session_t *s)
 {
-    ngx_live_record_ctx_t          *ctx;
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
-    if (!ctx->open) {
-        goto next;
-    }
-
-    // close index and media file
-    ngx_live_record_close_index(s, ctx);
-
-    ctx->open = 0;
-
-next:
-    return next_close_stream(s, &ctx->closev);
+    return NGX_OK;
 }
 
 
@@ -1129,6 +1121,8 @@ ngx_live_record_close(ngx_rtmp_session_t *s)
     }
 
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "record: close %V:", &s->stream);
+
+    ngx_live_record_done(s);
 
     ngx_live_record_close_index(s, ctx);
 
@@ -1182,9 +1176,14 @@ ngx_live_record_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         goto next;
     }
 
-    ctx->closev = *v;
+    if (ctx->open == 0) {
+        goto next;
+    }
 
-    return ngx_live_record_done(s);
+    ngx_live_record_done(s);
+
+    ngx_live_record_close_index(s, ctx);
+    ctx->open = 0;
 
 next:
     return next_close_stream(s, v);

@@ -24,11 +24,11 @@ typedef struct {
     ngx_file_t                  file;
 
     ngx_rtmp_publish_t          pubv;
-    ngx_rtmp_close_stream_t     closev;
 
     ngx_uint_t                  audio_cc;
     ngx_uint_t                  video_cc;
 
+    ngx_msec_t                  begintime;
     ngx_msec_t                  starttime;
     ngx_msec_t                  endtime;
     off_t                       startsize;
