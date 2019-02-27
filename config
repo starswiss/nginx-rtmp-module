@@ -10,8 +10,8 @@ RTMP_CORE_MODULES="                                         \
                 ngx_rtmp_codec_module                       \
                 ngx_rtmp_access_module                      \
                 ngx_rtmp_record_module                      \
-                ngx_live_record_module                      \
                 ngx_rtmp_live_module                        \
+                ngx_live_record_module                      \
                 ngx_live_relay_module                       \
                 ngx_live_relay_rtmp_module                  \
                 ngx_live_relay_static_module                \

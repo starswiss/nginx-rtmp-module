@@ -9,10 +9,16 @@
 #include <ngx_core.h>
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_cmd_module.h"
+#include "ngx_live_record.h"
 #include "ngx_live_relay.h"
 #include "ngx_dynamic_resolver.h"
 #include "ngx_toolkit_misc.h"
 #include "ngx_netcall.h"
+
+
+static ngx_live_record_start_pt     next_record_start;
+static ngx_live_record_update_pt    next_record_update;
+static ngx_live_record_done_pt      next_record_done;
 
 
 static ngx_rtmp_publish_pt          next_publish;
@@ -140,6 +146,8 @@ typedef struct {
 
 typedef struct {
     ngx_netcall_ctx_t          *nctx;
+    ngx_netcall_ctx_t          *rctx;
+
     ngx_rtmp_oclp_event_t      *event;
     ngx_uint_t                  type;
     ngx_live_relay_t           *relay;
@@ -710,37 +718,13 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     ngx_request_url_t           ru;
     size_t                      len;
     u_char                     *p, *buf;
+    ngx_live_record_ctx_t      *lrctx;
     unsigned                    fill = 0;
 
     ngx_memzero(&ru, sizeof(ngx_request_url_t));
     ngx_parse_request_url(&ru, &event->url);
 
-    len = event->url.len + sizeof("?call=&act=&domain=&app=&name=") - 1
-        + ngx_strlen(ngx_rtmp_oclp_app_type[nctx->type])
-        + ngx_strlen(ngx_rtmp_oclp_stage[stage])
-        + s->domain.len + s->app.len + s->name.len;
-
-    if (ru.args.len == 0 && ru.path.len == 0) { // no args and no path
-        p = event->url.data + event->url.len - 1;
-        if (*p != '/') { // need fill '/' at end of url
-            fill = 1;
-            ++len;
-        }
-    }
-
-    if (event->groupid.len) {
-        len += sizeof("&groupid=") - 1 + event->groupid.len;
-    }
-
-    if (event->args.len) {
-        len += event->args.len + 1;
-    }
-
-    url->data = ngx_pcalloc(nctx->pool, len);
-    if (url->data == NULL) {
-        return;
-    }
-
+    len = NGX_NETCALL_MAX_URL_LEN;
     buf = url->data;
     p = ngx_snprintf(buf, len , "%V", &event->url);
     if (fill) {
@@ -760,6 +744,16 @@ ngx_rtmp_oclp_common_url(ngx_str_t *url, ngx_rtmp_session_t *s,
     }
     len -= p - buf;
     buf = p;
+
+    if (nctx->type == NGX_RTMP_OCLP_RECORD && stage != NGX_RTMP_OCLP_START) {
+        lrctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
+        p = ngx_snprintf(buf, len, "&begintime=%M&endtime=%M&index=%V&file=%V",
+                lrctx->begintime, lrctx->endtime, &lrctx->index.name,
+                &lrctx->file.name);
+
+        len -= p - buf;
+        buf = p;
+    }
 
     if (event->groupid.len) {
         p = ngx_snprintf(buf, len, "&groupid=%V", &event->groupid);
@@ -1381,6 +1375,157 @@ ngx_rtmp_oclp_stream_done(ngx_rtmp_session_t *s)
     s->live_stream->stream_nctx = NULL;
 }
 
+static void
+ngx_rtmp_oclp_record_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
+{
+    ngx_rtmp_session_t         *s;
+    ngx_live_record_ctx_t      *ctx;
+
+    s = nctx->data;
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
+
+    if (code == NGX_HTTP_OK) {
+        ctx->open = 1;
+    } else if (code != -1) {
+        ctx->open = 0;
+    }
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0,
+            "oclp record receive code %i, open: %d", code, ctx->open);
+
+    if (next_record_start(s) != NGX_OK) {
+        ngx_rtmp_finalize_session(s);
+    }
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_record_start(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_oclp_app_conf_t   *oacf;
+    ngx_netcall_ctx_t          *nctx;
+    ngx_rtmp_oclp_ctx_t        *octx;
+    ngx_rtmp_oclp_event_t      *event;
+
+    oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
+
+    if (oacf->events[NGX_RTMP_OCLP_RECORD].nelts == 0) {
+        goto next;
+    }
+
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+    if (octx == NULL) {
+        octx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_oclp_ctx_t));
+        if (octx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->log, 0, "pcalloc oclp ctx failed");
+            goto next;
+        }
+        ngx_rtmp_set_ctx(s, octx, ngx_rtmp_oclp_module);
+    }
+
+    event = oacf->events[NGX_RTMP_OCLP_RECORD].elts;
+
+    nctx = ngx_netcall_create_ctx(NGX_RTMP_OCLP_RECORD, &event->groupid,
+            event->stage, event->timeout, event->update, 0);
+
+    ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
+                             NGX_RTMP_OCLP_START);
+    nctx->handler = ngx_rtmp_oclp_record_start_handle;
+    nctx->data = s;
+
+    octx->rctx = nctx;
+    octx->type = NGX_RTMP_OCLP_RECORD;
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "oclp record start create %V",
+            &nctx->url);
+
+    ngx_netcall_create(nctx, s->log);
+
+    return NGX_OK;
+
+next:
+    return next_record_start(s);
+}
+
+static void
+ngx_rtmp_oclp_record_update_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
+{
+    ngx_rtmp_session_t         *s;
+
+    s = nctx->data;
+
+    if (code != NGX_HTTP_OK) {
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                "oclp record update notify error: %i", code);
+    }
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_record_update(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_oclp_app_conf_t   *oacf;
+    ngx_netcall_ctx_t          *nctx;
+    ngx_rtmp_oclp_ctx_t        *octx;
+    ngx_rtmp_oclp_event_t      *event;
+
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+    if (octx == NULL || octx->rctx == NULL) {
+        goto next;
+    }
+
+    nctx = octx->rctx;
+
+    if ((nctx->stage & NGX_RTMP_OCLP_UPDATE) == NGX_RTMP_OCLP_UPDATE) {
+        oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
+        event = oacf->events[nctx->type].elts;
+
+        ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
+                                 NGX_RTMP_OCLP_UPDATE);
+        nctx->handler = ngx_rtmp_oclp_record_update_handle;
+
+        ngx_log_error(NGX_LOG_INFO, s->log, 0,
+                "oclp record update create %V %p", &nctx->url, nctx);
+
+        ngx_netcall_create(nctx, s->log);
+    }
+
+next:
+    return next_record_update(s);
+}
+
+static ngx_int_t
+ngx_rtmp_oclp_record_done(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_oclp_app_conf_t   *oacf;
+    ngx_netcall_ctx_t          *nctx;
+    ngx_rtmp_oclp_ctx_t        *octx;
+    ngx_rtmp_oclp_event_t      *event;
+
+    octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
+    if (octx == NULL || octx->rctx == NULL) {
+        goto next;
+    }
+
+    nctx = octx->rctx;
+
+    if ((nctx->stage & NGX_RTMP_OCLP_DONE) == NGX_RTMP_OCLP_DONE) {
+        oacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_oclp_module);
+        event = oacf->events[nctx->type].elts;
+
+        ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
+                                 NGX_RTMP_OCLP_DONE);
+
+        ngx_log_error(NGX_LOG_INFO, s->log, 0,
+                "oclp record done create %V %p", &nctx->url, nctx);
+
+        ngx_netcall_create(nctx, s->log);
+    }
+
+    ngx_netcall_destroy(nctx);
+
+next:
+    return next_record_done(s);
+}
+
 static ngx_int_t
 ngx_rtmp_oclp_push(ngx_rtmp_session_t *s)
 {
@@ -1602,6 +1747,17 @@ ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
     h = ngx_array_push(&cmcf->events[NGX_RTMP_MSG_VIDEO]);
     *h = ngx_rtmp_oclp_av;
 
+    /* record */
+    next_record_start = ngx_live_record_start;
+    ngx_live_record_start = ngx_rtmp_oclp_record_start;
+
+    next_record_update = ngx_live_record_update;
+    ngx_live_record_update = ngx_rtmp_oclp_record_update;
+
+    next_record_done = ngx_live_record_done;
+    ngx_live_record_done = ngx_rtmp_oclp_record_done;
+
+    /* pull & push */
     next_push = ngx_live_push;
     ngx_live_push = ngx_rtmp_oclp_push;
 
@@ -1614,6 +1770,7 @@ ngx_rtmp_oclp_postconfiguration(ngx_conf_t *cf)
     next_pull_close = ngx_live_pull_close;
     ngx_live_pull_close = ngx_rtmp_oclp_pull_close;
 
+    /* publish & play */
     next_publish = ngx_rtmp_publish;
     ngx_rtmp_publish = ngx_rtmp_oclp_publish;
 

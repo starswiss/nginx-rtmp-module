@@ -45,7 +45,7 @@ typedef ngx_int_t (*ngx_live_record_done_pt)(ngx_rtmp_session_t *s);
 
 
 extern ngx_live_record_start_pt     ngx_live_record_start;
-extern ngx_live_record_update_pt    ngxLive_record_update;
+extern ngx_live_record_update_pt    ngx_live_record_update;
 extern ngx_live_record_done_pt      ngx_live_record_done;
 
 

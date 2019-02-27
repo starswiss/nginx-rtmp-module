@@ -159,7 +159,7 @@ ngx_live_record_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     }
 
     *ngx_snprintf(path, sizeof(path) - 1, "%V/", &conf->path) = 0;
-    err = ngx_create_full_path(path, 0700);
+    err = ngx_create_full_path(path, 0755);
     if (err) {
         ngx_conf_log_error(NGX_LOG_CRIT, cf, err,
                 ngx_create_dir_n " \"%s\" failed", path);
@@ -211,7 +211,7 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
     ctx->file.name.len = p - ctx->file.name.data;
 
     // create dir
-    err = ngx_create_full_path(ctx->file.name.data, 0700);
+    err = ngx_create_full_path(ctx->file.name.data, 0755);
     if (err) {
         ngx_log_error(NGX_LOG_ERR, s->log, err,
                 ngx_create_dir_n " \"%V\" failed", &ctx->index.name);
@@ -320,7 +320,7 @@ ngx_live_record_open_index(ngx_rtmp_session_t *s)
     ctx->index.name.len = p - ctx->index.name.data;
 
     // create dir
-    err = ngx_create_full_path(ctx->index.name.data, 0700);
+    err = ngx_create_full_path(ctx->index.name.data, 0755);
     if (err) {
         ngx_log_error(NGX_LOG_ERR, s->log, err,
                 ngx_create_dir_n " \"%V\" failed", &ctx->index.name);
