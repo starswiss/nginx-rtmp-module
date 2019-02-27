@@ -39,6 +39,8 @@ typedef struct {
 
     ngx_msec_t                      min_fraglen;
     ngx_msec_t                      max_fraglen;
+
+    size_t                          buffer;
 } ngx_live_record_app_conf_t;
 
 
@@ -77,6 +79,13 @@ static ngx_command_t  ngx_live_record_commands[] = {
       ngx_conf_set_msec_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_live_record_app_conf_t, max_fraglen),
+      NULL },
+
+    { ngx_string("live_record_buffer"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_size_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_live_record_app_conf_t, buffer),
       NULL },
 
       ngx_null_command
@@ -126,6 +135,7 @@ ngx_live_record_create_app_conf(ngx_conf_t *cf)
     racf->interval = NGX_CONF_UNSET_MSEC;
     racf->min_fraglen = NGX_CONF_UNSET_MSEC;
     racf->max_fraglen = NGX_CONF_UNSET_MSEC;
+    racf->buffer = NGX_CONF_UNSET_SIZE;
 
     return racf;
 }
@@ -147,6 +157,7 @@ ngx_live_record_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_msec_value(conf->interval, prev->interval, 10 * 60 * 1000);
     ngx_conf_merge_msec_value(conf->min_fraglen, prev->min_fraglen, 8 * 1000);
     ngx_conf_merge_msec_value(conf->max_fraglen, prev->max_fraglen, 12 * 1000);
+    ngx_conf_merge_msec_value(conf->buffer, prev->buffer, 1024 * 1024);
 
     if (conf->path.data[conf->path.len - 1] == '/') {
         --conf->path.len;
@@ -167,6 +178,56 @@ ngx_live_record_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     }
 
     return NGX_CONF_OK;
+}
+
+
+static ssize_t
+ngx_live_record_flush(ngx_rtmp_mpegts_file_t *file)
+{
+    ssize_t                         rc;
+
+    rc = ngx_write_fd(file->fd, file->wbuf.pos,
+            file->wbuf.last - file->wbuf.pos);
+    if (rc < 0) {
+        ngx_log_error(NGX_LOG_ERR, file->log, ngx_errno,
+                "flush record buf error");
+        return rc;
+    }
+
+    file->file_size += rc;
+    file->wbuf.last = file->wbuf.pos;
+
+    return rc;
+}
+
+
+static ssize_t
+ngx_live_record_write_buf(ngx_rtmp_mpegts_file_t *file, u_char *in,
+        size_t in_size)
+{
+    u_char                         *p, *end;
+    size_t                          len;
+    ssize_t                         rc, n;
+
+    end = in + in_size;
+    n = 0;
+
+    for (p = in; p != end; /* void */ ) {
+        len = ngx_min(file->wbuf.end - file->wbuf.last, end - p);
+        file->wbuf.last = ngx_cpymem(file->wbuf.last, p, len);
+
+        p += len;
+        n += len;
+
+        if (file->wbuf.last == file->wbuf.end) {
+            rc = ngx_live_record_flush(file);
+            if (rc < 0) {
+                return rc;
+            }
+        }
+    }
+
+    return n;
 }
 
 
@@ -236,6 +297,19 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
         return NGX_ERROR;
     }
 
+    if (ctx->ts.wbuf.start == NULL) {
+        ctx->ts.wbuf.start = ngx_pcalloc(s->pool, lracf->buffer);
+        if (ctx->ts.wbuf.start == NULL) {
+            ngx_log_error(NGX_LOG_CRIT, s->log, 0,
+                    "record: alloc write buffer error");
+            return NGX_ERROR;
+        }
+
+        ctx->ts.wbuf.pos = ctx->ts.wbuf.last = ctx->ts.wbuf.start;
+        ctx->ts.wbuf.end = ctx->ts.wbuf.start + lracf->buffer;
+
+        ctx->ts.whandle = ngx_live_record_write_buf;
+    }
     ctx->ts.fd = ctx->file.fd;
     ctx->ts.log = s->log;
     ctx->ts.file_size = file_size;
@@ -247,6 +321,7 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
 
             return NGX_ERROR;
         }
+        ngx_live_record_flush(&ctx->ts);
     }
 
     ctx->startsize = ctx->ts.file_size;
@@ -261,6 +336,8 @@ ngx_live_record_write_index(ngx_rtmp_session_t *s, ngx_live_record_ctx_t *ctx,
         ngx_msec_t curr_time)
 {
     u_char                         *p, buf[1024];
+
+    ngx_live_record_flush(&ctx->ts);
 
     ctx->endsize = ctx->ts.file_size - 1;
 

@@ -13,7 +13,14 @@
 #include <openssl/aes.h>
 
 
-typedef struct {
+typedef struct ngx_rtmp_mpegts_file_s  ngx_rtmp_mpegts_file_t;
+
+
+typedef ssize_t (*ngx_rtmp_mpegts_write_pt) (ngx_rtmp_mpegts_file_t *file,
+        u_char *in, size_t in_size);
+
+
+struct ngx_rtmp_mpegts_file_s {
     ngx_fd_t    fd;
     ngx_log_t  *log;
     off_t       file_size;
@@ -22,7 +29,10 @@ typedef struct {
     u_char      buf[16];
     u_char      iv[16];
     AES_KEY     key;
-} ngx_rtmp_mpegts_file_t;
+
+    ngx_buf_t   wbuf;
+    ngx_rtmp_mpegts_write_pt whandle;
+};
 
 
 typedef struct {
