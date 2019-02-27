@@ -7,7 +7,6 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include "ngx_rtmp_cmd_module.h"
-#include "ngx_rtmp_record_module.h"
 #include "ngx_rtmp_eval.h"
 #include "ngx_poold.h"
 #include <stdlib.h>
@@ -21,7 +20,6 @@
 static ngx_rtmp_publish_pt              next_publish;
 static ngx_rtmp_play_pt                 next_play;
 static ngx_rtmp_close_stream_pt         next_close_stream;
-static ngx_rtmp_record_done_pt          next_record_done;
 #endif
 
 
@@ -1301,65 +1299,6 @@ ngx_rtmp_exec_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 next:
     return next_close_stream(s, v);
 }
-
-
-static ngx_int_t
-ngx_rtmp_exec_record_done(ngx_rtmp_session_t *s, ngx_rtmp_record_done_t *v)
-{
-    u_char                     c;
-    ngx_uint_t                 ext, dir;
-    ngx_rtmp_exec_ctx_t       *ctx;
-    ngx_rtmp_exec_app_conf_t  *eacf;
-
-    if (s->interprocess) {
-        goto next;
-    }
-
-    eacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_exec_module);
-    if (eacf == NULL || !eacf->active) {
-        goto next;
-    }
-
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_exec_module);
-    if (ctx == NULL) {
-        goto next;
-    }
-
-    ctx->recorder = v->recorder;
-    ctx->path = v->path;
-
-    ctx->dirname.data = ctx->path.data;
-    ctx->dirname.len = 0;
-
-    for (dir = ctx->path.len; dir > 0; dir--) {
-        c = ctx->path.data[dir - 1];
-        if (c == '/' || c == '\\') {
-            ctx->dirname.len = dir - 1;
-            break;
-        }
-    }
-
-    ctx->filename.data = ctx->path.data + dir;
-    ctx->filename.len = ctx->path.len - dir;
-
-    ctx->basename = ctx->filename;
-
-    for (ext = ctx->filename.len; ext > 0; ext--) {
-        if (ctx->filename.data[ext - 1] == '.') {
-            ctx->basename.len = ext - 1;
-            break;
-        }
-    }
-
-    ngx_rtmp_exec_unmanaged(s, &eacf->conf[NGX_RTMP_EXEC_RECORD_DONE],
-                            "record_done");
-
-    ngx_str_null(&v->recorder);
-    ngx_str_null(&v->path);
-
-next:
-    return next_record_done(s, v);
-}
 #endif /* NGX_WIN32 */
 
 
@@ -1595,9 +1534,6 @@ ngx_rtmp_exec_postconfiguration(ngx_conf_t *cf)
 
     next_close_stream = ngx_rtmp_close_stream;
     ngx_rtmp_close_stream = ngx_rtmp_exec_close_stream;
-
-    next_record_done = ngx_rtmp_record_done;
-    ngx_rtmp_record_done = ngx_rtmp_exec_record_done;
 
 #endif /* NGX_WIN32 */
 
