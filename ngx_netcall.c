@@ -110,6 +110,12 @@ ngx_netcall_create_ctx(ngx_uint_t type, ngx_str_t *groupid, ngx_uint_t stage,
         return NULL;
     }
 
+    ctx->url.data = ngx_pcalloc(pool, NGX_NETCALL_MAX_URL_LEN);
+    if (ctx->url.data == NULL) {
+        NGX_DESTROY_POOL(pool);
+        return NULL;
+    }
+
     ctx->pool = pool;
 
     ctx->idx = idx;

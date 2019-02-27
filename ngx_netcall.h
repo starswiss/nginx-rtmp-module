@@ -11,6 +11,8 @@
 #include "ngx_http_client.h"
 
 
+#define NGX_NETCALL_MAX_URL_LEN     2048
+
 typedef struct ngx_netcall_ctx_s  ngx_netcall_ctx_t;
 
 typedef void (* ngx_netcall_handler_pt)(ngx_netcall_ctx_t *ctx, ngx_int_t code);
