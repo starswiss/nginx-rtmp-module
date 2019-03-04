@@ -206,6 +206,11 @@ ngx_live_relay_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 {
     ngx_live_relay_ctx_t       *ctx;
 
+    // second publish will not trigger push
+    if (s->live_stream->publish_ctx->next != NULL) {
+        goto next;
+    }
+
     if (ngx_live_push(s) != NGX_OK) {
         return NGX_ERROR;
     }
