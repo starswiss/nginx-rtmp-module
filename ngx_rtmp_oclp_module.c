@@ -777,10 +777,10 @@ ngx_rtmp_oclp_common_timer(ngx_event_t *ev)
 
     nctx = ev->data;
 
-    ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "oclp %s update create %V",
+    ngx_log_error(NGX_LOG_INFO, ev->log, 0, "oclp %s update create %V",
             ngx_rtmp_oclp_app_type[nctx->type], &nctx->url);
 
-    ngx_netcall_create(nctx, ngx_cycle->log);
+    ngx_netcall_create(nctx, ev->log);
 }
 
 static void
@@ -788,14 +788,14 @@ ngx_rtmp_oclp_common_update_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 {
     ngx_event_t                *ev;
 
+    ev = &nctx->ev;
+    ev->handler = ngx_rtmp_oclp_common_timer;
+
     if (code != NGX_HTTP_OK) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+        ngx_log_error(NGX_LOG_ERR, ev->log, 0,
                 "oclp %s update notify error: %i",
                 ngx_rtmp_oclp_app_type[nctx->type], code);
     }
-
-    ev = &nctx->ev;
-    ev->handler = ngx_rtmp_oclp_common_timer;
 
     ngx_add_timer(ev, nctx->update);
 }
@@ -819,7 +819,6 @@ ngx_rtmp_oclp_common_update_create(ngx_rtmp_session_t *s,
         nctx->handler = ngx_rtmp_oclp_common_update_handle;
 
         ev = &nctx->ev;
-        ev->log = ngx_cycle->log;
         ev->data = nctx;
         ev->handler = ngx_rtmp_oclp_common_timer;
 
@@ -865,7 +864,7 @@ ngx_rtmp_oclp_pnotify_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
 
     if (code < NGX_HTTP_OK || code > NGX_HTTP_SPECIAL_RESPONSE) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp %s start notify error: %i",
                ngx_rtmp_oclp_app_type[nctx->type], code);
 
@@ -931,6 +930,7 @@ ngx_rtmp_oclp_pnotify_start(ngx_rtmp_session_t *s, ngx_uint_t type)
 
     nctx = ngx_netcall_create_ctx(type, &event->groupid,
             event->stage, event->timeout, event->update, 0);
+    nctx->ev.log = s->log;
 
     ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
             NGX_RTMP_OCLP_START);
@@ -1009,8 +1009,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     }
 
     if (code == -1) { // wait for oclp relay reconnect
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                "oclp relay start failed");
+        ngx_log_error(NGX_LOG_ERR, s->log, 0, "oclp relay start failed");
 
         ngx_rtmp_finalize_session(s); // only reconnect immediately
 
@@ -1018,7 +1017,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     }
 
     if (code >= 400) { // error finalize
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp relay start error: %i", code);
 
         if (s->publishing) { // relay pull
@@ -1041,7 +1040,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     /* redirect */
     local_name = ngx_netcall_header(nctx, &location);
     if (local_name == NULL) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp relay start has no Location when redirect");
         ngx_rtmp_finalize_session(s);
 
@@ -1194,6 +1193,7 @@ ngx_rtmp_oclp_relay_handler(ngx_event_t *ev)
 
         return;
     }
+    nctx->ev.log = s->log;
 
     ngx_rtmp_oclp_common_url(&nctx->url, s, event, nctx,
             NGX_RTMP_OCLP_START);
