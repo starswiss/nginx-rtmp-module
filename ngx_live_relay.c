@@ -360,10 +360,23 @@ static ngx_int_t
 ngx_live_relay_pull_close(ngx_rtmp_session_t *s)
 {
     ngx_live_relay_ctx_t       *ctx;
+    ngx_flag_t                  has_player;
+    ngx_rtmp_core_ctx_t        *cctx;;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_live_relay_module);
 
-    if (s->live_stream->play_ctx || s->static_pull) { // has player in stream
+    has_player = 0;
+
+    if (s->static_pull == 0) {
+        for (cctx = s->live_stream->play_ctx; cctx; cctx = cctx->next) {
+            if (cctx->session->relay == 0) { // has pure player, not relay push
+                has_player = 1;
+                break;
+            }
+        }
+    }
+
+    if (has_player || s->static_pull) { // has player in stream
         // ctx is NULL, s is a normal publisher
         // ctx is not NULL, s is a puller, if giveup flag set
         //      no need to create pull reconnect
