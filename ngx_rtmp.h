@@ -174,6 +174,17 @@ typedef struct ngx_live_stream_s    ngx_live_stream_t;
 typedef struct ngx_live_server_s    ngx_live_server_t;
 typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 
+#define NGX_LIVE_INIT               0
+#define NGX_LIVE_HANDSHAKE_DONE     1
+#define NGX_LIVE_CONNECT            2
+#define NGX_LIVE_CREATE_STREAM      3
+#define NGX_LIVE_PUBLISH            4
+#define NGX_LIVE_PLAY               5
+#define NGX_LIVE_AV                 6
+#define NGX_LIVE_CLOSE              7
+
+extern char *ngx_live_stage[];
+
 struct ngx_rtmp_session_s {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
 
@@ -288,6 +299,19 @@ struct ngx_rtmp_session_s {
     ngx_chain_t            *merge[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_uint_t              nframe;
     ngx_rtmp_prepared_pt    prepare_handler;
+
+    /* for trace and statistics */
+    ngx_uint_t              stage;
+    ngx_msec_t              init_time;
+    ngx_msec_t              handshake_done_time;
+    ngx_msec_t              connect_time;
+    ngx_msec_t              create_stream_time;
+    ngx_msec_t              ptime;                  /* publish or play time */
+    ngx_msec_t              first_data;             /* audio video or metadata*/
+    ngx_msec_t              first_metadata;
+    ngx_msec_t              first_audio;
+    ngx_msec_t              first_video;
+    ngx_msec_t              close_stream_time;
 
     /* circular buffer of RTMP message pointers */
     ngx_msec_t              timeout;

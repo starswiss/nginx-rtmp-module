@@ -250,8 +250,7 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 }
 
 ngx_int_t
-ngx_rtmp_close_stream_filter(ngx_rtmp_session_t *s,
-    ngx_rtmp_close_stream_t *v)
+ngx_rtmp_close_stream_filter(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
     if (s->closed) {
         ngx_log_error(NGX_LOG_INFO, s->log, 0, "session has been closed");
@@ -415,6 +414,9 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     s->live_server = ngx_live_create_server(&s->serverid);
 
+    s->stage = NGX_LIVE_CONNECT;
+    s->connect_time = ngx_current_msec;
+
     return ngx_rtmp_connect(s, &v);
 }
 
@@ -550,6 +552,9 @@ ngx_rtmp_cmd_create_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     }
 
     ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0, "createStream");
+
+    s->stage = NGX_LIVE_CREATE_STREAM;
+    s->create_stream_time = ngx_current_msec;
 
     return ngx_rtmp_create_stream(s, &v);
 }
@@ -710,6 +715,9 @@ ngx_rtmp_cmd_publish_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                    "publish: name='%s' args='%s' type=%s silent=%d",
                    v.name, v.args, v.type, v.silent);
 
+    s->stage = NGX_LIVE_PUBLISH;
+    s->ptime = ngx_current_msec;
+
     return ngx_rtmp_publish_filter(s, &v);
 }
 
@@ -778,6 +786,9 @@ ngx_rtmp_cmd_play_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                    v.name, v.args, (ngx_int_t) v.start,
                    (ngx_int_t) v.duration, (ngx_int_t) v.reset,
                    (ngx_int_t) v.silent);
+
+    s->stage = NGX_LIVE_PLAY;
+    s->ptime = ngx_current_msec;
 
     return ngx_rtmp_play_filter(s, &v);
 }
@@ -913,6 +924,9 @@ static ngx_int_t
 ngx_rtmp_cmd_disconnect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                         ngx_chain_t *in)
 {
+    s->stage = NGX_LIVE_CLOSE;
+    s->close_stream_time = ngx_current_msec;
+
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "disconnect");
 
     return ngx_rtmp_disconnect(s);

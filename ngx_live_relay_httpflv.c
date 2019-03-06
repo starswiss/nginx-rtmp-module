@@ -476,6 +476,9 @@ ngx_live_relay_httpflv_recv(void *request, ngx_http_request_t *hcr)
     s = request;
     status_code = ngx_http_client_status_code(hcr);
 
+    s->stage = NGX_LIVE_PLAY;
+    s->ptime = ngx_current_msec;
+
     if (status_code != NGX_HTTP_OK) {
         ngx_live_relay_httpflv_error(s, status_code);
         ngx_http_client_finalize_request(hcr, 1);
@@ -533,6 +536,9 @@ ngx_live_relay_httpflv_send_request(ngx_rtmp_session_t *s,
         { ngx_string("User-Agent"), ctx->user_agent },
         { ngx_null_string,          ngx_null_string }
     };
+
+    s->stage = NGX_LIVE_CONNECT;
+    s->connect_time = ngx_current_msec;
 
     hcr = ngx_http_client_get(s->log, &request_url, headers, s);
     ngx_http_client_set_read_handler(hcr, ngx_live_relay_httpflv_recv);

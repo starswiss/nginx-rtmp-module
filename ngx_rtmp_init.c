@@ -27,6 +27,18 @@ typedef struct {
 } ngx_rtmp_error_log_ctx_t;
 
 
+char *ngx_live_stage[] = {
+    "init",
+    "handshake_done",
+    "connect",
+    "create_stream",
+    "publish",
+    "play",
+    "audio_video",
+    "close_stream",
+};
+
+
 void
 ngx_rtmp_init_connection(ngx_connection_t *c)
 {
@@ -185,7 +197,8 @@ ngx_rtmp_log_error(ngx_log_t *log, u_char *buf, size_t len)
         return p;
     }
 
-    p = ngx_snprintf(buf, len, ", server: %V, session: %p", s->addr_text, s);
+    p = ngx_snprintf(buf, len, ", server: %V, session: %p, stage: %s",
+            s->addr_text, s, ngx_live_stage[s->stage]);
     len -= p - buf;
     buf = p;
 
@@ -644,6 +657,9 @@ ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf)
 
     s->log->handler = ngx_rtmp_log_error;
     s->log->data = ctx;
+
+    s->stage = NGX_LIVE_INIT;
+    s->init_time = ngx_current_msec;
 
     return s;
 

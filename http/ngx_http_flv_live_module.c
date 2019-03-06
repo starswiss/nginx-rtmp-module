@@ -577,6 +577,9 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
 
     s->prepare_handler = ngx_http_flv_live_prepare_out_chain;
 
+    s->stage = NGX_LIVE_PLAY;
+    s->ptime = ngx_current_msec;
+
     if (ngx_rtmp_play_filter(s, &v) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }

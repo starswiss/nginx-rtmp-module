@@ -371,6 +371,9 @@ ngx_rtmp_handshake_done(ngx_rtmp_session_t *s)
         return;
     }
 
+    s->stage = NGX_LIVE_HANDSHAKE_DONE;
+    s->handshake_done_time = ngx_current_msec;
+
     ngx_rtmp_cycle(s);
 }
 

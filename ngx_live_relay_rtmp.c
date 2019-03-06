@@ -234,6 +234,9 @@ ngx_live_relay_rtmp_send_connect(ngx_rtmp_session_t *s)
     h.csid = NGX_RTMP_RELAY_CSID_AMF_INI;
     h.type = NGX_RTMP_MSG_AMF_CMD;
 
+    s->status = NGX_LIVE_CONNECT;
+    s->connect_time = ngx_current_msec;
+
     return ngx_rtmp_send_chunk_size(s, cscf->chunk_size) != NGX_OK
         || ngx_rtmp_send_ack_size(s, cscf->ack_window) != NGX_OK
         || ngx_rtmp_send_amf(s, &h, out_elts,
@@ -269,6 +272,9 @@ ngx_live_relay_rtmp_send_create_stream(ngx_rtmp_session_t *s)
     ngx_memzero(&h, sizeof(h));
     h.csid = NGX_RTMP_RELAY_CSID_AMF_INI;
     h.type = NGX_RTMP_MSG_AMF_CMD;
+
+    s->stage = NGX_LIVE_CREATE_STREAM;
+    s->create_stream_time = ngx_current_msec;
 
     return ngx_rtmp_send_amf(s, &h, out_elts,
             sizeof(out_elts) / sizeof(out_elts[0]));
@@ -332,6 +338,9 @@ ngx_live_relay_rtmp_send_publish(ngx_rtmp_session_t *s)
     h.csid = NGX_RTMP_RELAY_CSID_AMF;
     h.msid = NGX_RTMP_RELAY_MSID;
     h.type = NGX_RTMP_MSG_AMF_CMD;
+
+    s->stage = NGX_LIVE_PUBLISH;
+    s->ptime = ngx_current_msec;
 
     return ngx_rtmp_send_amf(s, &h, out_elts,
             sizeof(out_elts) / sizeof(out_elts[0]));
@@ -405,6 +414,9 @@ ngx_live_relay_rtmp_send_play(ngx_rtmp_session_t *s)
     h.csid = NGX_RTMP_RELAY_CSID_AMF;
     h.msid = NGX_RTMP_RELAY_MSID;
     h.type = NGX_RTMP_MSG_AMF_CMD;
+
+    s->stage = NGX_LIVE_PLAY;
+    s->ptime = ngx_current_msec;
 
     return ngx_rtmp_send_amf(s, &h, out_elts,
             sizeof(out_elts) / sizeof(out_elts[0])) != NGX_OK
