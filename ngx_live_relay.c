@@ -292,6 +292,7 @@ ngx_live_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         if (s->live_stream->publish_ctx == NULL) {
             for (ctx = s->live_stream->play_ctx; ctx; ctx = ctx->next) {
                 if (ctx->session->relay) {
+                    ctx->session->finalize_reason = NGX_LIVE_RELAY_CLOSE;
                     ngx_rtmp_finalize_session(ctx->session);
                 }
             }
@@ -309,6 +310,7 @@ ngx_live_relay_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         if (s->live_stream->play_ctx == NULL) {
             for (ctx = s->live_stream->publish_ctx; ctx; ctx = ctx->next) {
                 if (ctx->session->relay) {
+                    ctx->session->finalize_reason = NGX_LIVE_RELAY_CLOSE;
                     ngx_rtmp_finalize_session(ctx->session);
                 }
             }

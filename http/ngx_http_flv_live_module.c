@@ -257,10 +257,14 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         return;
     }
 
+    ctx = ngx_http_get_module_ctx(r, ngx_http_flv_live_module);
+    s = ctx->session;
+
     if (wev->timedout) {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, NGX_ETIMEDOUT,
                 "http flv live, client timed out");
         r->connection->timedout = 1;
+        s->finalize_reason = NGX_LIVE_FLV_SEND_TIMEOUT;
         if (r->header_sent) {
             ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
             ngx_http_run_posted_requests(r->connection);
@@ -276,9 +280,6 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         ngx_del_timer(wev);
     }
 
-    ctx = ngx_http_get_module_ctx(r, ngx_http_flv_live_module);
-    s = ctx->session;
-
     if (ngx_rtmp_prepare_merge_frame(s) == NGX_ERROR) {
         ngx_http_finalize_request(r, NGX_ERROR);
         return;
@@ -287,6 +288,7 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
     if (s->out_chain) {
         rc = ngx_http_flv_live_send_header(r);
         if (rc == NGX_ERROR || rc > NGX_OK) {
+            s->finalize_reason = NGX_LIVE_FLV_SEND_ERR;
             ngx_http_finalize_request(r, rc);
             return;
         }
@@ -318,6 +320,7 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         if (rc == NGX_ERROR) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, ngx_errno,
                     "http flv live, send error");
+            s->finalize_reason = NGX_LIVE_FLV_SEND_ERR;
             ngx_http_finalize_request(r, NGX_ERROR);
             return;
         }
@@ -490,6 +493,13 @@ ngx_http_flv_live_cleanup(void *data)
 
     if (ctx->session) {
         ctx->session->request = NULL;
+
+        if (ctx->session->finalize_reason == 0) {
+            ctx->session->finalize_reason = r->connection->read->error?
+                                            NGX_LIVE_FLV_RECV_ERR:
+                                            NGX_LIVE_NORMAL_CLOSE;
+        }
+
         ngx_rtmp_finalize_fake_session(ctx->session);
     }
 }

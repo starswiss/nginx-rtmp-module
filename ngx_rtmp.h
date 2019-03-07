@@ -183,7 +183,22 @@ typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 #define NGX_LIVE_AV                 6
 #define NGX_LIVE_CLOSE              7
 
-extern char *ngx_live_stage[];
+#define NGX_LIVE_INTERNAL_ERR       0
+#define NGX_LIVE_NORMAL_CLOSE       1
+#define NGX_LIVE_RTMP_SEND_ERR      2
+#define NGX_LIVE_RTMP_SEND_TIMEOUT  3
+#define NGX_LIVE_FLV_SEND_ERR       4
+#define NGX_LIVE_FLV_SEND_TIMEOUT   5
+#define NGX_LIVE_RTMP_RECV_ERR      6
+#define NGX_LIVE_FLV_RECV_ERR       7
+#define NGX_LIVE_RELAY_TRANSIT      8
+#define NGX_LIVE_RELAY_TIMEOUT      9
+#define NGX_LIVE_CONTROL_DROP       10
+#define NGX_LIVE_DROP_IDLE          11
+#define NGX_LIVE_OCLP_NOTIFY_ERR    12
+#define NGX_LIVE_OCLP_RELAY_ERR     13
+#define NGX_LIVE_OCLP_PARA_ERR      14
+#define NGX_LIVE_RELAY_CLOSE        15
 
 struct ngx_rtmp_session_s {
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
@@ -301,6 +316,8 @@ struct ngx_rtmp_session_s {
     ngx_rtmp_prepared_pt    prepare_handler;
 
     /* for trace and statistics */
+    ngx_int_t               oclp_status;
+    ngx_uint_t              finalize_reason;
     ngx_uint_t              stage;
     ngx_msec_t              init_time;
     ngx_msec_t              handshake_done_time;

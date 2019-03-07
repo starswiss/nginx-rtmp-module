@@ -143,6 +143,7 @@ ngx_live_relay_static_handler(ngx_event_t *ev)
     if (!ctx->failed_delay && ev->timedout) { // connect timeout
         ngx_log_error(NGX_LOG_ERR, s->log, NGX_ETIMEDOUT,
                 "static relay, relay timeout");
+        s->finalize_reason = NGX_LIVE_RELAY_TIMEOUT;
         ngx_rtmp_finalize_session(s);
 
         return;
@@ -451,6 +452,7 @@ ngx_live_relay_static_init_main_dconf(ngx_conf_t *cf, void *conf)
 
         rctx = ngx_rtmp_get_module_ctx(srelay->session, ngx_live_relay_module);
         rctx->giveup = 1;
+        srelay->session->finalize_reason = NGX_LIVE_NORMAL_CLOSE;
         ngx_rtmp_finalize_session(srelay->session);
 
         ngx_map_delete(&rsmcf->pulls[rsmcf->used],

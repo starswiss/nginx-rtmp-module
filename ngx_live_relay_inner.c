@@ -166,6 +166,7 @@ ngx_live_relay_inner_handler(ngx_event_t *ev)
     if (!ctx->failed_delay && ev->timedout) { // connect timeout
         ngx_log_error(NGX_LOG_ERR, s->log, NGX_ETIMEDOUT,
                 "inner relay, relay timeout");
+        s->finalize_reason = NGX_LIVE_RELAY_TIMEOUT;
         ngx_rtmp_finalize_session(s);
 
         return;

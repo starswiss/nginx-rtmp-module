@@ -363,6 +363,8 @@ ngx_live_relay_httpflv_recv_body(void *request, ngx_http_request_t *hcr)
     n = ngx_http_client_read_body(hcr, &cl);
 
     if (n == 0 || n == NGX_ERROR) {
+        s->finalize_reason = n == 0? NGX_LIVE_NORMAL_CLOSE:
+                                     NGX_LIVE_FLV_RECV_ERR;
         ngx_log_error(NGX_LOG_INFO, s->log, ngx_errno,
                 "http relay, recv body error");
         ngx_rtmp_finalize_session(s);
@@ -423,6 +425,11 @@ ngx_live_relay_httpflv_cleanup(void *data)
         if (s->close.posted) {
             ngx_delete_posted_event(&s->close);
         }
+
+        if (s->finalize_reason == 0) {
+            s->finalize_reason = NGX_LIVE_FLV_RECV_ERR;
+        }
+
         ngx_rtmp_finalize_fake_session(s);
     }
 }
@@ -461,6 +468,7 @@ ngx_live_relay_httpflv_error(ngx_rtmp_session_t *s, ngx_uint_t status)
         ngx_rtmp_send_status(cctx->session, code, level, desc);
 
         if (ngx_strcmp(level, "error") == 0) {
+            cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
             ngx_rtmp_finalize_session(cctx->session);
         }
     }
@@ -481,6 +489,7 @@ ngx_live_relay_httpflv_recv(void *request, ngx_http_request_t *hcr)
 
     if (status_code != NGX_HTTP_OK) {
         ngx_live_relay_httpflv_error(s, status_code);
+        s->finalize_reason = NGX_LIVE_FLV_RECV_ERR;
         ngx_http_client_finalize_request(hcr, 1);
         return;
     }

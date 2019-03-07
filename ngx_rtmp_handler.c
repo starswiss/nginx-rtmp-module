@@ -256,6 +256,8 @@ ngx_rtmp_recv(ngx_event_t *rev)
             n = c->recv(c, b->last, b->end - b->last);
 
             if (n == NGX_ERROR || n == 0) {
+                s->finalize_reason = n == 0? NGX_LIVE_NORMAL_CLOSE:
+                                             NGX_LIVE_RTMP_RECV_ERR;
                 ngx_rtmp_finalize_session(s);
                 return;
             }
@@ -682,6 +684,7 @@ ngx_rtmp_send(ngx_event_t *wev)
     if (wev->timedout) {
         ngx_log_error(NGX_LOG_INFO, s->log, NGX_ETIMEDOUT, "client timed out");
         c->timedout = 1;
+        s->finalize_reason = NGX_LIVE_RTMP_SEND_TIMEOUT;
         ngx_rtmp_finalize_session(s);
         return;
     }
@@ -708,6 +711,7 @@ ngx_rtmp_send(ngx_event_t *wev)
 
         if (chain == NGX_CHAIN_ERROR) { /* NGX_ERROR */
             c->error = 1;
+            s->finalize_reason = NGX_LIVE_RTMP_SEND_ERR;
             ngx_rtmp_finalize_session(s);
             return;
         }

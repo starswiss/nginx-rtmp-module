@@ -213,6 +213,7 @@ ngx_rtmp_live_idle(ngx_event_t *pev)
     ngx_log_error(NGX_LOG_ERR, s->log, 0,
                   "live: drop idle publisher");
 
+    s->finalize_reason = NGX_LIVE_DROP_IDLE;
     ngx_rtmp_finalize_session(s);
 }
 

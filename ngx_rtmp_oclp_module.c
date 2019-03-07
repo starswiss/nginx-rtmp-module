@@ -863,6 +863,8 @@ ngx_rtmp_oclp_pnotify_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
 
     octx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_oclp_module);
 
+    s->oclp_status = code;
+
     if (code < NGX_HTTP_OK || code > NGX_HTTP_SPECIAL_RESPONSE) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp %s start notify error: %i",
@@ -899,6 +901,7 @@ error:
         ngx_rtmp_send_status(s, "NetStream.Play.Forbidden", "status",
                 "Play stream Forbidden");
     }
+    s->finalize_reason = NGX_LIVE_OCLP_NOTIFY_ERR;
     ngx_rtmp_finalize_session(s);
 }
 
@@ -980,6 +983,7 @@ ngx_rtmp_oclp_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
 
         for (; cctx; cctx = cctx->next) {
             cctx->session->status = status;
+            cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
             ngx_rtmp_finalize_session(cctx->session);
         }
     }
@@ -1008,9 +1012,12 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         return;
     }
 
+    s->oclp_status = code;
+
     if (code == -1) { // wait for oclp relay reconnect
         ngx_log_error(NGX_LOG_ERR, s->log, 0, "oclp relay start failed");
 
+        s->finalize_reason = NGX_LIVE_OCLP_RELAY_ERR;
         ngx_rtmp_finalize_session(s); // only reconnect immediately
 
         return;
@@ -1025,6 +1032,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
         } else { // relay push
             ngx_rtmp_oclp_relay_error(s, 400);
         }
+        s->finalize_reason = NGX_LIVE_OCLP_RELAY_ERR;
         ngx_rtmp_finalize_session(s);
 
         return;
@@ -1033,6 +1041,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (code == NGX_HTTP_OK) { // successd but no need to relay
         ctx = ngx_rtmp_get_module_ctx(s, ngx_live_relay_module);
         ctx->giveup = 1;
+        s->finalize_reason = NGX_LIVE_NORMAL_CLOSE;
         ngx_rtmp_finalize_session(s);
         return;
     }
@@ -1042,6 +1051,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (local_name == NULL) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp relay start has no Location when redirect");
+        s->finalize_reason = NGX_LIVE_OCLP_PARA_ERR;
         ngx_rtmp_finalize_session(s);
 
         return;
@@ -1072,6 +1082,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (ngx_parse_request_url(&url->url, local_name) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp relay start, request url format error: %V", &location);
+        s->finalize_reason = NGX_LIVE_OCLP_PARA_ERR;
         ngx_rtmp_finalize_session(s);
 
         return;
@@ -1085,6 +1096,7 @@ ngx_rtmp_oclp_relay_start_handle(ngx_netcall_ctx_t *nctx, ngx_int_t code)
     if (url->port == 0) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "oclp relay start, request url port error");
+        s->finalize_reason = NGX_LIVE_OCLP_PARA_ERR;
         ngx_rtmp_finalize_session(s);
 
         return;
@@ -1155,6 +1167,7 @@ ngx_rtmp_oclp_relay_handler(ngx_event_t *ev)
     if (!ctx->failed_delay && ev->timedout) { // connect timeout
         ngx_log_error(NGX_LOG_ERR, s->log, NGX_ETIMEDOUT,
                 "oclp relay, relay timeout");
+        s->finalize_reason = NGX_LIVE_RELAY_TIMEOUT;
         ngx_rtmp_finalize_session(s);
 
         if (octx->nctx->hcr) {

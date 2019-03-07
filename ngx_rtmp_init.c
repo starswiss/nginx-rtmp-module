@@ -27,7 +27,7 @@ typedef struct {
 } ngx_rtmp_error_log_ctx_t;
 
 
-char *ngx_live_stage[] = {
+static char *ngx_live_stage[] = {
     "init",
     "handshake_done",
     "connect",
@@ -36,6 +36,26 @@ char *ngx_live_stage[] = {
     "play",
     "audio_video",
     "close_stream",
+};
+
+
+static char *ngx_live_err[] = {
+    "internal_err",
+    "normal_close",
+    "rtmp_send_err",
+    "rtmp_send_timeout",
+    "flv_send_err",
+    "flv_send_timeout",
+    "rtmp_recv_err",
+    "flv_recv_err",
+    "relay_transit",
+    "relay_timeout",
+    "control_drop",
+    "drop_idle",
+    "oclp_notify_err",
+    "oclp_relay_err",
+    "oclp_para_err",
+    "relay_close",
 };
 
 
@@ -177,12 +197,6 @@ ngx_rtmp_log_error(ngx_log_t *log, u_char *buf, size_t len)
 
     p = buf;
 
-    if (log->action) {
-        p = ngx_snprintf(buf, len, " while %s", log->action);
-        len -= p - buf;
-        buf = p;
-    }
-
     ctx = log->data;
 
     if (ctx->client) {
@@ -197,8 +211,7 @@ ngx_rtmp_log_error(ngx_log_t *log, u_char *buf, size_t len)
         return p;
     }
 
-    p = ngx_snprintf(buf, len, ", server: %V, session: %p, stage: %s",
-            s->addr_text, s, ngx_live_stage[s->stage]);
+    p = ngx_snprintf(buf, len, ", server: %V, session: %p", s->addr_text, s);
     len -= p - buf;
     buf = p;
 
@@ -242,6 +255,9 @@ ngx_rtmp_close_connection(ngx_connection_t *c)
 static void
 ngx_rtmp_close_session(ngx_rtmp_session_t *s)
 {
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "close session at %s: %s",
+            ngx_live_stage[s->stage], ngx_live_err[s->finalize_reason]);
+
     if (s->ping_evt.timer_set) {
         ngx_del_timer(&s->ping_evt);
     }

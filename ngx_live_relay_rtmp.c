@@ -463,6 +463,7 @@ ngx_live_relay_rtmp_status_error(ngx_rtmp_session_t *s, char *type, char *code,
                    : ngx_rtmp_send_error(cctx->session, code, level, desc);
 
             if (ngx_rtmp_relay_status_error_code[i].finalize) {
+                cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
                 ngx_rtmp_finalize_session(cctx->session);
             }
         }
