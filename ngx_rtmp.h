@@ -570,12 +570,14 @@ typedef struct {
     struct sockaddr        *sockaddr;
     socklen_t               socklen;
 
+    unsigned                set:1;
     unsigned                default_server:1;
     unsigned                bind:1;
     unsigned                wildcard:1;
 #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
     unsigned                ipv6only:2;
 #endif
+    unsigned                reuseport:1;
     unsigned                so_keepalive:2;
     unsigned                proxy_protocol:1;
 #if (NGX_HAVE_KEEPALIVE_TUNABLE)

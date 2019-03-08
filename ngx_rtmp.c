@@ -603,6 +603,17 @@ ngx_rtmp_add_addresses(ngx_conf_t *cf, ngx_rtmp_core_srv_conf_t *cscf,
 
         proxy_protocol = lsopt->proxy_protocol || addr[i].opt.proxy_protocol;
 
+        if (lsopt->set) {
+
+            if (addr[i].opt.set) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                        "duplicate listen options for %s", addr[i].opt.addr);
+                return NGX_ERROR;
+            }
+
+            addr[i].opt = *lsopt;
+        }
+
         /* check the duplicate "default" server for this address:port */
 
         if (lsopt->default_server) {
@@ -876,6 +887,10 @@ ngx_rtmp_add_listening(ngx_conf_t *cf, ngx_rtmp_conf_addr_t *addr)
 
 #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
     ls->ipv6only = addr->opt.ipv6only;
+#endif
+
+#if (NGX_HAVE_REUSEPORT)
+    ls->reuseport = addr->opt.reuseport;
 #endif
 
     return ls;

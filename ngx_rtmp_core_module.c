@@ -786,6 +786,19 @@ ngx_rtmp_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 #endif
         }
 
+        if (ngx_strcmp(value[i].data, "reuseport") == 0) {
+#if (NGX_HAVE_REUSEPORT)
+            lsopt.reuseport = 1;
+            lsopt.set = 1;
+            lsopt.bind = 1;
+#else
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "reuseport is not supported "
+                               "on this platform, ignored");
+#endif
+            continue;
+        }
+
         if (ngx_strncmp(value[i].data, "so_keepalive=", 13) == 0) {
 
             if (ngx_strcmp(&value[i].data[13], "on") == 0) {
