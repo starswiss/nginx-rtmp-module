@@ -244,6 +244,14 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_monitor_app_conf_t    *macf;
     ngx_rtmp_monitor_ctx_t         *ctx;
 
+    if (s->first_metadata == 0 && (h->type == NGX_RTMP_MSG_AMF_META
+                               || h->type == NGX_RTMP_MSG_AMF3_META))
+    {
+        s->stage = NGX_LIVE_AV;
+        s->first_metadata = ngx_current_msec;
+        s->first_data = s->first_data == 0? ngx_current_msec: s->first_data;
+    }
+
     if (s->first_audio == 0 && h->type == NGX_RTMP_MSG_AUDIO) {
         s->stage = NGX_LIVE_AV;
         s->first_audio = ngx_current_msec;

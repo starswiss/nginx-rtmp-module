@@ -620,6 +620,8 @@ ngx_rtmp_cmd_close_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_ERROR;
     }
 
+    s->finalize_reason = NGX_LIVE_NORMAL_CLOSE;
+
     return ngx_rtmp_close_stream_filter(s, &v);
 }
 
@@ -657,6 +659,8 @@ ngx_rtmp_cmd_delete_stream_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     {
         return NGX_ERROR;
     }
+
+    s->finalize_reason = NGX_LIVE_NORMAL_CLOSE;
 
     return ngx_rtmp_delete_stream(s, &v);
 }
