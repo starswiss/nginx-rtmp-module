@@ -11,7 +11,10 @@
 #include "ngx_rtmp.h"
 #include "ngx_dynamic_conf.h"
 #include "ngx_rtmp_dynamic.h"
+#include "ngx_rtmp_variables.h"
 
+
+static ngx_int_t ngx_rtmp_core_preconfiguration(ngx_conf_t *cf);
 
 static void *ngx_rtmp_core_create_main_conf(ngx_conf_t *cf);
 static char *ngx_rtmp_core_init_main_conf(ngx_conf_t *cf, void *conf);
@@ -209,7 +212,7 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
 
 
 static ngx_rtmp_module_t  ngx_rtmp_core_module_ctx = {
-    NULL,                                   /* preconfiguration */
+    ngx_rtmp_core_preconfiguration,         /* preconfiguration */
     NULL,                                   /* postconfiguration */
     ngx_rtmp_core_create_main_conf,         /* create main configuration */
     ngx_rtmp_core_init_main_conf,           /* init main configuration */
@@ -1160,4 +1163,11 @@ ngx_rtmp_arg(ngx_rtmp_session_t *s, u_char *name, size_t len, ngx_str_t *value)
     }
 
     return NGX_DECLINED;
+}
+
+
+static ngx_int_t
+ngx_rtmp_core_preconfiguration(ngx_conf_t *cf)
+{
+    return ngx_rtmp_variables_add_core_vars(cf);
 }

@@ -27,7 +27,7 @@ typedef struct {
 } ngx_rtmp_error_log_ctx_t;
 
 
-static char *ngx_live_stage[] = {
+char *ngx_live_stage[] = {
     "init",
     "handshake_done",
     "connect",
@@ -39,7 +39,7 @@ static char *ngx_live_stage[] = {
 };
 
 
-static char *ngx_live_err[] = {
+char *ngx_live_err[] = {
     "internal_err",
     "normal_close",
     "rtmp_send_err",
@@ -255,9 +255,6 @@ ngx_rtmp_close_connection(ngx_connection_t *c)
 static void
 ngx_rtmp_close_session(ngx_rtmp_session_t *s)
 {
-    ngx_log_error(NGX_LOG_INFO, s->log, 0, "close session at %s: %s",
-            ngx_live_stage[s->stage], ngx_live_err[s->finalize_reason]);
-
     if (s->ping_evt.timer_set) {
         ngx_del_timer(&s->ping_evt);
     }

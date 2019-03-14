@@ -58,6 +58,7 @@ RTMP_DEPS="                                                     \
                 $ngx_addon_dir/ngx_live_relay.h                 \
                 $ngx_addon_dir/ngx_live_record.h                \
                 $ngx_addon_dir/ngx_rtmp_dynamic.h               \
+                $ngx_addon_dir/ngx_rtmp_variables.h             \
                 "
 
 
@@ -99,6 +100,7 @@ RTMP_CORE_SRCS="                                                \
                 $ngx_addon_dir/ngx_rtmp_gop_module.c            \
                 $ngx_addon_dir/ngx_rtmp_monitor_module.c        \
                 $ngx_addon_dir/ngx_rtmp_dynamic.c               \
+                $ngx_addon_dir/ngx_rtmp_variables.c             \
                 "
 
 

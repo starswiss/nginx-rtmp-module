@@ -1248,30 +1248,6 @@ ngx_rtmp_rmemcpy(void *dst, const void* src, size_t n)
     return dst;
 }
 
-#if (NGX_PCRE)
-ngx_rtmp_regex_t *
-ngx_rtmp_regex_compile(ngx_conf_t *cf, ngx_regex_compile_t *rc)
-{
-    ngx_rtmp_regex_t           *re;
-
-    rc->pool = cf->pool;
-
-    if (ngx_regex_compile(rc) != NGX_OK) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "%V", &rc->err);
-        return NULL;
-    }
-
-    re = ngx_pcalloc(cf->pool, sizeof(ngx_regex_elt_t));
-    if (re == NULL) {
-        return NULL;
-    }
-
-    re->regex = rc->regex;
-    re->name = rc->pattern;
-
-    return re;
-}
-#endif
 
 static ngx_int_t
 ngx_rtmp_find_virtual_server(ngx_rtmp_virtual_names_t *virtual_names,

@@ -29,10 +29,25 @@ typedef unsigned __int8     uint8_t;
 
 
 #if (NGX_PCRE)
+
 typedef struct {
-    ngx_regex_t            *regex;
-    ngx_str_t               name;
+    ngx_uint_t                    capture;
+    ngx_int_t                     index;
+} ngx_rtmp_regex_variable_t;
+
+typedef struct {
+    ngx_regex_t                *regex;
+    ngx_uint_t                  ncaptures;
+    ngx_rtmp_regex_variable_t  *variables;
+    ngx_uint_t                  nvariables;
+    ngx_str_t                   name;
 } ngx_rtmp_regex_t;
+
+typedef struct {
+    ngx_rtmp_regex_t             *regex;
+    void                         *value;
+} ngx_rtmp_map_regex_t;
+
 #endif
 
 
@@ -220,6 +235,14 @@ struct ngx_rtmp_session_s {
 
     ngx_str_t              *addr_text;
     int                     connected;
+
+    ngx_http_variable_value_t *variables;
+
+#if (NGX_PCRE)
+    ngx_uint_t              ncaptures;
+    int                    *captures;
+    u_char                 *captures_data;
+#endif
 
 #if (nginx_version >= 1007005)
     ngx_queue_t             posted_dry_events;
@@ -469,6 +492,17 @@ typedef struct {
     ngx_uint_t              server_names_hash_max_size;
     ngx_uint_t              server_names_hash_bucket_size;
 
+    ngx_hash_t              variables_hash;
+
+    ngx_array_t             variables;         /* ngx_http_variable_t */
+    ngx_array_t             prefix_variables;  /* ngx_http_variable_t */
+    ngx_uint_t              ncaptures;
+
+    ngx_uint_t              variables_hash_max_size;
+    ngx_uint_t              variables_hash_bucket_size;
+
+    ngx_hash_keys_arrays_t *variables_keys;
+
     ngx_array_t            *ports;  /* ngx_rtmp_conf_port_t */
 } ngx_rtmp_core_main_conf_t;
 
@@ -671,6 +705,8 @@ typedef struct {
 #if (NGX_PCRE)
 ngx_rtmp_regex_t *ngx_rtmp_regex_compile(ngx_conf_t *cf,
     ngx_regex_compile_t *rc);
+ngx_int_t ngx_rtmp_regex_exec(ngx_rtmp_session_t *s, ngx_rtmp_regex_t *re,
+    ngx_str_t *str);
 #endif
 ngx_int_t ngx_rtmp_add_listen(ngx_conf_t *cf, ngx_rtmp_core_srv_conf_t *cscf,
     ngx_rtmp_listen_opt_t *lsopt);
