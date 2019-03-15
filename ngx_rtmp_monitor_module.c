@@ -233,6 +233,10 @@ ngx_rtmp_monitor_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         ngx_del_timer(&ctx->consume);
     }
 
+    if (ctx->consume.posted) {
+        ngx_delete_posted_event(&ctx->consume);
+    }
+
 next:
     return next_close_stream(s, v);
 }
