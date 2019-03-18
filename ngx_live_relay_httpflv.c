@@ -468,7 +468,7 @@ ngx_live_relay_httpflv_error(ngx_rtmp_session_t *s, ngx_uint_t status)
         cctx->session->status = status;
         ngx_rtmp_send_status(cctx->session, code, level, desc);
 
-        if (ngx_strcmp(level, "error") == 0) {
+        if (ngx_strcmp(level, "error") == 0 && !cctx->session->static_pull) {
             cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
             ngx_rtmp_finalize_session(cctx->session);
         }

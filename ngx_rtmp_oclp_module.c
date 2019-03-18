@@ -982,9 +982,11 @@ ngx_rtmp_oclp_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
         }
 
         for (; cctx; cctx = cctx->next) {
-            cctx->session->status = status;
-            cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
-            ngx_rtmp_finalize_session(cctx->session);
+            if (!cctx->session->static_pull) {
+                cctx->session->status = status;
+                cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
+                ngx_rtmp_finalize_session(cctx->session);
+            }
         }
     }
 }

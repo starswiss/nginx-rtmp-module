@@ -571,6 +571,17 @@ ngx_rtmp_create_static_session(ngx_live_relay_t *relay,
         }
     }
 
+    if (rs->app_conf == NULL) {
+
+        if (cscf->default_app == NULL || cscf->default_app->app_conf == NULL) {
+            ngx_log_error(NGX_LOG_ERR, rs->log, 0,
+                    "static session: application not found: '%V'", &rs->app);
+            goto destroy;
+        }
+
+        rs->app_conf = cscf->default_app->app_conf;
+    }
+
     // create relay ctx
     rctx = ngx_pcalloc(rs->pool, sizeof(ngx_live_relay_ctx_t));
     if (rctx == NULL) {
