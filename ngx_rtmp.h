@@ -316,6 +316,7 @@ struct ngx_rtmp_session_s {
     ngx_uint_t              flv_flags;
     unsigned                flv_data_offset;
     unsigned                flv_tagsize;
+    unsigned                flv_first_pts;
 
     /* input stream 0 (reserved by RTMP spec)
      * is used as free chain link */

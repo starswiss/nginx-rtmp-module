@@ -169,7 +169,8 @@ ngx_live_relay_httpflv_parse(ngx_rtmp_session_t *s, ngx_buf_t *b)
             st = &s->in_streams[0];
             h = &st->hdr;
 
-            if (h->mlen == 0) {
+            if (h->mlen == 0 && s->flv_first_pts == 0) {
+                s->flv_first_pts = 1;
                 if (s->flv_tagsize != 0) {
                     rc = NGX_ERROR;
                     goto done;
