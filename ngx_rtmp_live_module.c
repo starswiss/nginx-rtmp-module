@@ -658,6 +658,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_live_chunk_stream_t   *cs;
 #ifdef NGX_DEBUG
     const char                     *type_s;
+    u_char                          frametype;
 
     type_s = (h->type == NGX_RTMP_MSG_VIDEO ? "video" : "audio");
 #endif
@@ -669,6 +670,15 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     if (!lacf->live || in == NULL  || in->buf == NULL) {
         return NGX_OK;
+    }
+
+    if (h->type == NGX_RTMP_MSG_VIDEO) {
+        frametype = in->buf->pos[0] & 0xf0;
+        if (frametype != 0x10 && frametype != 0x20) {
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                    "codec: receive unkwnon frametype %02xD", frametype);
+            return NGX_OK;
+        }
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_live_module);
