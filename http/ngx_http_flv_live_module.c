@@ -343,28 +343,6 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
     }
 }
 
-static void
-ngx_http_flv_live_send(ngx_event_t *wev)
-{
-    ngx_connection_t                   *c;
-    ngx_http_request_t                 *r;
-    ngx_http_flv_live_ctx_t            *ctx;
-
-    c = wev->data;
-    r = c->data;
-
-    ctx = ngx_http_get_module_ctx(r, ngx_http_flv_live_module);
-
-    if (ctx->session == NULL) {
-        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-                "http flv live, http request has been terminate");
-        return;
-    }
-
-    ngx_http_flv_live_write_handler(r);
-
-    ngx_http_run_posted_requests(c);
-}
 
 static void
 ngx_http_flv_live_parse_url(ngx_http_request_t *r, ngx_str_t *app,
@@ -558,7 +536,6 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
 
     s->live_type = NGX_HTTP_FLV_LIVE;
     s->live_server = ngx_live_create_server(&s->serverid);
-    s->handler = ngx_http_flv_live_send;
     s->request = r;
 
     v.silent = 1;

@@ -308,7 +308,6 @@ struct ngx_rtmp_session_s {
     unsigned                live_type:2;
     ngx_uint_t              status;
     ngx_http_request_t     *request;
-    ngx_event_handler_pt    handler;
 
     unsigned                flv_state;
 
@@ -383,31 +382,6 @@ struct ngx_rtmp_core_ctx_s {
 #define NGX_RTMP_MAX_OCLP   8
 #define NGX_RTMP_MAX_PUSH   8
 
-typedef struct {
-    ngx_str_t                   name;
-    ngx_str_t                   url;
-    ngx_rtmp_session_t         *session;
-
-    ngx_str_t                   pargs; /* play or publish ctx */
-
-    ngx_str_t                   app;
-    ngx_str_t                   args;
-    ngx_str_t                   tc_url;
-    ngx_str_t                   page_url;
-    ngx_str_t                   swf_url;
-    ngx_str_t                   flash_ver;
-    uint32_t                    acodecs;
-    uint32_t                    vcodecs;
-
-    ngx_str_t                   play_path;
-    ngx_int_t                   live;
-    ngx_int_t                   start;
-    ngx_int_t                   stop;
-
-    unsigned                    relay_completion:1;
-    void                       *tag;
-    ngx_uint_t                  idx;
-} ngx_rtmp_relay_ctx_t;
 
 struct ngx_live_stream_s {
     u_char                      name[NGX_LIVE_STREAM_LEN];
