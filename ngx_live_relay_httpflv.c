@@ -20,8 +20,9 @@ typedef struct {
 
 static ngx_http_status_code_t ngx_http_relay_status_code[] = {
     { 400, "NetStream.Play.BadName", "error", "Bad Request" },
+    { 403, "NetStream.Play.Forbidden", "error", "Forbidden" },
     { 404, "NetStream.Play.StreamNotFound", "error", "No such stream" },
-    { 503, "NetStream.Play.ServiceUnavailable", "error", "Service Unavailable" },
+    { 503, "NetStream.Play.ServiceUnavailable", "error", "Service Unavailable"},
     { 0, "NetStream.Play.StreamError", "error", "Stream Error" }
 };
 
@@ -444,7 +445,7 @@ ngx_live_relay_httpflv_error(ngx_rtmp_session_t *s, ngx_uint_t status)
     char                       *code, *level, *desc;
     size_t                      i;
 
-    for (i = 0; ngx_http_relay_status_code[i].code; ++i) {
+    for (i = 0; ngx_http_relay_status_code[i].status; ++i) {
 
         if (status != ngx_http_relay_status_code[i].status) {
             continue;
@@ -459,7 +460,7 @@ ngx_live_relay_httpflv_error(ngx_rtmp_session_t *s, ngx_uint_t status)
 
     ngx_log_error(NGX_LOG_ERR, s->log, 0,
             "http relay transit, %d: level='%s' code='%s' description='%s'",
-            status, code, level, desc);
+            status, level, code, desc);
 
     st = ngx_live_create_stream(&s->serverid, &s->stream);
     cctx = st->play_ctx;
