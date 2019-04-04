@@ -37,6 +37,9 @@ typedef struct {
     ngx_rtmp_frame_t           *aac_header;
     ngx_rtmp_frame_t           *avc_header;
 
+    ngx_rtmp_frame_t           *latest_aac_header;
+    ngx_rtmp_frame_t           *latest_avc_header;
+
     ngx_uint_t                  meta_version;
 
     uint32_t                    first_timestamp;
@@ -141,6 +144,7 @@ static ngx_int_t
 ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 {
     ngx_uint_t                  nmsg;
+    ngx_rtmp_gop_ctx_t         *ctx;
 
     if (frame == NULL) {
         return NGX_OK;
@@ -152,6 +156,16 @@ ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "link frame nmsg(%ui) >= out_queue(%O)", nmsg, s->out_queue);
         return NGX_AGAIN;
+    }
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_gop_module);
+
+    if (frame->hdr.type == NGX_RTMP_MSG_AUDIO && frame->av_header) {
+        ctx->latest_aac_header = frame;
+    }
+
+    if (frame->hdr.type == NGX_RTMP_MSG_VIDEO && frame->av_header) {
+        ctx->latest_avc_header = frame;
     }
 
     s->out[s->out_last] = frame;
@@ -367,6 +381,14 @@ ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
             frame->hdr.type, frame->keyframe, frame->av_header,
             frame->hdr.timestamp, frame->hdr.mlen);
 
+    if (frame->hdr.type == NGX_RTMP_MSG_AUDIO && frame->av_header) {
+        ctx->latest_aac_header = frame;
+    }
+
+    if (frame->hdr.type == NGX_RTMP_MSG_VIDEO && frame->av_header) {
+        ctx->latest_avc_header = frame;
+    }
+
     /* first video frame is not intra_frame or video header */
     if (ctx->keyframe == NULL && frame->hdr.type == NGX_RTMP_MSG_VIDEO
             && !frame->keyframe && !frame->av_header)
@@ -394,12 +416,11 @@ ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 }
 
 static ngx_int_t
-ngx_rtmp_gop_send_meta_and_codec(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
+ngx_rtmp_gop_send_meta(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 {
-    ngx_rtmp_gop_ctx_t         *sctx, *ssctx;
+    ngx_rtmp_gop_ctx_t         *ssctx;
     ngx_rtmp_codec_ctx_t       *cctx;
 
-    sctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_gop_module);
     ssctx = ngx_rtmp_get_module_ctx(ss, ngx_rtmp_gop_module);
     cctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
@@ -410,22 +431,6 @@ ngx_rtmp_gop_send_meta_and_codec(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         return NGX_AGAIN;
     }
     ssctx->meta_version = cctx->meta_version;
-
-    /* aac codec header */
-    if (sctx->aac_header && ssctx->aac_header != sctx->aac_header
-            && ngx_rtmp_gop_link_frame(ss, sctx->aac_header) == NGX_AGAIN)
-    {
-        return NGX_AGAIN;
-    }
-    ssctx->aac_header = sctx->aac_header;
-
-    /* avc codec header */
-    if (sctx->avc_header && ssctx->avc_header != sctx->avc_header
-            && ngx_rtmp_gop_link_frame(ss, sctx->avc_header) == NGX_AGAIN)
-    {
-        return NGX_AGAIN;
-    }
-    ssctx->avc_header = sctx->avc_header;
 
     return NGX_OK;
 }
@@ -448,17 +453,30 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         return NGX_OK;
     }
 
-    if (ngx_rtmp_gop_send_meta_and_codec(s, ss) == NGX_AGAIN) {
+    if (ngx_rtmp_gop_send_meta(s, ss) == NGX_AGAIN) {
         return NGX_AGAIN;
     }
 
     /* link frame in s to ss */
     if (ssctx->send_gop == 0) {
-        ssctx->send_gop = 1;
         ssctx->gop_pos = sctx->gop_pos;
         if (sctx->cache[ssctx->gop_pos] == NULL) {
             return NGX_AGAIN;
         }
+
+        if (sctx->aac_header) {
+            if (ngx_rtmp_gop_link_frame(ss, sctx->aac_header) == NGX_AGAIN) {
+                return NGX_AGAIN;
+            }
+        }
+
+        if (sctx->avc_header) {
+            if (ngx_rtmp_gop_link_frame(ss, sctx->avc_header) == NGX_AGAIN) {
+                return NGX_AGAIN;
+            }
+        }
+
+        ssctx->send_gop = 1;
         ssctx->first_timestamp = sctx->cache[ssctx->gop_pos]->hdr.timestamp;
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
@@ -526,18 +544,65 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     }
 
     /* send frame by frame */
-    if (ngx_rtmp_gop_send_meta_and_codec(s, ss) == NGX_AGAIN) {
+    if (ngx_rtmp_gop_send_meta(s, ss) == NGX_AGAIN) {
         return NGX_AGAIN;
     }
 
     pos = ngx_rtmp_gop_prev(s, sctx->gop_last);
     /* new frame is video key frame */
     if (sctx->cache[pos]->keyframe && !sctx->cache[pos]->av_header) {
-        if (gacf->low_latency) {
+        if (gacf->low_latency && pos != ssctx->gop_pos) {
             ssctx->gop_pos = pos;
+
+            ngx_log_error(NGX_LOG_INFO, ss->log, 0,
+                    "gop, low latency, chase to new keyframe");
+
+            if (sctx->latest_aac_header
+                    && sctx->latest_aac_header != ssctx->latest_aac_header)
+            {
+                if (ngx_rtmp_gop_link_frame(ss, sctx->latest_aac_header)
+                        == NGX_AGAIN)
+                {
+                    return NGX_AGAIN;
+                }
+            }
+
+            if (sctx->latest_avc_header
+                    && sctx->latest_avc_header != ssctx->latest_avc_header)
+            {
+                if (ngx_rtmp_gop_link_frame(ss, sctx->latest_avc_header)
+                        == NGX_AGAIN)
+                {
+                    return NGX_AGAIN;
+                }
+            }
         }
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
+            ngx_log_error(NGX_LOG_ERR, ss->log, 0,
+                    "gop, current gop pos is NULL, skip to new postion %d %d",
+                    sctx->gop_pos, ssctx->gop_pos);
+
+            if (sctx->aac_header
+                    && sctx->aac_header != ssctx->latest_aac_header)
+            {
+                if (ngx_rtmp_gop_link_frame(ss, sctx->aac_header)
+                        == NGX_AGAIN)
+                {
+                    return NGX_AGAIN;
+                }
+            }
+
+            if (sctx->avc_header
+                    && sctx->avc_header != ssctx->latest_avc_header)
+            {
+                if (ngx_rtmp_gop_link_frame(ss, sctx->avc_header)
+                        == NGX_AGAIN)
+                {
+                    return NGX_AGAIN;
+                }
+            }
+
             ssctx->gop_pos = sctx->gop_pos;
         }
     }
