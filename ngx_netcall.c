@@ -23,8 +23,6 @@ ngx_netcall_cleanup(void *data)
         ngx_delete_posted_event(&nctx->ev);
     }
 
-    ngx_log_error(NGX_LOG_ERR, nctx->hcr->connection->log, 0, "ngx_netcall_cleanup");
-
     if (nctx->hcr) {
         ngx_http_client_detach(nctx->hcr);
         nctx->handler(nctx, NGX_ERROR);
@@ -39,7 +37,6 @@ ngx_netcall_timeout(ngx_event_t *ev)
     ngx_netcall_ctx_t          *nctx;
 
     nctx = ev->data;
-    ngx_log_error(NGX_LOG_ERR, nctx->hcr->connection->log, 0, "ngx_netcall_timeout");
 
     if (nctx->ev.timer_set) {
         ngx_del_timer(&nctx->ev);
@@ -63,7 +60,6 @@ ngx_netcall_handler(void *data, ngx_http_request_t *hcr)
     ngx_int_t                   code;
 
     nctx = data;
-    ngx_log_error(NGX_LOG_ERR, hcr->connection->log, 0, "ngx_netcall_handler");
 
     if (nctx->ev.timer_set) {
         ngx_del_timer(&nctx->ev);
@@ -152,7 +148,7 @@ ngx_netcall_create(ngx_netcall_ctx_t *nctx, ngx_log_t *log)
 
     ngx_http_client_set_read_handler(hcr, ngx_netcall_handler);
 
-    cln = ngx_http_cleanup_add(hcr, 0);
+    cln = ngx_http_client_cleanup_add(hcr, 0);
     if (cln == NULL) {
         ngx_log_error(NGX_LOG_ERR, log, 0,
                 "netcall create add cleanup failed");

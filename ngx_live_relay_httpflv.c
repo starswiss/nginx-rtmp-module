@@ -489,6 +489,11 @@ ngx_live_relay_httpflv_recv(void *request, ngx_http_request_t *hcr)
     s->stage = NGX_LIVE_PLAY;
     s->ptime = ngx_current_msec;
 
+    s->connection = hcr->connection;
+    ngx_rtmp_set_combined_log(s, hcr->connection->log->data,
+            hcr->connection->log->handler);
+    s->log->connection = s->connection->number;
+
     if (status_code != NGX_HTTP_OK) {
         ngx_live_relay_httpflv_error(s, status_code);
         s->finalize_reason = NGX_LIVE_FLV_RECV_ERR;
@@ -554,7 +559,7 @@ ngx_live_relay_httpflv_send_request(ngx_rtmp_session_t *s,
     hcr = ngx_http_client_get(s->log, &request_url, headers, s);
     ngx_http_client_set_read_handler(hcr, ngx_live_relay_httpflv_recv);
 
-    cln = ngx_http_cleanup_add(hcr, 0);
+    cln = ngx_http_client_cleanup_add(hcr, 0);
     if (cln == NULL) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0, "http client add cleanup failed");
         ngx_live_relay_httpflv_error(s, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -566,11 +571,6 @@ ngx_live_relay_httpflv_send_request(ngx_rtmp_session_t *s,
 
     s->request = hcr;
     s->live_type = NGX_HTTP_FLV_LIVE;
-
-    s->connection = hcr->connection;
-    ngx_rtmp_set_combined_log(s, hcr->connection->log->data,
-            hcr->connection->log->handler);
-    s->log->connection = s->connection->number;
 
     return NGX_OK;
 }

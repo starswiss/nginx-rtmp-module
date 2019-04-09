@@ -268,6 +268,7 @@ ngx_http_flv_live_write_handler(ngx_http_request_t *r)
         if (r->header_sent) {
             ngx_http_finalize_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         } else {
+            r->error_page = 1;
             ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
         }
 
