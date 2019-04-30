@@ -525,7 +525,7 @@ ngx_rtmp_mp4_write_avcc(ngx_rtmp_session_t *s, ngx_buf_t *b)
     if (p < in->buf->last) {
         ngx_rtmp_mp4_data(b, p, (size_t) (in->buf->last - p));
     } else {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: invalid avcc received");
     }
 

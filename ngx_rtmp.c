@@ -603,6 +603,17 @@ ngx_rtmp_add_addresses(ngx_conf_t *cf, ngx_rtmp_core_srv_conf_t *cscf,
 
         proxy_protocol = lsopt->proxy_protocol || addr[i].opt.proxy_protocol;
 
+        if (lsopt->set) {
+
+            if (addr[i].opt.set) {
+                ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                        "duplicate listen options for %s", addr[i].opt.addr);
+                return NGX_ERROR;
+            }
+
+            addr[i].opt = *lsopt;
+        }
+
         /* check the duplicate "default" server for this address:port */
 
         if (lsopt->default_server) {
@@ -876,6 +887,10 @@ ngx_rtmp_add_listening(ngx_conf_t *cf, ngx_rtmp_conf_addr_t *addr)
 
 #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
     ls->ipv6only = addr->opt.ipv6only;
+#endif
+
+#if (NGX_HAVE_REUSEPORT)
+    ls->reuseport = addr->opt.reuseport;
 #endif
 
     return ls;
@@ -1233,35 +1248,10 @@ ngx_rtmp_rmemcpy(void *dst, const void* src, size_t n)
     return dst;
 }
 
-#if (NGX_PCRE)
-ngx_rtmp_regex_t *
-ngx_rtmp_regex_compile(ngx_conf_t *cf, ngx_regex_compile_t *rc)
-{
-    ngx_rtmp_regex_t           *re;
-
-    rc->pool = cf->pool;
-
-    if (ngx_regex_compile(rc) != NGX_OK) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "%V", &rc->err);
-        return NULL;
-    }
-
-    re = ngx_pcalloc(cf->pool, sizeof(ngx_regex_elt_t));
-    if (re == NULL) {
-        return NULL;
-    }
-
-    re->regex = rc->regex;
-    re->name = rc->pattern;
-
-    return re;
-}
-#endif
 
 static ngx_int_t
-ngx_rtmp_find_virtual_server(ngx_connection_t *c,
-    ngx_rtmp_virtual_names_t *virtual_names, ngx_str_t *host,
-    ngx_rtmp_session_t *s, ngx_rtmp_core_srv_conf_t **cscfp)
+ngx_rtmp_find_virtual_server(ngx_rtmp_virtual_names_t *virtual_names,
+    ngx_str_t *host, ngx_rtmp_session_t *s, ngx_rtmp_core_srv_conf_t **cscfp)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
 
@@ -1322,8 +1312,7 @@ ngx_rtmp_set_virtual_server(ngx_rtmp_session_t *s, ngx_str_t *host)
 
     addr_conf = s->addr_conf;
 
-    rc = ngx_rtmp_find_virtual_server(s->connection, addr_conf->virtual_names,
-                                      host, s, &cscf);
+    rc = ngx_rtmp_find_virtual_server(addr_conf->virtual_names, host, s, &cscf);
 
     if (rc == NGX_ERROR) {
         return NGX_ERROR;

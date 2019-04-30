@@ -133,7 +133,7 @@ ngx_rtmp_proxy_protocol_recv(ngx_event_t *rev)
         goto bad_header;
     }
 
-    if (ngx_parse_addr(s->connection->pool, &addr, p, pp - p) != NGX_OK) {
+    if (ngx_parse_addr(s->pool, &addr, p, pp - p) != NGX_OK) {
         goto bad_header;
     }
 
@@ -159,7 +159,7 @@ skip:
     }
 
     if (addr.socklen) {
-        text = ngx_palloc(s->connection->pool, NGX_SOCKADDR_STRLEN);
+        text = ngx_palloc(s->pool, NGX_SOCKADDR_STRLEN);
 
         if (text == NULL) {
             goto failed;

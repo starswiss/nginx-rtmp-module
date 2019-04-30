@@ -11,7 +11,10 @@
 #include "ngx_rtmp.h"
 #include "ngx_dynamic_conf.h"
 #include "ngx_rtmp_dynamic.h"
+#include "ngx_rtmp_variables.h"
 
+
+static ngx_int_t ngx_rtmp_core_preconfiguration(ngx_conf_t *cf);
 
 static void *ngx_rtmp_core_create_main_conf(ngx_conf_t *cf);
 static char *ngx_rtmp_core_init_main_conf(ngx_conf_t *cf, void *conf);
@@ -32,6 +35,11 @@ static char *ngx_rtmp_core_application(ngx_conf_t *cf, ngx_command_t *cmd,
 
 static void *ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf);
 static char *ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf);
+
+static char *ngx_rtmp_merge_frame(ngx_conf_t *cf, void *post, void *data);
+
+static ngx_conf_post_handler_pt  ngx_rtmp_merge_frame_p =
+    ngx_rtmp_merge_frame;
 
 ngx_rtmp_core_main_conf_t      *ngx_rtmp_core_main_conf;
 
@@ -149,6 +157,20 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       offsetof(ngx_rtmp_core_srv_conf_t, out_queue),
       NULL },
 
+    { ngx_string("merge_frame"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_num_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, merge_frame),
+      &ngx_rtmp_merge_frame_p },
+
+    { ngx_string("tcp_nodelay"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_app_conf_t, tcp_nodelay),
+      NULL },
+
     { ngx_string("out_cork"),
       NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_size_slot,
@@ -185,20 +207,6 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       offsetof(ngx_rtmp_core_srv_conf_t, buflen),
       NULL },
 
-    { ngx_string("push_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_core_app_conf_t, push_reconnect),
-      NULL },
-
-    { ngx_string("pull_reconnect"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_core_app_conf_t, pull_reconnect),
-      NULL },
-
     { ngx_string("serverid"),
       NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_str_slot,
@@ -218,7 +226,7 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
 
 
 static ngx_rtmp_module_t  ngx_rtmp_core_module_ctx = {
-    NULL,                                   /* preconfiguration */
+    ngx_rtmp_core_preconfiguration,         /* preconfiguration */
     NULL,                                   /* postconfiguration */
     ngx_rtmp_core_create_main_conf,         /* create main configuration */
     ngx_rtmp_core_init_main_conf,           /* init main configuration */
@@ -442,9 +450,9 @@ ngx_rtmp_core_create_app_conf(ngx_conf_t *cf)
         return NULL;
     }
 
-    conf->push_reconnect = NGX_CONF_UNSET_MSEC;
-    conf->pull_reconnect = NGX_CONF_UNSET_MSEC;
     conf->hevc_codec = NGX_CONF_UNSET_UINT;
+    conf->merge_frame = NGX_CONF_UNSET_UINT;
+    conf->tcp_nodelay = NGX_CONF_UNSET;
 
     return conf;
 }
@@ -456,9 +464,9 @@ ngx_rtmp_core_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_core_app_conf_t *prev = parent;
     ngx_rtmp_core_app_conf_t *conf = child;
 
-    ngx_conf_merge_msec_value(conf->push_reconnect, prev->push_reconnect, 3000);
-    ngx_conf_merge_msec_value(conf->pull_reconnect, prev->pull_reconnect, 3000);
     ngx_conf_merge_uint_value(conf->hevc_codec, prev->hevc_codec, 12);
+    ngx_conf_merge_uint_value(conf->merge_frame, prev->merge_frame, 32);
+    ngx_conf_merge_value(conf->tcp_nodelay, prev->tcp_nodelay, 1);
 
     return NGX_CONF_OK;
 }
@@ -480,6 +488,24 @@ ngx_rtmp_core_create_srv_dconf(ngx_conf_t *cf)
 static char *
 ngx_rtmp_core_init_srv_dconf(ngx_conf_t *cf, void *conf)
 {
+    return NGX_CONF_OK;
+}
+
+
+static char *
+ngx_rtmp_merge_frame(ngx_conf_t *cf, void *post, void *data)
+{
+    ngx_uint_t                 *mfp;
+
+    mfp = data;
+
+    if (*mfp > NGX_RTMP_MAX_MERGE_FRAME) {
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                           "the merge_frame must be no larger than %ui",
+                           NGX_RTMP_MAX_MERGE_FRAME);
+        return NGX_CONF_ERROR;
+    }
+
     return NGX_CONF_OK;
 }
 
@@ -780,6 +806,19 @@ ngx_rtmp_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 #endif
         }
 
+        if (ngx_strcmp(value[i].data, "reuseport") == 0) {
+#if (NGX_HAVE_REUSEPORT)
+            lsopt.reuseport = 1;
+            lsopt.set = 1;
+            lsopt.bind = 1;
+#else
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "reuseport is not supported "
+                               "on this platform, ignored");
+#endif
+            continue;
+        }
+
         if (ngx_strncmp(value[i].data, "so_keepalive=", 13) == 0) {
 
             if (ngx_strcmp(&value[i].data[13], "on") == 0) {
@@ -987,14 +1026,12 @@ ngx_rtmp_core_server_name(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     return NGX_CONF_OK;
 }
 
-ngx_rtmp_addr_conf_t *
-ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
+static ngx_rtmp_addr_conf_t *
+ngx_rtmp_get_addr_conf(ngx_listening_t *ls, struct sockaddr *sa, socklen_t len)
 {
     ngx_uint_t                  i;
     ngx_rtmp_addr_conf_t       *addr_conf;
     ngx_rtmp_port_t            *port;
-    struct sockaddr             sa;
-    socklen_t                   len;
     struct sockaddr_in         *sin;
     ngx_rtmp_in_addr_t         *addr;
 #if (NGX_HAVE_INET6)
@@ -1005,16 +1042,11 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
     port = ls->servers;
     addr_conf = NULL;
 
-    len = sizeof(struct sockaddr);
-    if (getsockname(c->fd, &sa, &len) != 0) {
-        return NULL;
-    }
-
     if (port->naddrs > 1) {
-        switch (sa.sa_family) {
+        switch (sa->sa_family) {
 #if (NGX_HAVE_INET6)
         case AF_INET6:
-            sin6 = (struct sockaddr_in6 *) &sa;
+            sin6 = (struct sockaddr_in6 *) sa;
 
             addr6 = port->addrs;
 
@@ -1031,7 +1063,7 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
             break;
 #endif
         default:
-            sin = (struct sockaddr_in *) &sa;
+            sin = (struct sockaddr_in *) sa;
 
             addr = port->addrs;
 
@@ -1049,7 +1081,7 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
         }
     } else {
 
-        switch (sa.sa_family) {
+        switch (sa->sa_family) {
 #if (NGX_HAVE_INET6)
         case AF_INET6:
             addr6 = port->addrs;
@@ -1067,8 +1099,8 @@ ngx_rtmp_get_addr_conf_by_listening(ngx_listening_t *ls, ngx_connection_t *c)
     return addr_conf;
 }
 
-ngx_listening_t *
-ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
+ngx_rtmp_addr_conf_t *
+ngx_rtmp_find_related_addr_conf(ngx_cycle_t *cycle, ngx_str_t *addr)
 {
     ngx_url_t                   u;
     ngx_listening_t            *ls;
@@ -1076,14 +1108,14 @@ ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
 
     ngx_memzero(&u, sizeof(ngx_url_t));
 
-    u.url = *url;
+    u.url = *addr;
     u.listen = 1;
     u.default_port = 0;
 
     if (ngx_parse_url(cycle->pool, &u) != NGX_OK) {
         if (u.err) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
-                    "Relation port err: %V", url);
+                    "Relation port err: %V", addr);
         }
 
         return NULL;
@@ -1091,19 +1123,68 @@ ngx_rtmp_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *url)
 
     ls = cycle->listening.elts;
 
-    for (i = 0; i < cycle->listening.nelts; ++i) {
+    for (i = 0; i < cycle->listening.nelts; ++i, ++ls) {
 
-        if (ls[i].handler == ngx_rtmp_init_connection
-            && ls[i].socklen == u.socklen
-                && ngx_memcmp(ls[i].sockaddr, (u_char *) &u.sockaddr,
+        if (ls->handler == ngx_rtmp_init_connection
+            && ls->socklen == u.socklen
+                && ngx_memcmp(ls->sockaddr, (u_char *) &u.sockaddr,
                     u.socklen) == 0)
         {
-            return &ls[i];
+            return ngx_rtmp_get_addr_conf(ls, &u.sockaddr.sockaddr, u.socklen);
         }
     }
 
     ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
-            "Can not find relation port: %V", url);
+            "Can not find relation port: %V", addr);
 
     return NULL;
+}
+
+
+ngx_int_t
+ngx_rtmp_arg(ngx_rtmp_session_t *s, u_char *name, size_t len, ngx_str_t *value)
+{
+    u_char                     *p, *last;
+
+    if (s->pargs.len == 0) {
+        return NGX_DECLINED;
+    }
+
+    p = s->pargs.data;
+    last = p + s->pargs.len;
+
+    for ( /* void */ ; p < last; p++) {
+
+        /* we need '=' after name, so drop one char from last */
+
+        p = ngx_strlcasestrn(p, last - 1, name, len - 1);
+
+        if (p == NULL) {
+            return NGX_DECLINED;
+        }
+
+        if ((p == s->pargs.data || *(p - 1) == '&') && *(p + len) == '=') {
+
+            value->data = p + len + 1;
+
+            p = ngx_strlchr(p, last, '&');
+
+            if (p == NULL) {
+                p = s->pargs.data + s->pargs.len;
+            }
+
+            value->len = p - value->data;
+
+            return NGX_OK;
+        }
+    }
+
+    return NGX_DECLINED;
+}
+
+
+static ngx_int_t
+ngx_rtmp_core_preconfiguration(ngx_conf_t *cf)
+{
+    return ngx_rtmp_variables_add_core_vars(cf);
 }

@@ -10,14 +10,11 @@
 #include "ngx_rtmp.h"
 #include "ngx_live.h"
 #include "ngx_rtmp_live_module.h"
-#include "ngx_rtmp_record_module.h"
+#include "ngx_live_record.h"
 #include "ngx_rtmp_dynamic.h"
 
 
 static char *ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static char *ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd,
-       void *conf);
-
 static void *ngx_rtmp_control_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_rtmp_control_merge_loc_conf(ngx_conf_t *cf,
        void *parent, void *child);
@@ -42,7 +39,6 @@ enum {
 
 typedef struct {
     ngx_uint_t                      count;
-    ngx_str_t                       path;
     ngx_uint_t                      filter;
     ngx_str_t                       method;
     ngx_array_t                     sessions; /* ngx_rtmp_session_t * */
@@ -51,8 +47,6 @@ typedef struct {
 
 typedef struct {
     ngx_uint_t                      control;
-
-    ngx_listening_t                *ls;
 } ngx_rtmp_control_loc_conf_t;
 
 
@@ -73,13 +67,6 @@ static ngx_command_t  ngx_rtmp_control_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       offsetof(ngx_rtmp_control_loc_conf_t, control),
       ngx_rtmp_control_masks },
-
-    { ngx_string("rtmp_control_port"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_1MORE,
-      ngx_rtmp_control_port,
-      NGX_HTTP_LOC_CONF_OFFSET,
-      0,
-      NULL },
 
       ngx_null_command
 };
@@ -119,46 +106,23 @@ ngx_module_t  ngx_rtmp_control_module = {
 static const char *
 ngx_rtmp_control_record_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 {
-    ngx_int_t                    rc;
-    ngx_str_t                    rec;
-    ngx_uint_t                   rn;
     ngx_rtmp_control_ctx_t      *ctx;
-    ngx_rtmp_core_app_conf_t    *cacf;
-    ngx_rtmp_record_app_conf_t  *racf;
-
-    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
-    racf = cacf->app_conf[ngx_rtmp_record_module.ctx_index];
-
-    if (ngx_http_arg(r, (u_char *) "rec", sizeof("rec") - 1, &rec) != NGX_OK) {
-        rec.len = 0;
-    }
-
-    rn = ngx_rtmp_record_find(racf, &rec);
-    if (rn == NGX_CONF_UNSET_UINT) {
-        return "Recorder not found";
-    }
 
     ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
 
     if (ctx->method.len == sizeof("start") - 1 &&
         ngx_strncmp(ctx->method.data, "start", ctx->method.len) == 0)
     {
-        rc = ngx_rtmp_record_open(s, rn, &ctx->path);
+        return ngx_live_record_open(s);
 
     } else if (ctx->method.len == sizeof("stop") - 1 &&
                ngx_strncmp(ctx->method.data, "stop", ctx->method.len) == 0)
     {
-        rc = ngx_rtmp_record_close(s, rn, &ctx->path);
+        return ngx_live_record_close(s);
 
     } else {
         return "Undefined method";
     }
-
-    if (rc == NGX_ERROR) {
-        return "Recorder error";
-    }
-
-    return NGX_CONF_OK;
 }
 
 
@@ -169,6 +133,7 @@ ngx_rtmp_control_drop_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 
     ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
 
+    s->finalize_reason = NGX_LIVE_CONTROL_DROP;
     ngx_rtmp_finalize_session(s);
 
     ++ctx->count;
@@ -363,13 +328,11 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r, ngx_live_server_t *srv)
         name.len = 0;
     }
 
-    serverid.data = srv->serverid;
-    serverid.len = ngx_strlen(srv->serverid);
-
-    stream.len = serverid.len + 1 + app.len + 1 + name.len; /* srv/app/name */
+    /* serverid/app/name */
+    stream.len = ngx_strlen(srv->serverid) + 1 + app.len + 1 + name.len;
     stream.data = ngx_pcalloc(r->pool, stream.len);
     p = stream.data;
-    p = ngx_copy(p, serverid.data, serverid.len);
+    p = ngx_copy(p, srv->serverid, ngx_strlen(srv->serverid));
     *p++ = '/';
     p = ngx_copy(p, app.data, app.len);
     *p++ = '/';
@@ -446,6 +409,7 @@ ngx_rtmp_control_record(ngx_http_request_t *r, ngx_str_t *method)
     const char              *msg;
     ngx_chain_t              cl;
     ngx_rtmp_control_ctx_t  *ctx;
+    size_t                   len;
 
     ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
     ctx->filter = NGX_RTMP_CONTROL_FILTER_PUBLISHER;
@@ -455,16 +419,14 @@ ngx_rtmp_control_record(ngx_http_request_t *r, ngx_str_t *method)
         goto error;
     }
 
-    if (ctx->path.len == 0) {
-        return NGX_HTTP_NO_CONTENT;
-    }
-
     /* output record path */
 
-    r->headers_out.status = NGX_HTTP_OK;
-    r->headers_out.content_length_n = ctx->path.len;
+    len = sizeof("ok\n") - 1;
 
-    b = ngx_create_temp_buf(r->pool, ctx->path.len);
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = len;
+
+    b = ngx_create_temp_buf(r->pool, len);
     if (b == NULL) {
         goto error;
     }
@@ -472,7 +434,7 @@ ngx_rtmp_control_record(ngx_http_request_t *r, ngx_str_t *method)
     ngx_memzero(&cl, sizeof(cl));
     cl.buf = b;
 
-    b->last = ngx_cpymem(b->pos, ctx->path.data, ctx->path.len);
+    b->last = ngx_cpymem(b->pos, "ok\n", len);
     b->last_buf = 1;
 
     ngx_http_send_header(r);
@@ -744,23 +706,4 @@ ngx_rtmp_control(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     clcf->handler = ngx_rtmp_control_handler;
 
     return ngx_conf_set_bitmask_slot(cf, cmd, conf);
-}
-
-
-static char *
-ngx_rtmp_control_port(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    ngx_rtmp_control_loc_conf_t        *rclcf;
-    ngx_str_t                          *value;
-
-    rclcf = conf;
-
-    value = cf->args->elts;
-
-    rclcf->ls = ngx_rtmp_find_relation_port(cf->cycle, &value[1]);
-    if (rclcf->ls == NULL) {
-        return NGX_CONF_ERROR;
-    }
-
-    return NGX_CONF_OK;
 }

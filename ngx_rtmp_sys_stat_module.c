@@ -9,6 +9,7 @@
 #include <ngx_http.h>
 #include "ngx_rtmp.h"
 #include "ngx_rbuf.h"
+#include "ngx_poold.h"
 #include "ngx_stream_zone_module.h"
 #include "ngx_event_timer_module.h"
 #include "ngx_event_resolver.h"
@@ -17,6 +18,9 @@
 
 
 static char *ngx_rtmp_sys_stat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
+
+extern ngx_chain_t *ngx_live_relay_static_state(ngx_http_request_t *r);
 
 
 static ngx_command_t  ngx_rtmp_sys_stat_commands[] = {
@@ -68,7 +72,15 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
 {
     ngx_chain_t                       **ll, *out;
     ngx_buf_t                          *b;
+    ngx_str_t                           detail_arg;
+    ngx_uint_t                          detail = 0;
     size_t                              len;
+
+    if (ngx_http_arg(r, (u_char *) "detail", sizeof("detail") - 1, &detail_arg)
+            == NGX_OK)
+    {
+        detail = 1;
+    }
 
     r->headers_out.status = NGX_HTTP_OK;
     ngx_http_send_header(r);
@@ -104,12 +116,17 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
     if (*ll) {
         ll = &(*ll)->next;
     }
+    *ll = ngx_live_relay_static_state(r);
+
+    if (*ll) {
+        ll = &(*ll)->next;
+    }
     *ll = ngx_rtmp_shared_state(r);
 
     if (*ll) {
         ll = &(*ll)->next;
     }
-    *ll = ngx_rbuf_state(r);
+    *ll = ngx_rbuf_state(r, detail);
 
     if (*ll) {
         ll = &(*ll)->next;
@@ -130,6 +147,11 @@ ngx_rtmp_sys_stat_handler(ngx_http_request_t *r)
         ll = &(*ll)->next;
     }
     *ll = ngx_dynamic_resolver_state(r);
+
+    if (*ll) {
+        ll = &(*ll)->next;
+    }
+    *ll = ngx_poold_state(r, detail);
 
     (*ll)->buf->last_buf = 1;
 

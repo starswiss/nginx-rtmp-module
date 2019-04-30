@@ -218,6 +218,7 @@ ngx_live_get_stream(ngx_str_t *stream)
     *ngx_cpymem(st->name, stream->data, stream->len) = 0;
     st->pslot = -1;
     st->epoch = ngx_current_msec;
+    ngx_map_init(&st->pubctx, ngx_map_hash_int, ngx_cmp_int);
 
     return st;
 }
@@ -233,49 +234,6 @@ ngx_live_put_stream(ngx_live_stream_t *st)
     st->next = lcf->free_stream;
     lcf->free_stream = st;
     ++lcf->free_stream_count;
-}
-
-ngx_relay_reconnect_t *
-ngx_live_get_relay_reconnect()
-{
-    ngx_relay_reconnect_t      *rc;
-    ngx_live_conf_t            *lcf;
-
-    lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
-                                           ngx_live_module);
-
-    rc = lcf->free_reconnect;
-    if (rc == NULL) {
-        rc = ngx_pcalloc(lcf->pool, sizeof(ngx_relay_reconnect_t));
-        ++lcf->alloc_reconnect_count;
-    } else {
-        lcf->free_reconnect = rc->next;
-        --lcf->free_reconnect_count;
-        ngx_memzero(rc, sizeof(ngx_relay_reconnect_t));
-    }
-
-    return rc;
-}
-
-void
-ngx_live_put_relay_reconnect(ngx_relay_reconnect_t *rc)
-{
-    ngx_live_conf_t            *lcf;
-
-    lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
-                                           ngx_live_module);
-
-    if (rc->reconnect.timer_set) {
-        ngx_del_timer(&rc->reconnect);
-    }
-
-    if (rc->reconnect.posted) {
-        ngx_delete_posted_event(&rc->reconnect);
-    }
-
-    rc->next = lcf->free_reconnect;
-    lcf->free_reconnect = rc;
-    ++lcf->free_reconnect_count;
 }
 
 ngx_live_server_t *
@@ -389,16 +347,6 @@ ngx_live_delete_stream(ngx_str_t *serverid, ngx_str_t *stream)
 
     st = *pst;
 
-    if (st->push_reconnect) {
-        ngx_live_put_relay_reconnect(st->push_reconnect);
-        st->push_reconnect = NULL;
-    }
-
-    if (st->pull_reconnect) {
-        ngx_live_put_relay_reconnect(st->pull_reconnect);
-        st->pull_reconnect = NULL;
-    }
-
     *pst = st->next;
     ngx_live_put_stream(st);
     --(*psrv)->n_stream;
@@ -415,7 +363,7 @@ ngx_live_create_ctx(ngx_rtmp_session_t *s, unsigned publishing)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_core_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_core_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_core_ctx_t));
         if (ctx == NULL) {
             return;
         }
@@ -476,9 +424,7 @@ ngx_live_state(ngx_http_request_t *r)
         + sizeof("ngx_live nalloc server: \n") - 1 + NGX_OFF_T_LEN
         + sizeof("ngx_live nfree server: \n") - 1 + NGX_OFF_T_LEN
         + sizeof("ngx_live nalloc stream: \n") - 1 + NGX_OFF_T_LEN
-        + sizeof("ngx_live nfree stream: \n") - 1 + NGX_OFF_T_LEN
-        + sizeof("ngx_live nalloc reconnect: \n") - 1 + NGX_OFF_T_LEN
-        + sizeof("ngx_live nfree reconnect: \n") - 1 + NGX_OFF_T_LEN;
+        + sizeof("ngx_live nfree stream: \n") - 1 + NGX_OFF_T_LEN;
 
     cl = ngx_alloc_chain_link(r->pool);
     if (cl == NULL) {
@@ -495,11 +441,9 @@ ngx_live_state(ngx_http_request_t *r)
     b->last = ngx_snprintf(b->last, len,
             "##########ngx live state##########\n"
             "ngx_live nalloc server: %ui\nngx_live nfree server: %ui\n"
-            "ngx_live nalloc stream: %ui\nngx_live nfree stream: %ui\n"
-            "ngx_live nalloc reconnect: %ui\nngx_live nfree reconnect: %ui\n",
+            "ngx_live nalloc stream: %ui\nngx_live nfree stream: %ui\n",
             lcf->alloc_server_count, lcf->free_server_count,
-            lcf->alloc_stream_count, lcf->free_stream_count,
-            lcf->alloc_reconnect_count, lcf->free_reconnect_count);
+            lcf->alloc_stream_count, lcf->free_stream_count);
 
     return cl;
 }

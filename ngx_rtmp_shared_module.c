@@ -83,6 +83,70 @@ ngx_rtmp_shared_init_conf(ngx_cycle_t *cycle, void *conf)
 }
 
 
+ngx_int_t
+ngx_rtmp_prepare_merge_frame(ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_core_app_conf_t   *cacf;
+    ngx_chain_t                *ll, **ln;
+    ngx_uint_t                  n;
+
+    // merge frame not send completely
+    if (s->out_chain) {
+        return NGX_OK;
+    }
+
+    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
+
+    ngx_rtmp_free_merge_frame(s);
+
+    ln = &s->out_chain;
+
+    for (n = 0; n < cacf->merge_frame && s->out_pos != s->out_last; ++n) {
+        // save frame chain with rtmp chunk or flv tag
+        s->merge[n] = s->prepare_handler(s);
+
+        if (s->out_pos == s->out_last) {
+            break;
+        }
+
+        // normal link to chain all merge frames
+        for (ll = s->merge[n]; ll; ll = ll->next, ln = &(*ln)->next) {
+            *ln = ngx_alloc_chain_link(s->pool);
+            (*ln)->next = NULL;
+            if (*ln == NULL) {
+                s->nframe = n;
+                return NGX_ERROR;
+            }
+
+            (*ln)->buf = ll->buf;
+        }
+
+        // save frame prepare to send
+        s->prepare_frame[n] = s->out[s->out_pos];
+
+        ++s->out_pos;
+        s->out_pos %= s->out_queue;
+    }
+
+    s->nframe = n;
+
+    return NGX_OK;
+}
+
+void
+ngx_rtmp_free_merge_frame(ngx_rtmp_session_t *s)
+{
+    ngx_uint_t                  n;
+
+    for (n = 0; n < s->nframe; ++n) {
+        ngx_put_chainbufs(s->merge[n]);
+        s->merge[n] = NULL;
+
+        ngx_rtmp_shared_free_frame(s->prepare_frame[n]);
+        s->prepare_frame[n] = NULL;
+    }
+}
+
 void
 ngx_rtmp_shared_append_chain(ngx_rtmp_frame_t *frame, size_t size,
         ngx_chain_t *cl, ngx_flag_t mandatory)

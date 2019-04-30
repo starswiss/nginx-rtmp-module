@@ -247,7 +247,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
                        NGX_FILE_TRUNCATE, NGX_FILE_DEFAULT_ACCESS);
 
     if (fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: open failed: '%V'", &ctx->playlist_bak);
         return NGX_ERROR;
     }
@@ -433,7 +433,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     n = ngx_write_fd(fd, buffer, p - buffer);
 
     if (n < 0) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: write failed: '%V'", &ctx->playlist_bak);
         ngx_close_file(fd);
         return NGX_ERROR;
@@ -444,7 +444,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
     if (ngx_rtmp_dash_rename_file(ctx->playlist_bak.data, ctx->playlist.data)
         == NGX_FILE_ERROR)
     {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: rename failed: '%V'->'%V'",
                       &ctx->playlist_bak, &ctx->playlist);
         return NGX_ERROR;
@@ -480,7 +480,7 @@ ngx_rtmp_dash_write_init_segments(ngx_rtmp_session_t *s)
                        NGX_FILE_DEFAULT_ACCESS);
 
     if (fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: error creating video init file");
         return NGX_ERROR;
     }
@@ -494,7 +494,7 @@ ngx_rtmp_dash_write_init_segments(ngx_rtmp_session_t *s)
 
     rc = ngx_write_fd(fd, b.start, (size_t) (b.last - b.start));
     if (rc == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: writing video init failed");
     }
 
@@ -508,7 +508,7 @@ ngx_rtmp_dash_write_init_segments(ngx_rtmp_session_t *s)
                        NGX_FILE_DEFAULT_ACCESS);
 
     if (fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: error creating dash audio init file");
         return NGX_ERROR;
     }
@@ -520,7 +520,7 @@ ngx_rtmp_dash_write_init_segments(ngx_rtmp_session_t *s)
 
     rc = ngx_write_fd(fd, b.start, (size_t) (b.last - b.start));
     if (rc == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: writing audio init failed");
     }
 
@@ -547,7 +547,7 @@ ngx_rtmp_dash_close_fragment(ngx_rtmp_session_t *s, ngx_rtmp_dash_track_t *t)
         return;
     }
 
-    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: close fragment id=%ui, type=%c, pts=%uD",
                    t->id, t->type, t->earliest_pres_time);
 
@@ -583,7 +583,7 @@ ngx_rtmp_dash_close_fragment(ngx_rtmp_session_t *s, ngx_rtmp_dash_track_t *t)
                        NGX_FILE_TRUNCATE, NGX_FILE_DEFAULT_ACCESS);
 
     if (fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: error creating dash temp video file");
         goto done;
     }
@@ -596,13 +596,13 @@ ngx_rtmp_dash_close_fragment(ngx_rtmp_session_t *s, ngx_rtmp_dash_track_t *t)
 
 #if (NGX_WIN32)
     if (SetFilePointer(t->fd, 0, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "dash: SetFilePointer error");
         goto done;
     }
 #else
     if (lseek(t->fd, 0, SEEK_SET) == -1) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: lseek error");
         goto done;
     }
@@ -646,7 +646,7 @@ ngx_rtmp_dash_close_fragments(ngx_rtmp_session_t *s)
         return NGX_OK;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: close fragments");
 
     ngx_rtmp_dash_close_fragment(s, &ctx->video);
@@ -673,7 +673,7 @@ ngx_rtmp_dash_open_fragment(ngx_rtmp_session_t *s, ngx_rtmp_dash_track_t *t,
         return NGX_OK;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: open fragment id=%ui, type='%c'", id, type);
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_dash_module);
@@ -684,7 +684,7 @@ ngx_rtmp_dash_open_fragment(ngx_rtmp_session_t *s, ngx_rtmp_dash_track_t *t,
                           NGX_FILE_TRUNCATE, NGX_FILE_DEFAULT_ACCESS);
 
     if (t->fd == NGX_INVALID_FILE) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: error creating fragment file");
         return NGX_ERROR;
     }
@@ -716,7 +716,7 @@ ngx_rtmp_dash_open_fragments(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_dash_ctx_t  *ctx;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: open fragments");
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_dash_module);
@@ -752,7 +752,7 @@ ngx_rtmp_dash_ensure_directory(ngx_rtmp_session_t *s)
     if (ngx_file_info(path, &fi) == NGX_FILE_ERROR) {
 
         if (ngx_errno != NGX_ENOENT) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                           "dash: " ngx_file_info_n " failed on '%V'",
                           &dacf->path);
             return NGX_ERROR;
@@ -761,25 +761,25 @@ ngx_rtmp_dash_ensure_directory(ngx_rtmp_session_t *s)
         /* ENOENT */
 
         if (ngx_create_dir(path, NGX_RTMP_DASH_DIR_ACCESS) == NGX_FILE_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                           "dash: " ngx_create_dir_n " failed on '%V'",
                           &dacf->path);
             return NGX_ERROR;
         }
 
-        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "dash: directory '%V' created", &dacf->path);
 
     } else {
 
         if (!ngx_is_dir(&fi)) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "dash: '%V' exists and is not a directory",
                           &dacf->path);
             return  NGX_ERROR;
         }
 
-        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "dash: directory '%V' exists", &dacf->path);
     }
 
@@ -800,19 +800,19 @@ ngx_rtmp_dash_ensure_directory(ngx_rtmp_session_t *s)
     if (ngx_file_info(path, &fi) != NGX_FILE_ERROR) {
 
         if (ngx_is_dir(&fi)) {
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                            "dash: directory '%s' exists", path);
             return NGX_OK;
         }
 
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "dash: '%s' exists and is not a directory", path);
 
         return  NGX_ERROR;
     }
 
     if (ngx_errno != NGX_ENOENT) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: " ngx_file_info_n " failed on '%s'", path);
         return NGX_ERROR;
     }
@@ -820,12 +820,12 @@ ngx_rtmp_dash_ensure_directory(ngx_rtmp_session_t *s)
     /* NGX_ENOENT */
 
     if (ngx_create_dir(path, NGX_RTMP_DASH_DIR_ACCESS) == NGX_FILE_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+        ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                       "dash: " ngx_create_dir_n " failed on '%s'", path);
         return NGX_ERROR;
     }
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: directory '%s' created", path);
 
     return NGX_OK;
@@ -850,13 +850,13 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         goto next;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: publish: name='%s' type='%s'", v->name, v->type);
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_dash_module);
 
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_dash_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_dash_ctx_t));
         if (ctx == NULL) {
             goto next;
         }
@@ -873,7 +873,7 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     }
 
     if (ctx->frags == NULL) {
-        ctx->frags = ngx_pcalloc(s->connection->pool,
+        ctx->frags = ngx_pcalloc(s->pool,
                                  sizeof(ngx_rtmp_dash_frag_t) *
                                  (dacf->winfrags * 2 + 1));
         if (ctx->frags == NULL) {
@@ -884,13 +884,13 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     ctx->id = 0;
 
     if (ngx_strstr(v->name, "..")) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "dash: bad stream name: '%s'", v->name);
         return NGX_ERROR;
     }
 
     ctx->name.len = ngx_strlen(v->name);
-    ctx->name.data = ngx_palloc(s->connection->pool, ctx->name.len + 1);
+    ctx->name.data = ngx_palloc(s->pool, ctx->name.len + 1);
 
     if (ctx->name.data == NULL) {
         return NGX_ERROR;
@@ -903,7 +903,7 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
         len += sizeof("/index") - 1;
     }
 
-    ctx->playlist.data = ngx_palloc(s->connection->pool, len);
+    ctx->playlist.data = ngx_palloc(s->pool, len);
     p = ngx_cpymem(ctx->playlist.data, dacf->path.data, dacf->path.len);
 
     if (p[-1] != '/') {
@@ -919,7 +919,7 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
      */
 
     ctx->stream.len = p - ctx->playlist.data + 1;
-    ctx->stream.data = ngx_palloc(s->connection->pool,
+    ctx->stream.data = ngx_palloc(s->pool,
                                   ctx->stream.len + NGX_INT32_LEN +
                                   sizeof(".m4x"));
 
@@ -938,7 +938,7 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     /* playlist bak (new playlist) path */
 
-    ctx->playlist_bak.data = ngx_palloc(s->connection->pool,
+    ctx->playlist_bak.data = ngx_palloc(s->pool,
                                         ctx->playlist.len + sizeof(".bak"));
     p = ngx_cpymem(ctx->playlist_bak.data, ctx->playlist.data,
                    ctx->playlist.len);
@@ -948,7 +948,7 @@ ngx_rtmp_dash_publish(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 
     *p = 0;
 
-    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: playlist='%V' playlist_bak='%V' stream_pattern='%V'",
                    &ctx->playlist, &ctx->playlist_bak, &ctx->stream);
 
@@ -977,7 +977,7 @@ ngx_rtmp_dash_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         goto next;
     }
 
-    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "dash: delete stream");
 
     ngx_rtmp_dash_close_fragments(s);
@@ -1080,7 +1080,7 @@ ngx_rtmp_dash_append(ngx_rtmp_session_t *s, ngx_chain_t *in,
     if (t->sample_count < NGX_RTMP_DASH_MAX_SAMPLES) {
 
         if (ngx_write_fd(t->fd, buffer, size) == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, ngx_errno,
+            ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
                           "dash: " ngx_write_fd_n " failed");
             return NGX_ERROR;
         }

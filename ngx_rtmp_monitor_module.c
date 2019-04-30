@@ -150,7 +150,7 @@ ngx_rtmp_monitor_consume(ngx_event_t *ev)
 
 next:
     if (ctx->frame_rate == 0) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "monitor, frame rate error, stream: %V, frame rate: %.2f",
                 &s->stream, ctx->frame_rate);
         return;
@@ -200,6 +200,35 @@ ngx_rtmp_monitor_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 {
     ngx_rtmp_monitor_frame(s, h, in, ngx_rtmp_is_codec_header(in), 1);
 
+//    if (h->type == NGX_RTMP_MSG_VIDEO) {
+//        ngx_log_error(NGX_LOG_INFO, s->log, 0,
+//                "!!!!!!video(%d): %02xD %02xD %02xD %02xD %02xD",
+//                h->mlen, in->buf->pos[0], in->buf->pos[1], in->buf->pos[2],
+//                in->buf->pos[3], in->buf->pos[4], in->buf->pos[5]);
+//    }
+//
+//    if (h->type == NGX_RTMP_MSG_AUDIO) {
+//        ngx_log_error(NGX_LOG_INFO, s->log, 0,
+//                "!!!!!!audio(%d): %02xD %02xD %02xD %02xD %02xD",
+//                h->mlen, in->buf->pos[0], in->buf->pos[1], in->buf->pos[2],
+//                in->buf->pos[3], in->buf->pos[4], in->buf->pos[5]);
+//    }
+
+    return NGX_OK;
+}
+
+static ngx_int_t
+ngx_rtmp_monitor_meta_data(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
+        ngx_chain_t *in)
+{
+    if (s->first_metadata == 0) {
+        s->stage = NGX_LIVE_AV;
+        s->first_metadata = ngx_current_msec;
+        s->first_data = s->first_data == 0? ngx_current_msec: s->first_data;
+    }
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "receive metadata");
+
     return NGX_OK;
 }
 
@@ -218,6 +247,10 @@ ngx_rtmp_monitor_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         ngx_del_timer(&ctx->consume);
     }
 
+    if (ctx->consume.posted) {
+        ngx_delete_posted_event(&ctx->consume);
+    }
+
 next:
     return next_close_stream(s, v);
 }
@@ -228,6 +261,42 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 {
     ngx_rtmp_monitor_app_conf_t    *macf;
     ngx_rtmp_monitor_ctx_t         *ctx;
+
+    if (s->first_metadata == 0 && (h->type == NGX_RTMP_MSG_AMF_META
+                               || h->type == NGX_RTMP_MSG_AMF3_META))
+    {
+        s->stage = NGX_LIVE_AV;
+        s->first_metadata = ngx_current_msec;
+        s->first_data = s->first_data == 0? ngx_current_msec: s->first_data;
+    }
+
+    if (s->first_audio == 0 && h->type == NGX_RTMP_MSG_AUDIO) {
+        s->stage = NGX_LIVE_AV;
+        s->first_audio = ngx_current_msec;
+        s->first_data = s->first_data == 0? ngx_current_msec: s->first_data;
+    }
+
+    if (s->first_video == 0 && h->type == NGX_RTMP_MSG_VIDEO) {
+        s->stage = NGX_LIVE_AV;
+        s->first_video = ngx_current_msec;
+        s->first_data = s->first_data == 0? ngx_current_msec: s->first_data;
+    }
+
+    if (h->type == NGX_RTMP_MSG_AUDIO && is_header) {
+        if (s->publishing) {
+            ngx_log_error(NGX_LOG_INFO, s->log, 0, "receive audio header");
+        } else {
+            ngx_log_error(NGX_LOG_INFO, s->log, 0, "send audio header");
+        }
+    }
+
+    if (h->type == NGX_RTMP_MSG_VIDEO && is_header) {
+        if (s->publishing) {
+            ngx_log_error(NGX_LOG_INFO, s->log, 0, "receive video header");
+        } else {
+            ngx_log_error(NGX_LOG_INFO, s->log, 0, "send video header");
+        }
+    }
 
     if (h->type != NGX_RTMP_MSG_VIDEO) {
         return;
@@ -242,7 +311,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_monitor_module);
 
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_monitor_ctx_t));
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_monitor_ctx_t));
         if (ctx == NULL) {
             return;
         }
@@ -252,7 +321,7 @@ ngx_rtmp_monitor_frame(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ctx->publishing = publishing;
 
         ctx->consume.data = s;
-        ctx->consume.log = s->connection->log;
+        ctx->consume.log = s->log;
         ctx->consume.handler = ngx_rtmp_monitor_consume;
         ngx_add_timer(&ctx->consume, 1000);
     }
@@ -354,6 +423,7 @@ ngx_rtmp_monitor_postconfiguration(ngx_conf_t *cf)
 {
     ngx_rtmp_core_main_conf_t          *cmcf;
     ngx_rtmp_handler_pt                *h;
+    ngx_rtmp_amf_handler_t             *ch;
 
     cmcf = ngx_rtmp_conf_get_module_main_conf(cf, ngx_rtmp_core_module);
 
@@ -363,6 +433,20 @@ ngx_rtmp_monitor_postconfiguration(ngx_conf_t *cf)
     h = ngx_array_push(&cmcf->events[NGX_RTMP_MSG_VIDEO]);
     *h = ngx_rtmp_monitor_av;
 
+    /* register metadata handler */
+    ch = ngx_array_push(&cmcf->amf);
+    if (ch == NULL) {
+        return NGX_ERROR;
+    }
+    ngx_str_set(&ch->name, "@setDataFrame");
+    ch->handler = ngx_rtmp_monitor_meta_data;
+
+    ch = ngx_array_push(&cmcf->amf);
+    if (ch == NULL) {
+        return NGX_ERROR;
+    }
+    ngx_str_set(&ch->name, "onMetaData");
+    ch->handler = ngx_rtmp_monitor_meta_data;
 
     next_close_stream = ngx_rtmp_close_stream;
     ngx_rtmp_close_stream = ngx_rtmp_monitor_close_stream;

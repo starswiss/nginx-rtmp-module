@@ -201,9 +201,18 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
         ngx_log_debug1(NGX_LOG_DEBUG_CORE, file->log, 0,
                        "mpegts: write %uz bytes", in_size);
 
-        rc = ngx_write_fd(file->fd, in, in_size);
-        if (rc < 0) {
-            return NGX_ERROR;
+        if (file->whandle == NULL) {
+            rc = ngx_write_fd(file->fd, in, in_size);
+            if (rc < 0) {
+                return NGX_ERROR;
+            }
+
+            file->file_size += rc;
+        } else {
+            rc = file->whandle(file, in, in_size);
+            if (rc < 0) {
+                return NGX_ERROR;
+            }
         }
 
         return NGX_OK;
@@ -266,7 +275,7 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_rtmp_mpegts_write_header(ngx_rtmp_mpegts_file_t *file)
 {
     ngx_int_t       ret;

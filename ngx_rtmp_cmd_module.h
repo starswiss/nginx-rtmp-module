@@ -144,10 +144,6 @@ typedef ngx_int_t (*ngx_rtmp_set_buflen_pt)(ngx_rtmp_session_t *s,
         ngx_rtmp_set_buflen_t *v);
 
 
-typedef ngx_int_t (*ngx_rtmp_pull_pt)(ngx_rtmp_session_t *s);
-typedef ngx_int_t (*ngx_rtmp_push_pt)(ngx_rtmp_session_t *s);
-
-
 extern ngx_rtmp_connect_pt          ngx_rtmp_connect;
 extern ngx_rtmp_disconnect_pt       ngx_rtmp_disconnect;
 extern ngx_rtmp_create_stream_pt    ngx_rtmp_create_stream;
@@ -163,10 +159,6 @@ extern ngx_rtmp_stream_eof_pt       ngx_rtmp_stream_eof;
 extern ngx_rtmp_stream_dry_pt       ngx_rtmp_stream_dry;
 extern ngx_rtmp_set_buflen_pt       ngx_rtmp_set_buflen;
 extern ngx_rtmp_recorded_pt         ngx_rtmp_recorded;
-
-
-extern ngx_rtmp_pull_pt             ngx_rtmp_pull;
-extern ngx_rtmp_push_pt             ngx_rtmp_push;
 
 
 #endif /*_NGX_RTMP_CMD_H_INCLUDED_ */

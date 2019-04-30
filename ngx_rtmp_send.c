@@ -70,7 +70,7 @@ ngx_rtmp_send_shared_packet(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_chunk_size(ngx_rtmp_session_t *s, uint32_t chunk_size)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "chunk_size=%uD", chunk_size);
 
     {
@@ -94,7 +94,7 @@ ngx_rtmp_send_chunk_size(ngx_rtmp_session_t *s, uint32_t chunk_size)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_abort(ngx_rtmp_session_t *s, uint32_t csid)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: abort csid=%uD", csid);
 
     {
@@ -118,7 +118,7 @@ ngx_rtmp_send_abort(ngx_rtmp_session_t *s, uint32_t csid)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_ack(ngx_rtmp_session_t *s, uint32_t seq)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: ack seq=%uD", seq);
 
     {
@@ -142,7 +142,7 @@ ngx_rtmp_send_ack(ngx_rtmp_session_t *s, uint32_t seq)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_ack_size(ngx_rtmp_session_t *s, uint32_t ack_size)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: ack_size=%uD", ack_size);
 
     {
@@ -167,7 +167,7 @@ ngx_rtmp_frame_t *
 ngx_rtmp_create_bandwidth(ngx_rtmp_session_t *s, uint32_t ack_size,
                           uint8_t limit_type)
 {
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: bandwidth ack_size=%uD limit=%d",
                    ack_size, (int)limit_type);
 
@@ -196,7 +196,7 @@ ngx_rtmp_send_bandwidth(ngx_rtmp_session_t *s, uint32_t ack_size,
 ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_begin(ngx_rtmp_session_t *s, uint32_t msid)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: stream_begin msid=%uD", msid);
 
     {
@@ -220,7 +220,7 @@ ngx_rtmp_send_stream_begin(ngx_rtmp_session_t *s, uint32_t msid)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_eof(ngx_rtmp_session_t *s, uint32_t msid)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: stream_end msid=%uD", msid);
 
     {
@@ -244,7 +244,7 @@ ngx_rtmp_send_stream_eof(ngx_rtmp_session_t *s, uint32_t msid)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_stream_dry(ngx_rtmp_session_t *s, uint32_t msid)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: stream_dry msid=%uD", msid);
 
     {
@@ -269,7 +269,7 @@ ngx_rtmp_frame_t *
 ngx_rtmp_create_set_buflen(ngx_rtmp_session_t *s, uint32_t msid,
                            uint32_t buflen_msec)
 {
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: set_buflen msid=%uD buflen=%uD",
                    msid, buflen_msec);
 
@@ -296,7 +296,7 @@ ngx_rtmp_send_set_buflen(ngx_rtmp_session_t *s, uint32_t msid,
 ngx_rtmp_frame_t *
 ngx_rtmp_create_recorded(ngx_rtmp_session_t *s, uint32_t msid)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: recorded msid=%uD", msid);
 
     {
@@ -320,7 +320,7 @@ ngx_rtmp_send_recorded(ngx_rtmp_session_t *s, uint32_t msid)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_ping_request(ngx_rtmp_session_t *s, uint32_t timestamp)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: ping_request timestamp=%uD", timestamp);
 
     {
@@ -344,7 +344,7 @@ ngx_rtmp_send_ping_request(ngx_rtmp_session_t *s, uint32_t timestamp)
 ngx_rtmp_frame_t *
 ngx_rtmp_create_ping_response(ngx_rtmp_session_t *s, uint32_t timestamp)
 {
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: ping_response timestamp=%uD", timestamp);
 
     {
@@ -389,7 +389,7 @@ ngx_rtmp_append_amf(ngx_rtmp_session_t *s,
     memset(&act, 0, sizeof(act));
     act.arg = cscf;
     act.alloc = ngx_rtmp_alloc_amf_buf;
-    act.log = s->connection->log;
+    act.log = s->log;
 
     if (first) {
         act.first = *first;
@@ -421,7 +421,7 @@ ngx_rtmp_create_amf(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_core_srv_conf_t   *cscf;
     ngx_rtmp_frame_t           *frame;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: amf nelts=%ui", nelts);
 
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
@@ -491,7 +491,7 @@ ngx_rtmp_create_error(ngx_rtmp_session_t *s, char *code, char* level,
           sizeof(out_inf) },
     };
 
-    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: error code='%s' level='%s' desc='%s'",
                    code, level, desc);
 
@@ -560,7 +560,7 @@ ngx_rtmp_create_status(ngx_rtmp_session_t *s, char *code, char* level,
           sizeof(out_inf) },
     };
 
-    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug3(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: status code='%s' level='%s' desc='%s'",
                    code, level, desc);
 
@@ -626,7 +626,7 @@ ngx_rtmp_create_play_status(ngx_rtmp_session_t *s, char *code, char* level,
           sizeof(out_inf) },
     };
 
-    ngx_log_debug4(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+    ngx_log_debug4(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "create: play_status code='%s' level='%s' "
                    "duration=%ui bytes=%ui",
                    code, level, duration, bytes);

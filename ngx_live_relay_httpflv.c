@@ -3,10 +3,10 @@
  */
 
 
+#include "ngx_live_relay.h"
 #include "ngx_http_client.h"
-#include "ngx_rtmp.h"
-#include "ngx_rtmp_relay_module.h"
-#include "ngx_rtmp_cmd_module.h"
+#include "ngx_toolkit_misc.h"
+#include "ngx_dynamic_resolver.h"
 #include "ngx_rbuf.h"
 
 
@@ -17,15 +17,18 @@ typedef struct {
     char                       *desc;
 } ngx_http_status_code_t;
 
+
 static ngx_http_status_code_t ngx_http_relay_status_code[] = {
     { 400, "NetStream.Play.BadName", "error", "Bad Request" },
+    { 403, "NetStream.Play.Forbidden", "error", "Forbidden" },
     { 404, "NetStream.Play.StreamNotFound", "error", "No such stream" },
-    { 503, "NetStream.Play.ServiceUnavailable", "error", "Service Unavailable" },
+    { 503, "NetStream.Play.ServiceUnavailable", "error", "Service Unavailable"},
     { 0, "NetStream.Play.StreamError", "error", "Stream Error" }
 };
 
+
 static ngx_int_t
-ngx_http_relay_parse_flv(ngx_rtmp_session_t *s, ngx_buf_t *b)
+ngx_live_relay_httpflv_parse(ngx_rtmp_session_t *s, ngx_buf_t *b)
 {
     u_char                      ch, *p, *pc;
     ngx_rtmp_stream_t          *st;
@@ -167,7 +170,8 @@ ngx_http_relay_parse_flv(ngx_rtmp_session_t *s, ngx_buf_t *b)
             st = &s->in_streams[0];
             h = &st->hdr;
 
-            if (h->mlen == 0) {
+            if (h->mlen == 0 && s->flv_first_pts == 0) {
+                s->flv_first_pts = 1;
                 if (s->flv_tagsize != 0) {
                     rc = NGX_ERROR;
                     goto done;
@@ -346,36 +350,27 @@ done:
     return rc;
 }
 
+
 static void
-ngx_http_relay_recv_body(void *request, ngx_http_request_t *hcr)
+ngx_live_relay_httpflv_recv_body(void *request, ngx_http_request_t *hcr)
 {
     ngx_int_t                   n;
-    ngx_client_session_t       *cs;
-    ngx_http_client_ctx_t      *ctx;
     ngx_rtmp_session_t         *s;
-    ngx_chain_t                *cl = NULL, *l, *in;
-    ngx_rtmp_core_srv_conf_t   *cscf;
+    ngx_chain_t                *cl, *l, *in;
     ngx_rtmp_header_t          *h;
     ngx_rtmp_stream_t          *st = NULL;
 
-    ctx = hcr->ctx[0];
-    cs = ctx->session;
-
     s = request;
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
-    if (cs->closed) {
-        ngx_http_client_finalize_request(hcr, 1);
-        return;
-    }
-
-    n = ngx_http_client_read_body(hcr, &cl, cscf->chunk_size);
+    n = ngx_http_client_read_body(hcr, &cl);
 
     if (n == 0 || n == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_INFO, s->connection->log, ngx_errno,
+        s->finalize_reason = n == 0? NGX_LIVE_NORMAL_CLOSE:
+                                     NGX_LIVE_FLV_RECV_ERR;
+        ngx_log_error(NGX_LOG_INFO, s->log, ngx_errno,
                 "http relay, recv body error");
         ngx_rtmp_finalize_session(s);
-        goto end;
+        return;
     }
 
     l = cl;
@@ -385,21 +380,18 @@ ngx_http_relay_recv_body(void *request, ngx_http_request_t *hcr)
         }
 
         if (l == NULL) {
-            break;
+            return;
         }
 
-        n = ngx_http_relay_parse_flv(s, l->buf);
+        n = ngx_live_relay_httpflv_parse(s, l->buf);
 
         if (n == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                     "http relay, parse flv frame failed in state %d",
                     s->flv_state);
-            ngx_rtmp_finalize_session(s);
+            ngx_http_client_finalize_request(hcr, 1);
 
-            ngx_put_chainbufs(st->in);
-            st->in = NULL;
-
-            goto end;
+            return;
         }
 
         if (n == NGX_AGAIN) {
@@ -413,53 +405,47 @@ ngx_http_relay_recv_body(void *request, ngx_http_request_t *hcr)
 
         if (ngx_rtmp_receive_message(s, h, in) != NGX_OK) {
             ngx_rtmp_finalize_session(s);
-            goto end;
+            return;
         }
 
         ngx_put_chainbufs(st->in);
         st->in = NULL;
     }
-
-end:
-    ngx_put_chainbufs(cl);
 }
 
+
 static void
-ngx_http_flv_client_cleanup(void *data)
+ngx_live_relay_httpflv_cleanup(void *data)
 {
-    ngx_http_request_t         *hcr;
-    ngx_http_client_ctx_t      *ctx;
     ngx_rtmp_session_t         *s;
 
-    hcr = data;
+    s = data;
 
-    ctx = hcr->ctx[0];
-    s = ctx->request;
-
-    if (ctx == NULL) {
-        return;
-    }
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "http flv client, cleanup");
 
     if (s) {
         if (s->close.posted) {
             ngx_delete_posted_event(&s->close);
         }
+
+        if (s->finalize_reason == 0) {
+            s->finalize_reason = NGX_LIVE_FLV_RECV_ERR;
+        }
+
         ngx_rtmp_finalize_fake_session(s);
     }
-
-    ngx_log_error(NGX_LOG_INFO, hcr->connection->log, 0,
-            "http flv client, cleanup");
 }
 
+
 static void
-ngx_http_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
+ngx_live_relay_httpflv_error(ngx_rtmp_session_t *s, ngx_uint_t status)
 {
     ngx_live_stream_t          *st;
     ngx_rtmp_core_ctx_t        *cctx;
     char                       *code, *level, *desc;
     size_t                      i;
 
-    for (i = 0; ngx_http_relay_status_code[i].code; ++i) {
+    for (i = 0; ngx_http_relay_status_code[i].status; ++i) {
 
         if (status != ngx_http_relay_status_code[i].status) {
             continue;
@@ -472,9 +458,9 @@ ngx_http_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
     level = ngx_http_relay_status_code[i].level;
     desc = ngx_http_relay_status_code[i].desc;
 
-    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_ERR, s->log, 0,
             "http relay transit, %d: level='%s' code='%s' description='%s'",
-            status, code, level, desc);
+            status, level, code, desc);
 
     st = ngx_live_create_stream(&s->serverid, &s->stream);
     cctx = st->play_ctx;
@@ -483,89 +469,105 @@ ngx_http_relay_error(ngx_rtmp_session_t *s, ngx_uint_t status)
         cctx->session->status = status;
         ngx_rtmp_send_status(cctx->session, code, level, desc);
 
-        if (ngx_strcmp(level, "error") == 0) {
+        if (ngx_strcmp(level, "error") == 0 && !cctx->session->static_pull) {
+            cctx->session->finalize_reason = NGX_LIVE_RELAY_TRANSIT;
             ngx_rtmp_finalize_session(cctx->session);
         }
     }
 }
 
+
 static void
-ngx_http_relay_recv(void *request, ngx_http_request_t *hcr)
+ngx_live_relay_httpflv_recv(void *request, ngx_http_request_t *hcr)
 {
     ngx_rtmp_session_t         *s;
-    ngx_http_client_ctx_t      *ctx;
     ngx_uint_t                  status_code;
 
     s = request;
-    ctx = hcr->ctx[0];
     status_code = ngx_http_client_status_code(hcr);
 
+    s->stage = NGX_LIVE_PLAY;
+    s->ptime = ngx_current_msec;
+
+    s->connection = hcr->connection;
+    ngx_rtmp_set_combined_log(s, hcr->connection->log->data,
+            hcr->connection->log->handler);
+    s->log->connection = s->connection->number;
+
     if (status_code != NGX_HTTP_OK) {
-        ngx_http_relay_error(s, status_code);
+        ngx_live_relay_httpflv_error(s, status_code);
+        s->finalize_reason = NGX_LIVE_FLV_RECV_ERR;
         ngx_http_client_finalize_request(hcr, 1);
         return;
     }
 
-    ngx_rtmp_relay_publish_local(s);
+    ngx_live_relay_publish_local(s);
 
-    ctx->read_handler = ngx_http_relay_recv_body;
-    ngx_http_relay_recv_body(request, hcr);
+    ngx_http_client_set_read_handler(hcr, ngx_live_relay_httpflv_recv_body);
+    ngx_live_relay_httpflv_recv_body(request, hcr);
 }
 
+
 static ngx_int_t
-ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
+ngx_live_relay_httpflv_send_request(ngx_rtmp_session_t *s,
+        ngx_live_relay_url_t *url)
 {
     ngx_http_request_t         *hcr;
     ngx_str_t                   request_url;
     size_t                      len;
-    ngx_rtmp_relay_ctx_t       *ctx;
-    ngx_request_url_t           rurl;
+    ngx_live_relay_ctx_t       *ctx;
     ngx_http_cleanup_t         *cln;
+    u_char                     *p;
 
-    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_relay_module);
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_live_relay_module);
 
-    if (ngx_parse_request_url(&rurl, &ctx->tc_url) == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
-                "parse tc_url(%V) failed", &ctx->tc_url);
-        return NGX_ERROR;
-    }
-
-    len = s->scheme.len + 3 + rurl.host.len + 1 + ctx->app.len + 1
-        + ctx->name.len;
+    // request url
+    // http:// + url + ':' + port + '/' + app + '/' + name + ['?' + pargs]
+    len = 7 + url->url.host.len + 1 + sizeof("65535") - 1
+        + 1 + ctx->app.len + 1 + ctx->name.len;
     if (ctx->pargs.len) {
         len = len + 1 + ctx->pargs.len;
     }
 
-    request_url.data = ngx_pcalloc(cs->connection->pool, len);
+    request_url.data = ngx_pcalloc(s->pool, len);
     if (request_url.data == NULL) {
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                "alloc mem for request url failed");
         return NGX_ERROR;
     }
-    request_url.len = len;
 
     if (ctx->pargs.len) {
-        ngx_snprintf(request_url.data, len, "%V://%V/%V/%V?%V", &s->scheme,
-                &rurl.host, &ctx->app, &ctx->name, &ctx->pargs);
+        p = ngx_snprintf(request_url.data, len, "http://%V:%d/%V/%V?%V",
+                &url->url.host, url->port, &ctx->app, &ctx->name, &ctx->pargs);
     } else {
-        ngx_snprintf(request_url.data, len, "%V://%V/%V/%V", &s->scheme,
-                &rurl.host, &ctx->app, &ctx->name);
+        p = ngx_snprintf(request_url.data, len, "http://%V:%d/%V/%V",
+                &url->url.host, url->port, &ctx->app, &ctx->name);
     }
+    request_url.len = p - request_url.data;
 
-    hcr = ngx_http_client_create_request(&request_url, NGX_HTTP_CLIENT_GET,
-            NGX_HTTP_CLIENT_VERSION_10, NULL, cs->connection->log,
-            ngx_http_relay_recv, NULL);
+    // request headers
+    ngx_keyval_t                headers[] = {
+        { ngx_string("Host"),       ctx->domain     },
+        { ngx_string("Referer"),    ctx->referer    },
+        { ngx_string("User-Agent"), ctx->user_agent },
+        { ngx_null_string,          ngx_null_string }
+    };
 
-    if (ngx_http_client_send(hcr, cs, s, cs->connection->log) != NGX_OK) {
-        return NGX_ERROR;
-    }
+    s->stage = NGX_LIVE_CONNECT;
+    s->connect_time = ngx_current_msec;
 
-    cln = ngx_http_cleanup_add(hcr, 0);
+    hcr = ngx_http_client_get(s->log, &request_url, headers, s);
+    ngx_http_client_set_read_handler(hcr, ngx_live_relay_httpflv_recv);
+
+    cln = ngx_http_client_cleanup_add(hcr, 0);
     if (cln == NULL) {
-        ngx_http_relay_error(s, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        ngx_log_error(NGX_LOG_ERR, s->log, 0, "http client add cleanup failed");
+        ngx_live_relay_httpflv_error(s, NGX_HTTP_INTERNAL_SERVER_ERROR);
         ngx_http_client_finalize_request(hcr, 1);
         return NGX_ERROR;
     }
-    cln->handler = ngx_http_flv_client_cleanup;
-    cln->data = hcr;
+    cln->handler = ngx_live_relay_httpflv_cleanup;
+    cln->data = s;
 
     s->request = hcr;
     s->live_type = NGX_HTTP_FLV_LIVE;
@@ -573,220 +575,56 @@ ngx_http_relay_send_request(ngx_rtmp_session_t *s, ngx_client_session_t *cs)
     return NGX_OK;
 }
 
-static ngx_int_t
-ngx_http_relay_copy_str(ngx_pool_t *pool, ngx_str_t *dst, ngx_str_t *src)
+
+ngx_int_t
+ngx_live_relay_create_httpflv(ngx_rtmp_session_t *s, ngx_live_relay_t *relay,
+        ngx_live_relay_url_t *url)
 {
-    if (src->len == 0) {
-        return NGX_OK;
-    }
-    dst->len = src->len;
-    dst->data = ngx_palloc(pool, src->len);
-    if (dst->data == NULL) {
+    ngx_live_relay_ctx_t       *rctx;
+    // must use ngx_sockaddr_t, because sizeof(struct sockaddr)
+    //   is not long enouph, content will be covered by other var
+    ngx_sockaddr_t              nsa;
+    struct sockaddr            *sa;
+    socklen_t                   len;
+
+    rctx = ngx_rtmp_get_module_ctx(s, ngx_live_relay_module);
+    if (rctx == NULL) {
         return NGX_ERROR;
     }
-    ngx_memcpy(dst->data, src->data, src->len);
+
+#define NGX_LIVE_RELAY_CTX(para)                                        \
+    if (ngx_copy_str(s->pool, &rctx->para, &relay->para) != NGX_OK) {   \
+        goto destroy;                                                   \
+    }
+
+    NGX_LIVE_RELAY_CTX(domain);
+    NGX_LIVE_RELAY_CTX(app);
+    NGX_LIVE_RELAY_CTX(name);
+    NGX_LIVE_RELAY_CTX(pargs);
+    NGX_LIVE_RELAY_CTX(referer);
+    NGX_LIVE_RELAY_CTX(user_agent);
+#undef NGX_LIVE_RELAY_CTX
+
+    rctx->tag = relay->tag;
+
+    // get address, host in url must be resolv sync
+    sa = (struct sockaddr *) &nsa;
+    len = ngx_dynamic_resolver_gethostbyname(&url->url.host, sa);
+    if (len == 0) {
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                "relay httpflv: gethostbyname failed %V", &url->url.host);
+        goto destroy;
+    }
+
+    // send http request
+    if (ngx_live_relay_httpflv_send_request(s, url) != NGX_OK) {
+        goto destroy;
+    }
+
     return NGX_OK;
-}
 
-ngx_rtmp_relay_ctx_t *
-ngx_http_relay_create_connection(ngx_rtmp_session_t *s,
-        ngx_rtmp_conf_ctx_t *cctx, ngx_str_t* name,
-        ngx_rtmp_relay_target_t *target)
-{
-    ngx_rtmp_core_srv_conf_t   *cscf;
-    ngx_client_session_t       *cs;
-    ngx_client_init_t          *ci;
-    ngx_rtmp_addr_conf_t       *addr_conf;
-    ngx_rtmp_conf_ctx_t        *addr_ctx;
-    ngx_rtmp_session_t         *rs;
-    ngx_pool_t                 *pool;
-    ngx_rtmp_relay_ctx_t       *rctx;
-    ngx_str_t                   v, *uri;
-    u_char                     *first, *last, *p;
+destroy:
+    ngx_rtmp_finalize_session(s);
 
-    /* init client session */
-    ci = ngx_client_init(&target->url.host, NULL, 0, s->connection->log);
-    if (ci == NULL) {
-        return NULL;
-    }
-    ci->port = target->url.port;
-    ci->max_retries = 0;
-    pool = ci->pool;
-
-    cs = ngx_client_connect(ci, s->connection->log);
-    if (cs == NULL) {
-        ngx_destroy_pool(pool);
-        return NULL;
-    }
-
-    /* create fake rtmp session */
-    addr_conf = ngx_pcalloc(pool, sizeof(ngx_rtmp_addr_conf_t));
-    if (addr_conf == NULL) {
-        goto clear;
-    }
-    addr_ctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_conf_ctx_t));
-    if (addr_ctx == NULL) {
-        goto clear;
-    }
-
-    cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
-
-    addr_conf->default_server = cscf;
-    addr_ctx->main_conf = cctx->main_conf;
-    addr_ctx->srv_conf  = cctx->srv_conf;
-
-    rs = ngx_rtmp_init_fake_session(cs->connection, addr_conf);
-    if (rs == NULL) {
-        goto clear;
-    }
-    rs->app_conf = cctx->app_conf;
-    rs->relay = 1;
-    rs->publishing = target->publishing;
-
-    /* set parameters */
-    #define NGX_RTMP_SESSION_STR_COPY(to, from)                             \
-    if (s && ngx_http_relay_copy_str(pool, &rs->to, &s->from) != NGX_OK) {  \
-        goto clear;                                                         \
-    }
-
-    NGX_RTMP_SESSION_STR_COPY(stream,   stream);
-
-    NGX_RTMP_SESSION_STR_COPY(name,     name);
-    NGX_RTMP_SESSION_STR_COPY(pargs,    pargs);
-
-    NGX_RTMP_SESSION_STR_COPY(app,      app);
-    NGX_RTMP_SESSION_STR_COPY(args,     args);
-    NGX_RTMP_SESSION_STR_COPY(flashver, flashver);
-    NGX_RTMP_SESSION_STR_COPY(swf_url,  swf_url);
-    NGX_RTMP_SESSION_STR_COPY(tc_url,   tc_url);
-    NGX_RTMP_SESSION_STR_COPY(page_url, page_url);
-
-    if (s) {
-        rs->acodecs = s->acodecs;
-        rs->vcodecs = s->vcodecs;
-    }
-
-    NGX_RTMP_SESSION_STR_COPY(serverid, serverid);
-
-#undef NGX_RTMP_SESSION_STR_COPY
-
-    ngx_rtmp_cmd_middleware_init(rs);
-
-    /* rctx from here */
-    rctx = ngx_pcalloc(pool, sizeof(ngx_rtmp_relay_ctx_t));
-    if (rctx == NULL) {
-        goto clear;
-    }
-
-    if (name && ngx_http_relay_copy_str(pool, &rctx->name, name) != NGX_OK) {
-        goto clear;
-    }
-
-    if (ngx_http_relay_copy_str(pool, &rctx->url, &target->url.url) != NGX_OK) {
-        goto clear;
-    }
-
-#define NGX_RTMP_RELAY_STR_COPY(to, from)                                     \
-    if (ngx_http_relay_copy_str(pool, &rctx->to, &target->from) != NGX_OK) {  \
-        goto clear;                                                           \
-    }                                                                         \
-
-    NGX_RTMP_RELAY_STR_COPY(app,        app);
-    NGX_RTMP_RELAY_STR_COPY(tc_url,     tc_url);
-    NGX_RTMP_RELAY_STR_COPY(page_url,   page_url);
-    NGX_RTMP_RELAY_STR_COPY(swf_url,    swf_url);
-    NGX_RTMP_RELAY_STR_COPY(flash_ver,  flash_ver);
-    NGX_RTMP_RELAY_STR_COPY(play_path,  play_path);
-
-    rctx->live  = target->live;
-    rctx->start = target->start;
-    rctx->stop  = target->stop;
-
-#undef NGX_RTMP_RELAY_STR_COPY
-
-/* if target not set, set rctx default */
-#define NGX_RTMP_DEFAULT_STR(to, from)          \
-    if (rctx->to.len == 0) {                    \
-        rctx->to = rs->from;                    \
-    }
-
-    NGX_RTMP_DEFAULT_STR(pargs,     pargs);
-
-    NGX_RTMP_DEFAULT_STR(app,       app);
-    NGX_RTMP_DEFAULT_STR(args,      args);
-    NGX_RTMP_DEFAULT_STR(tc_url,    tc_url);
-    NGX_RTMP_DEFAULT_STR(page_url,  page_url);
-    NGX_RTMP_DEFAULT_STR(swf_url,   swf_url);
-    NGX_RTMP_DEFAULT_STR(flash_ver, flashver);
-
-    if (rctx->acodecs == 0) {
-        rctx->acodecs = rs->acodecs;
-    }
-
-    if (rctx->vcodecs == 0) {
-        rctx->vcodecs = rs->vcodecs;
-    }
-
-#undef NGX_RTMP_DEFAULT_STR
-
-    if (rctx->app.len == 0 || rctx->play_path.len == 0) {
-        /* parse uri */
-        uri = &target->url.uri;
-        first = uri->data;
-        last  = uri->data + uri->len;
-        if (first != last && *first == '/') {
-            ++first;
-        }
-
-        if (first != last) {
-
-            /* deduce app */
-            p = ngx_strlchr(first, last, '/');
-            if (p == NULL) {
-                p = last;
-            }
-
-            if (rctx->app.len == 0 && first != p) {
-                v.data = first;
-                v.len = p - first;
-                if (ngx_http_relay_copy_str(pool, &rctx->app, &v) != NGX_OK) {
-                    goto clear;
-                }
-            }
-
-            /* deduce play_path */
-            if (p != last) {
-                ++p;
-            }
-
-            if (rctx->play_path.len == 0 && p != last) {
-                v.data = p;
-                v.len = last - p;
-                if (ngx_http_relay_copy_str(pool, &rctx->play_path, &v)
-                        != NGX_OK)
-                {
-                    goto clear;
-                }
-            }
-        }
-    }
-
-    rctx->tag = target->tag;
-    rctx->idx = target->idx;
-    rctx->session = rs;
-    ngx_rtmp_set_ctx(rs, rctx, ngx_rtmp_relay_module);
-
-#if (NGX_STAT_STUB)
-    (void) ngx_atomic_fetch_add(ngx_stat_active, 1);
-#endif
-
-    /* send http request */
-    ngx_http_relay_send_request(rs, cs);
-
-    return rctx;
-
-clear:
-    ngx_client_close(cs);
-
-    return NULL;
+    return NGX_ERROR;
 }
