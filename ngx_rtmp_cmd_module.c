@@ -170,7 +170,7 @@ ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s)
         s->serverid.len = rcsdf->serverid.len;
         ngx_memcpy(s->serverid.data, rcsdf->serverid.data, s->serverid.len);
     } else if (rcsf && rcsf->serverid.len) {
-        s->serverid.data = ngx_pcalloc(s->connection->pool,
+        s->serverid.data = ngx_pcalloc(s->pool,
                                        rcsf->serverid.len);
         if (s->serverid.data == NULL) {
             return;
@@ -183,7 +183,8 @@ ngx_rtmp_cmd_middleware_init(ngx_rtmp_session_t *s)
 }
 
 void
-ngx_rtmp_cmd_session_set(ngx_rtmp_session_t *s, u_char *name, u_char *args)
+ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, u_char *name, u_char *args,
+        unsigned publishing)
 {
     u_char                     *p;
 
@@ -211,12 +212,7 @@ ngx_rtmp_cmd_session_set(ngx_rtmp_session_t *s, u_char *name, u_char *args)
         *p++ = '/';
         p = ngx_copy(p, s->name.data, s->name.len);
     }
-}
 
-
-void
-ngx_rtmp_cmd_stream_init(ngx_rtmp_session_t *s, unsigned publishing)
-{
     s->live_stream = ngx_live_create_stream(&s->serverid, &s->stream);
 
     ngx_live_create_ctx(s, publishing);
@@ -238,7 +234,7 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
     s->published = 1;
 
     if (!s->relay) { /* relay pull */
-        ngx_rtmp_cmd_stream_init(s, 1);
+        ngx_rtmp_cmd_stream_init(s, v->name, v->args, 1);
     }
 
     return ngx_rtmp_publish(s, v);
@@ -257,7 +253,7 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     s->played = 1;
 
     if (!s->relay) { /* relay push */
-        ngx_rtmp_cmd_stream_init(s, 0);
+        ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
     }
 
     return ngx_rtmp_play(s, v);
