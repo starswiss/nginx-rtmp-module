@@ -762,7 +762,7 @@ ngx_rtmp_hls_append_hevc_vps_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             return NGX_ERROR;
         }
         nal_unit_type &= 0x3f;
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
             "rtmp-hls: append_vps_sps_pps| type %d", nal_unit_type);
         if (ngx_rtmp_hls_copy(s, &rnum_nalus, &p, 2, &in) != NGX_OK) {
             return NGX_ERROR;
@@ -779,7 +779,7 @@ ngx_rtmp_hls_append_hevc_vps_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             nal_unit_len = 0;
             ngx_rtmp_rmemcpy(&nal_unit_len, &rnal_unit_len, 2);
             if (out->end - out->last < 4) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "hls: too small buffer for hevc header NAL size");
                 return NGX_ERROR;
             }
@@ -790,7 +790,7 @@ ngx_rtmp_hls_append_hevc_vps_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             *out->last++ = 1;
 
             if (out->end - out->last < (ngx_int_t)nal_unit_len) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "hls: too small buffer for hevc header NAL");
                 return NGX_ERROR;
             }
@@ -1726,7 +1726,7 @@ ngx_rtmp_hls_update_fragment(ngx_rtmp_session_t *s, uint64_t ts,
         d = (int64_t) (ts - ctx->frag_ts);
 
         if (d > (int64_t) hacf->max_fraglen * 90 || d < -90000) {
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                           "hls: force fragment split: %.3f sec, ", d / 90000.);
             force = 1;
 
@@ -1905,7 +1905,7 @@ ngx_rtmp_hls_audio(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     if (codec_ctx->audio_codec_id == NGX_RTMP_AUDIO_AAC) {
         if (b->last + 7 > b->end) {
-            ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                         "hls: not enough buffer for audio header");
             return NGX_OK;
         }
@@ -1930,7 +1930,7 @@ ngx_rtmp_hls_audio(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         if (ngx_rtmp_hls_parse_aac_header(s, &objtype, &srindex, &chconf)
             != NGX_OK)
         {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "hls: aac header error");
             return NGX_OK;
         }
@@ -1947,7 +1947,7 @@ ngx_rtmp_hls_audio(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         p[6] = 0xfc;
     } else if (codec_ctx->audio_codec_id == NGX_RTMP_AUDIO_MP3) {
 		if (b->last > b->end) {
-            ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                             "hls: not enough buffer for audio header");
             return NGX_OK;
         }
@@ -2133,7 +2133,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                     case 5:
                     case 6:
                         if (ngx_rtmp_hls_append_aud(s, &out) != NGX_OK) {
-                            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                         "hls: error appending AUD NAL");
                         }
                     case 9:
@@ -2151,7 +2151,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
                         break;
                     }
                     if (ngx_rtmp_hls_append_sps_pps(s, &out) != NGX_OK) {
-                        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                     "hls: error appenging SPS/PPS NALs");
                     }
                     sps_pps_sent = 1;
@@ -2160,7 +2160,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         } else {
             if (src_nal_type == 0) {
                 if (ngx_rtmp_hls_copy(s, out.last, &p, 3, &in) != NGX_OK) {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                     "rtmp-hls: video| buffer error");
                     return NGX_ERROR;
                 }
@@ -2176,7 +2176,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
             nal_type = (src_nal_type >> 1) & 0x3f;
 
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                         "hls: h265 NAL type=%ui, len=%uD",
                         (ngx_uint_t) nal_type, len);
 
@@ -2187,7 +2187,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
              )
             {
                 if (ngx_rtmp_hls_copy(s, NULL, &p, len - 1, &in) != NGX_OK) {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "rtmp-hls: video| jump nal, failed copy ");
                     return NGX_ERROR;
                 }
@@ -2196,7 +2196,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
             if (!aud_sent) {
                 if (ngx_rtmp_hls_append_hevc_aud(s, &out) != NGX_OK) {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                 "hls: error appending AUD NAL");
                 }
                 aud_sent = 1;
@@ -2207,7 +2207,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
             } else if (!sps_pps_sent) {
                 if (ngx_rtmp_hls_append_hevc_vps_sps_pps(s, &out) != NGX_OK)
                 {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                 "hls: error appenging VPS/SPS/PPS NALs");
                 }
                 sps_pps_sent = 1;
@@ -2242,7 +2242,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         }
 
         if (ngx_rtmp_hls_copy(s, out.last, &p, len - 1, &in) != NGX_OK) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "rtmp-hls: video| copy nal, failed copy, len %d, in %d",
                         len - 1, in->buf->last - in->buf->pos);
             return NGX_ERROR;
