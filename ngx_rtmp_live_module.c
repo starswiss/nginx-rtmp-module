@@ -656,10 +656,9 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_uint_t                      csidx;
     uint32_t                        delta;
     ngx_rtmp_live_chunk_stream_t   *cs;
-    const char                     *type_s;
     u_char                          frametype;
 
-    type_s = (h->type == NGX_RTMP_MSG_VIDEO ? "video" : "audio");
+#define MSG_TYPE (h->type == NGX_RTMP_MSG_VIDEO ? "video" : "audio")
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
     if (lacf == NULL) {
@@ -686,7 +685,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     if (ctx->publishing == 0) {
         ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
-                       "live: %s from non-publisher", type_s);
+                       "live: %s from non-publisher", MSG_TYPE);
         return NGX_OK;
     }
 
@@ -700,7 +699,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "live: %s packet timestamp=%uD",
-                   type_s, h->timestamp);
+                   MSG_TYPE, h->timestamp);
 
     s->current_time = h->timestamp;
 
@@ -841,7 +840,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
         if (cs->active && (lacf->sync && cs->dropped > lacf->sync)) {
             ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ss->log, 0,
-                           "live: sync %s dropped=%uD", type_s, cs->dropped);
+                           "live: sync %s dropped=%uD", MSG_TYPE, cs->dropped);
 
             cs->active = 0;
             cs->dropped = 0;
@@ -891,7 +890,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
                 ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ss->log, 0,
                                "live: abs %s header timestamp=%uD",
-                               type_s, lh.timestamp);
+                               MSG_TYPE, lh.timestamp);
 
                 if (header) {
                     header->hdr = lh;
@@ -923,7 +922,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
         ngx_log_debug2(NGX_LOG_DEBUG_RTMP, ss->log, 0,
                        "live: rel %s packet delta=%uD",
-                       type_s, delta);
+                       MSG_TYPE, delta);
 
         if (ngx_rtmp_send_message(ss, avframe, prio) != NGX_OK) {
             ++pctx->ndropped;
