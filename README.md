@@ -117,6 +117,8 @@ rtmp_auto_push directive.
 #               oclp_pull http://127.0.0.1/oclp;
                 live on;
                 cache_time 3s;
+                # h265 codecid, default 12
+                hevc_codecid  12;
             }
         }
 }
