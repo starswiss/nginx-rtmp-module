@@ -86,7 +86,7 @@
 </xsl:template>
 
 <xsl:template match="server">
-    <xsl:apply-templates select="application"/>
+    <xsl:apply-templates select="live"/>
 </xsl:template>
 
 <xsl:template match="application">
