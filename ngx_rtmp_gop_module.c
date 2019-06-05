@@ -630,8 +630,9 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
             ngx_log_error(NGX_LOG_ERR, ss->log, 0,
-                    "gop, current gop pos is NULL, skip to new postion %d %d",
-                    sctx->gop_pos, ssctx->gop_pos);
+                    "gop, current gop pos is NULL, "
+                    "skip to new postion [pos %d last %d] %d",
+                    sctx->gop_pos, sctx->gop_last, ssctx->gop_pos);
 
             if (sctx->aac_header
                     && sctx->aac_header != ssctx->latest_aac_header)

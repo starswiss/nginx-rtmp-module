@@ -108,6 +108,27 @@ rtmp_auto_push directive.
 ### Example nginx.conf
 
 ```nginx
+    user  root;
+    daemon on;
+    master_process on;
+    worker_processes  1;
+    #worker_rlimit 4g;
+    #working_directory /usr/local/openresty/nginx/logs;
+
+    #error_log  logs/error.log;
+    #error_log  logs/error.log  notice;
+    error_log  logs/error.log  info;
+
+    worker_rlimit_nofile 102400;
+    worker_rlimit_core   2G;
+    working_directory    /tmp;
+
+    #pid        logs/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+    stream_zone buckets=1024 streams=4096;
 
     rtmp {
         server {
