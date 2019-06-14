@@ -164,8 +164,8 @@ rtmp_auto_push directive.
                 return 302 http://127.0.0.1:8080/live/1;
             }
 
-            location /live {
-                flv_live 1935;
+            location /live-flv {
+                flv_live 1935 app=live;
             }
 
             location /stat.xsl {
