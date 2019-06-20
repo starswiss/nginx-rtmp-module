@@ -40,10 +40,26 @@ $ ./auto/configure --add-module=../nginx-client-module \
 $
 $ sudo make && sudo make install
 ```
+### Publish & Play
+
+#### rtmp publish
+
+rtmp://localhost/live/xx
+
+#### play
+
+* rtmp => rtmp://localhost/live/xx
+
+* http-flv => http://localhost/flv/xx
+
+* http-ts => http://localhost/ts/xx
+
+* hls => http://localhost/hls/xx.m3u8
+
 
 ### Features
 
-* RTMP/HLS/MPEG-DASH/HTTP-FLV live streaming
+* RTMP/HLS/MPEG-DASH/HTTP-FLV/HTTP-TS live streaming
 
 * RTMP Video on demand FLV/MP4,
   playing from local filesystem or HTTP
@@ -134,11 +150,19 @@ rtmp_auto_push directive.
         server {
             listen 1935;
             application live {
-#                pull rtmp://127.0.0.1:1936/live app=live;
+#               pull rtmp://127.0.0.1:1936/live app=live;
 #               oclp_pull http://127.0.0.1/oclp;
+                send_all off;
+                zero_start off;
                 live on;
-                cache_time 3s;
-                # h265 codecid, default 12
+                hls on;
+                hls_path /tmp/hls;
+                wait_key on;
+                wait_video on;
+                cache_time 2s;
+                low_latency on;
+                fix_timestamp 2000ms;
+            # h265 codecid, default 12
                 hevc_codecid  12;
             }
         }
@@ -164,8 +188,12 @@ rtmp_auto_push directive.
                 return 302 http://127.0.0.1:8080/live/1;
             }
 
-            location /live-flv {
+            location /flv {
                 flv_live 1935 app=live;
+            }
+
+            location /ts {
+                ts_live 1935 app=live;
             }
 
             location /stat.xsl {

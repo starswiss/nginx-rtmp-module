@@ -198,6 +198,9 @@ struct ngx_mpegts_frame_s {
     unsigned                    key:1;
     ngx_uint_t                  ref;
 
+    ngx_uint_t                  type;
+    ngx_uint_t                  length;
+
     ngx_mpegts_frame_t         *next;
     ngx_chain_t                *chain;
 };
@@ -945,6 +948,7 @@ ngx_int_t ngx_rtmp_send_status(ngx_rtmp_session_t *s, char *code,
 ngx_int_t ngx_rtmp_send_play_status(ngx_rtmp_session_t *s, char *code,
         char* level, ngx_uint_t duration, ngx_uint_t bytes);
 ngx_int_t ngx_rtmp_send_sample_access(ngx_rtmp_session_t *s);
+void ngx_rtmp_mpegts_mux(ngx_rtmp_session_t *s);
 
 
 /* Frame types */
@@ -983,6 +987,6 @@ extern ngx_thread_volatile ngx_event_t     *ngx_rtmp_init_queue;
 extern ngx_uint_t                           ngx_rtmp_max_module;
 extern ngx_module_t                         ngx_rtmp_module;
 extern ngx_module_t                         ngx_rtmp_core_module;
-
+extern u_char ngx_rtmp_mpegts_header[];
 
 #endif /* _NGX_RTMP_H_INCLUDED_ */

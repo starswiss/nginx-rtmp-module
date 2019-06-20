@@ -360,14 +360,6 @@ ngx_rtmp_cmd_connect_init(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_rtmp_cmd_fill_args(v.app, v.args);
     ngx_rtmp_cmd_reset_vhost(s, &v);
 
-    ngx_log_error(NGX_LOG_DEBUG_RTMP, s->log, 0,
-            "connect: app='%s' args='%s' flashver='%s' swf_url='%s' "
-            "tc_url='%s' page_url='%s' acodecs=%uD vcodecs=%uD "
-            "object_encoding=%ui",
-            v.app, v.args, v.flashver, v.swf_url, v.tc_url, v.page_url,
-            (uint32_t)v.acodecs, (uint32_t)v.vcodecs,
-            (ngx_int_t)v.object_encoding);
-
 #define NGX_RTMP_SET_STRPAR(name)                                           \
     s->name.len = ngx_strlen(v.name);                                       \
     s->name.data = ngx_palloc(s->pool, s->name.len);                        \

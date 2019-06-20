@@ -53,6 +53,7 @@ typedef struct {
     ngx_flag_t                  low_latency;
     ngx_flag_t                  send_all;
     ngx_msec_t                  fix_timestamp;
+    ngx_flag_t                  zero_start;
 } ngx_rtmp_gop_app_conf_t;
 
 
@@ -86,6 +87,12 @@ static ngx_command_t  ngx_rtmp_gop_commands[] = {
       offsetof(ngx_rtmp_gop_app_conf_t, fix_timestamp),
       NULL },
 
+    { ngx_string("zero_start"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_gop_app_conf_t, zero_start),
+      NULL },
       ngx_null_command
 };
 
@@ -132,6 +139,7 @@ ngx_rtmp_gop_create_app_conf(ngx_conf_t *cf)
     gacf->low_latency = NGX_CONF_UNSET;
     gacf->send_all = NGX_CONF_UNSET;
     gacf->fix_timestamp = NGX_CONF_UNSET_MSEC;
+    gacf->zero_start = NGX_CONF_UNSET;
 
     return gacf;
 }
@@ -146,6 +154,7 @@ ngx_rtmp_gop_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_conf_merge_value(conf->low_latency, prev->low_latency, 0);
     ngx_conf_merge_value(conf->send_all, prev->send_all, 0);
     ngx_conf_merge_msec_value(conf->fix_timestamp, prev->fix_timestamp, 10000);
+    ngx_conf_merge_value(conf->zero_start, prev->zero_start, 0);
 
     return NGX_CONF_OK;
 }
@@ -180,7 +189,7 @@ ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
             delta = 0;
         }
 
-        if (cs->timestamp == 0) {
+        if (!gacf->zero_start && cs->timestamp == 0) {
             cs->timestamp = frame->hdr.timestamp;
         } else if (frame->hdr.timestamp > cs->last_timestamp) {
             cs->timestamp += delta;
@@ -543,7 +552,14 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
             ssctx->send_gop = 2;
             break;
         }
-
+/*
+        frame->hdr.timestamp = 0;
+        if (frame->hdr.type == NGX_RTMP_MSG_AUDIO) {
+            pos = ngx_rtmp_gop_next(s, pos);
+            frame = sctx->cache[pos];
+            continue;
+        }
+*/
         if (ngx_rtmp_gop_link_frame(ss, frame) == NGX_AGAIN) {
             break;
         }
@@ -603,6 +619,8 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     if (sctx->cache[pos]->keyframe && !sctx->cache[pos]->av_header) {
         if (gacf->low_latency && pos != ssctx->gop_pos) {
             ssctx->gop_pos = pos;
+
+            ss->out_pos = ss->out_last;
 
             ngx_log_error(NGX_LOG_INFO, ss->log, 0,
                     "gop, low latency, chase to new keyframe");

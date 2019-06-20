@@ -311,6 +311,7 @@ ngx_rtmp_shared_alloc_mpegts_frame(ngx_chain_t *cl, ngx_flag_t mandatory)
         }
     }
 
+    ngx_memset(frame, 0, sizeof(ngx_mpegts_frame_t));
     frame->ref = 1;
     frame->next = NULL;
 
