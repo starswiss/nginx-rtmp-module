@@ -200,7 +200,8 @@ ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
         cs->last_timestamp = frame->hdr.timestamp;
 
         ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
-            "gop: link_frame| type %d, delta %d, timestamp %uD, fixed timestamp %uD",
+            "gop: link_frame| type %d, delta %d,"
+            " timestamp %uD, fixed timestamp %uD",
             frame->hdr.type, delta, frame->hdr.timestamp, cs->timestamp);
 
         frame->hdr.timestamp = cs->timestamp;
@@ -508,16 +509,24 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     ssctx = ngx_rtmp_get_module_ctx(ss, ngx_rtmp_gop_module);
 
     /* already send gop */
-    if (ssctx->send_gop == 2) {
+    if (ssctx->send_gop == 3) {
         return NGX_OK;
     }
 
-    if (ngx_rtmp_gop_send_meta(s, ss) == NGX_AGAIN) {
+    if (ssctx->send_gop == 0) {
+        if (ngx_rtmp_gop_send_meta(s, ss) == NGX_AGAIN) {
+            return NGX_AGAIN;
+        }
+
+        ngx_rtmp_send_message(ss, NULL, 0);
+
+        ssctx->send_gop = 1;
+
         return NGX_AGAIN;
     }
 
     /* link frame in s to ss */
-    if (ssctx->send_gop == 0) {
+    if (ssctx->send_gop == 1) {
         ssctx->gop_pos = sctx->gop_pos;
         if (sctx->cache[ssctx->gop_pos] == NULL) {
             return NGX_AGAIN;
@@ -535,7 +544,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
             }
         }
 
-        ssctx->send_gop = 1;
+        ssctx->send_gop = 2;
         ssctx->first_timestamp = sctx->cache[ssctx->gop_pos]->hdr.timestamp;
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
@@ -549,7 +558,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         if (!gacf->send_all &&
             frame->hdr.timestamp - ssctx->first_timestamp >= gacf->cache_time)
         {
-            ssctx->send_gop = 2;
+            ssctx->send_gop = 3;
             break;
         }
 /*
@@ -569,7 +578,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     }
 
     if (frame == NULL) { /* send all frame in cache */
-        ssctx->send_gop = 2;
+        ssctx->send_gop = 3;
     }
 
     ssctx->gop_pos = pos;
