@@ -162,6 +162,9 @@ ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
     p = ngx_cpymem(p, ngx_mpegts_pmt_header, sizeof(ngx_mpegts_pmt_header));
 
     switch (vcodec) {
+        case 0: //ignore
+        break;
+
         case NGX_RTMP_VIDEO_H264:
             vpid = NGX_RTMP_MPEGTS_PID_H264;
         break;
@@ -173,10 +176,12 @@ ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
         default:
             ngx_log_error(NGX_LOG_ERR, file->log, 0,
                 "rtmp: gen_pmt| unknown video codec (%d)", vcodec);
-            return NGX_ERROR;
     }
 
     switch (acodec) {
+        case 0: //ignore
+        break;
+
         case NGX_RTMP_AUDIO_MP3:
             apid = NGX_RTMP_MPEGTS_PID_MP3;
         break;
@@ -188,7 +193,6 @@ ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
         default:
             ngx_log_error(NGX_LOG_ERR, file->log, 0,
                 "rtmp: gen_pmt| unknown audio codec (%d)", acodec);
-            return NGX_ERROR;
     }
 
     if (vpid != -1) {
