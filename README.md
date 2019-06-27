@@ -152,17 +152,41 @@ rtmp_auto_push directive.
             application live {
 #               pull rtmp://127.0.0.1:1936/live app=live;
 #               oclp_pull http://127.0.0.1/oclp;
+
+                # 允许缓存的最大音视频帧数
+                # 该值将直接影响到roll_back和cache_time，
+                # 如果希望roll_back或cache_time可以设置非常大，那么该值也应该设置成较大的值才行
+                out_queue 204800;
+
+                # 允许最长回看时间:
+                # 如 rtmp://xxx/xxx/xxx?roll_back=30000 和 http://xxx/xxx/xxx?roll_back=30000
+                # 表示从30000ms前开始播放
+                roll_back 3m;
+
                 send_all off;
+
+                # 下发数据时，时间戳是否从零开始
                 zero_start off;
+
                 live on;
                 hls on;
                 hls_path /tmp/hls;
                 wait_key on;
                 wait_video on;
-                cache_time 2s;
+
+                # 缓存时长，和roll_back搭配使用时，取最大值
+                cache_time 1s;
+
+                # 低延时模式，发现最新关键帧则跳至帧开始下发，roll_back > 0 时该配置失效
                 low_latency on;
-                fix_timestamp 2000ms;
-            # h265 codecid, default 12
+
+                # 首次下发数据时长，如果希望追求低延时，牺牲秒开效果，可以将该值设置成 0s
+                # 默认与cache_time相等
+                one_off_send 2s;
+
+                # 能忍受的最大时间戳差值，超过这个值则自动矫正(只有在 cache_time > 0 时生效)
+                fix_timestamp 0ms;
+               # h265 codecid, default 12
                 hevc_codecid  12;
             }
         }

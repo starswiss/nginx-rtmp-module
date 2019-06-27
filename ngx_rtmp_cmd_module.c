@@ -243,6 +243,9 @@ ngx_rtmp_publish_filter(ngx_rtmp_session_t *s, ngx_rtmp_publish_t *v)
 ngx_int_t
 ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
+    static ngx_str_t                roll_back = ngx_string("roll_back");
+    ngx_str_t                       val;
+
     if (s->played) {
         ngx_log_error(NGX_LOG_INFO, s->log, 0, "session has been played");
         return NGX_OK;
@@ -254,6 +257,12 @@ ngx_rtmp_play_filter(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     if (!s->relay) { /* relay push */
         ngx_rtmp_cmd_stream_init(s, v->name, v->args, 0);
+    }
+
+    ngx_memzero(&val, sizeof(val));
+    ngx_rtmp_arg(s, roll_back.data, roll_back.len, &val);
+    if (val.data && val.len) {
+        s->roll_back = ngx_atoi(val.data, val.len);
     }
 
     return ngx_rtmp_play(s, v);

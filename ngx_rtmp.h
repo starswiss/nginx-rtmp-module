@@ -182,6 +182,7 @@ struct ngx_rtmp_frame_s {
     ngx_flag_t              keyframe;
     ngx_flag_t              mandatory;
     ngx_uint_t              ref;
+    ngx_uint_t              pos;
 
     ngx_rtmp_frame_t       *next;
     ngx_chain_t            *chain;
@@ -253,6 +254,7 @@ typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 #define NGX_LIVE_RELAY_CLOSE        15
 
 struct ngx_rtmp_session_s {
+    ngx_msec_t              roll_back;
     ngx_int_t               acodec;
     ngx_int_t               vcodec;
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
