@@ -151,7 +151,7 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       NULL },
 
     { ngx_string("out_queue"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_CONF_TAKE1,
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_size_slot,
       NGX_RTMP_SRV_CONF_OFFSET,
       offsetof(ngx_rtmp_core_srv_conf_t, out_queue),
@@ -219,6 +219,13 @@ static ngx_command_t  ngx_rtmp_core_commands[] = {
       ngx_conf_set_num_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_core_app_conf_t, hevc_codec),
+      NULL },
+
+    { ngx_string("reset_vhost"),
+      NGX_RTMP_MAIN_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_flag_slot,
+      NGX_RTMP_SRV_CONF_OFFSET,
+      offsetof(ngx_rtmp_core_main_conf_t, reset_vhost),
       NULL },
 
       ngx_null_command
@@ -300,6 +307,7 @@ ngx_rtmp_core_create_main_conf(ngx_conf_t *cf)
 
     cmcf->server_names_hash_max_size = NGX_CONF_UNSET_UINT;
     cmcf->server_names_hash_bucket_size = NGX_CONF_UNSET_UINT;
+    cmcf->reset_vhost = NGX_CONF_UNSET;
 
     return cmcf;
 }
@@ -315,6 +323,7 @@ ngx_rtmp_core_init_main_conf(ngx_conf_t *cf, void *conf)
     ngx_conf_init_uint_value(cmcf->server_names_hash_max_size, 512);
     ngx_conf_init_uint_value(cmcf->server_names_hash_bucket_size,
                              ngx_cacheline_size);
+    ngx_conf_init_value(cmcf->reset_vhost, 0);
 
     return NGX_CONF_OK;
 }

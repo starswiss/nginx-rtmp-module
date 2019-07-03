@@ -43,6 +43,7 @@ typedef struct {
     ngx_uint_t                  meta_version;
 
     uint32_t                    first_timestamp;
+    uint32_t                    current_timestamp;
 
     /* only for publisher, must at last of ngx_rtmp_gop_ctx_t */
     ngx_rtmp_frame_t           *cache[];
@@ -50,6 +51,8 @@ typedef struct {
 
 typedef struct {
     ngx_msec_t                  cache_time;
+    ngx_msec_t                  roll_back;
+    ngx_msec_t                  one_off_send;
     ngx_flag_t                  low_latency;
     ngx_flag_t                  send_all;
     ngx_msec_t                  fix_timestamp;
@@ -64,6 +67,20 @@ static ngx_command_t  ngx_rtmp_gop_commands[] = {
       ngx_conf_set_msec_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_gop_app_conf_t, cache_time),
+      NULL },
+
+    { ngx_string("roll_back"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_gop_app_conf_t, roll_back),
+      NULL },
+
+    { ngx_string("one_off_send"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_msec_slot,
+      NGX_RTMP_APP_CONF_OFFSET,
+      offsetof(ngx_rtmp_gop_app_conf_t, one_off_send),
       NULL },
 
     { ngx_string("low_latency"),
@@ -136,6 +153,8 @@ ngx_rtmp_gop_create_app_conf(ngx_conf_t *cf)
     }
 
     gacf->cache_time = NGX_CONF_UNSET_MSEC;
+    gacf->roll_back = NGX_CONF_UNSET_MSEC;
+    gacf->one_off_send = NGX_CONF_UNSET_MSEC;
     gacf->low_latency = NGX_CONF_UNSET;
     gacf->send_all = NGX_CONF_UNSET;
     gacf->fix_timestamp = NGX_CONF_UNSET_MSEC;
@@ -151,6 +170,8 @@ ngx_rtmp_gop_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_rtmp_gop_app_conf_t    *conf = child;
 
     ngx_conf_merge_msec_value(conf->cache_time, prev->cache_time, 0);
+    ngx_conf_merge_msec_value(conf->roll_back, prev->roll_back, conf->cache_time);
+    ngx_conf_merge_msec_value(conf->one_off_send, prev->one_off_send, 2000);
     ngx_conf_merge_value(conf->low_latency, prev->low_latency, 0);
     ngx_conf_merge_value(conf->send_all, prev->send_all, 0);
     ngx_conf_merge_msec_value(conf->fix_timestamp, prev->fix_timestamp, 10000);
@@ -284,6 +305,7 @@ ngx_rtmp_gop_reset_gop(ngx_rtmp_session_t *s, ngx_rtmp_gop_ctx_t *ctx,
     ngx_rtmp_frame_t           *f, *next_keyframe;
     size_t                      pos;
     ngx_uint_t                  nmsg;
+    ngx_msec_t                  cache_time;
 
     /* reset av_header at the front of cache */
     for (pos = ctx->gop_pos; pos != ctx->gop_last;
@@ -305,10 +327,13 @@ ngx_rtmp_gop_reset_gop(ngx_rtmp_session_t *s, ngx_rtmp_gop_ctx_t *ctx,
 
     gacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_gop_module);
 
+    cache_time = gacf->cache_time > gacf->roll_back ?
+        gacf->cache_time : gacf->roll_back;
+
     /* only audio in cache */
     if (ctx->keyframe == NULL) {
         if (frame->hdr.timestamp - ctx->cache[ctx->gop_pos]->hdr.timestamp
-                > gacf->cache_time)
+                > cache_time)
         {
             ngx_rtmp_shared_free_frame(f);
             ctx->cache[ctx->gop_pos] = NULL;
@@ -336,7 +361,7 @@ ngx_rtmp_gop_reset_gop(ngx_rtmp_session_t *s, ngx_rtmp_gop_ctx_t *ctx,
     }
 
     if (frame->hdr.type == NGX_RTMP_MSG_VIDEO && frame->hdr.timestamp
-            - next_keyframe->hdr.timestamp < gacf->cache_time)
+            - next_keyframe->hdr.timestamp < cache_time)
     {
         return;
     }
@@ -463,6 +488,8 @@ ngx_rtmp_gop_cache(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
         *keyframe = frame;
     }
 
+    frame->pos = ctx->gop_last;
+    ctx->current_timestamp = frame->hdr.timestamp;
     ctx->cache[ctx->gop_last] = frame;
     ctx->gop_last = ngx_rtmp_gop_next(s, ctx->gop_last);
 
@@ -500,7 +527,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 {
     ngx_rtmp_gop_app_conf_t    *gacf;
     ngx_rtmp_gop_ctx_t         *sctx, *ssctx;
-    ngx_rtmp_frame_t           *frame;
+    ngx_rtmp_frame_t           *frame, *keyframe;
     size_t                      pos;
 
     gacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_gop_module);
@@ -552,11 +579,34 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         }
     }
 
-    pos = ssctx->gop_pos;
-    frame = sctx->cache[pos];
+    frame = NULL;
+
+    keyframe = sctx->keyframe;
+    while (gacf->roll_back && keyframe &&
+        ((sctx->current_timestamp - keyframe->hdr.timestamp) > ss->roll_back))
+    {
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+            "rtmp-gop: send_gop| curr %D - k %D, %D",
+            sctx->current_timestamp, keyframe->hdr.timestamp, ss->roll_back);
+        frame = keyframe;
+        keyframe = keyframe->next;
+    }
+
+    if (frame == NULL) {
+        pos = sctx->gop_pos;
+        frame = sctx->cache[pos];
+    } else {
+        pos = frame->pos;
+    }
+
     while (frame) {
+
+        if (ngx_rtmp_gop_link_frame(ss, frame) == NGX_AGAIN) {
+            break;
+        }
+
         if (!gacf->send_all &&
-            frame->hdr.timestamp - ssctx->first_timestamp >= gacf->cache_time)
+            frame->hdr.timestamp - ssctx->first_timestamp >= gacf->one_off_send)
         {
             ssctx->send_gop = 3;
             break;
@@ -569,10 +619,6 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
             continue;
         }
 */
-        if (ngx_rtmp_gop_link_frame(ss, frame) == NGX_AGAIN) {
-            break;
-        }
-
         pos = ngx_rtmp_gop_next(s, pos);
         frame = sctx->cache[pos];
     }
@@ -626,7 +672,7 @@ ngx_rtmp_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     pos = ngx_rtmp_gop_prev(s, sctx->gop_last);
     /* new frame is video key frame */
     if (sctx->cache[pos]->keyframe && !sctx->cache[pos]->av_header) {
-        if (gacf->low_latency && pos != ssctx->gop_pos) {
+        if (gacf->low_latency && !ss->roll_back && pos != ssctx->gop_pos) {
             ssctx->gop_pos = pos;
 
             ss->out_pos = ss->out_last;
