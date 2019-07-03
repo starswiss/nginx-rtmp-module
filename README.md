@@ -149,14 +149,15 @@ rtmp_auto_push directive.
     rtmp {
         server {
             listen 1935;
+
+            # 允许缓存的最大音视频帧数
+            # 该值将直接影响到roll_back和cache_time，
+            # 如果希望roll_back或cache_time可以设置非常大，那么该值也应该设置成较大的值才行
+            out_queue 204800;
+
             application live {
 #               pull rtmp://127.0.0.1:1936/live app=live;
 #               oclp_pull http://127.0.0.1/oclp;
-
-                # 允许缓存的最大音视频帧数
-                # 该值将直接影响到roll_back和cache_time，
-                # 如果希望roll_back或cache_time可以设置非常大，那么该值也应该设置成较大的值才行
-                out_queue 204800;
 
                 # 允许最长回看时间:
                 # 如 rtmp://xxx/xxx/xxx?roll_back=30000 和 http://xxx/xxx/xxx?roll_back=30000
