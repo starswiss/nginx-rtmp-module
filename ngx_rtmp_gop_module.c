@@ -593,7 +593,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     }
 
     if (frame == NULL) {
-        pos = sctx->gop_pos;
+        pos = ssctx->gop_pos;
         frame = sctx->cache[pos];
     } else {
         pos = frame->pos;
@@ -608,6 +608,8 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         if (!gacf->send_all &&
             frame->hdr.timestamp - ssctx->first_timestamp >= gacf->one_off_send)
         {
+            ngx_log_error(NGX_LOG_INFO, s->log, 0, "gone %D, curr %D",
+                frame->hdr.timestamp, sctx->current_timestamp);
             ssctx->send_gop = 3;
             break;
         }
