@@ -492,7 +492,7 @@ ngx_live_relay_httpflv_recv(void *request, ngx_http_request_t *hcr)
     s->connection = hcr->connection;
     ngx_rtmp_set_combined_log(s, hcr->connection->log->data,
             hcr->connection->log->handler);
-    s->log->connection = s->connection->number;
+    s->log->connection = s->number;
 
     if (status_code != NGX_HTTP_OK) {
         ngx_live_relay_httpflv_error(s, status_code);

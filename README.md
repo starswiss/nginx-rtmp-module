@@ -1,6 +1,6 @@
 # NGINX-based Media Streaming Server
-## nginx-rtmp-module
 
+## nginx-rtmp-module
 
 ### Project blog
 
@@ -11,16 +11,6 @@
 ### Wiki manual
 
   [auto pull module](./doc/ngx_rtmp_oclp_module.chs.md)
-
-### Google group
-
-  https://groups.google.com/group/nginx-rtmp
-
-  https://groups.google.com/group/nginx-rtmp-ru (Russian)
-
-### Donation page (Paypal etc)
-
-  http://arut.github.com/nginx-rtmp-module/
 
 ### Build
 
@@ -40,6 +30,7 @@ $ ./auto/configure --add-module=../nginx-client-module \
 $
 $ sudo make && sudo make install
 ```
+
 ### Publish & Play
 
 #### rtmp publish
@@ -56,43 +47,7 @@ rtmp://localhost/live/xx
 
 * hls => http://localhost/hls/xx.m3u8
 
-
-### Features
-
-* RTMP/HLS/MPEG-DASH/HTTP-FLV/HTTP-TS live streaming
-
-* RTMP Video on demand FLV/MP4,
-  playing from local filesystem or HTTP
-
-* Stream relay support for distributed
-  streaming: push & pull models
-
-* Recording streams in multiple FLVs
-
-* H264/H265/AAC/MP3 support
-
-* Online transcoding with FFmpeg
-
-* HTTP callbacks (publish/play/record/update etc)
-
-* Running external programs on certain events (exec)
-
-* HTTP control module for recording audio/video and dropping clients
-
-* Advanced buffering techniques
-  to keep memory allocations at a minimum
-  level for faster streaming and low
-  memory footprint
-
-* Proved to work with Wirecast, FMS, Wowza,
-  JWPlayer, FlowPlayer, StrobeMediaPlayback,
-  ffmpeg, avconv, rtmpdump, flvstreamer
-  and many more
-
-* Statistics in XML/XSL in machine- & human-
-  readable form
-
-* Linux/FreeBSD/MacOS/Windows
+* hls2memory => http://localhost/hls2/xx.m3u8
 
 ### Windows limitations
 
@@ -112,14 +67,12 @@ app -  should match one of application {}
 name - interpreted by each application
          can be empty
 
-
 ### Multi-worker live streaming
 
 Module supports multi-worker live
 streaming through automatic stream pushing
 to nginx workers. This option is toggled with
 rtmp_auto_push directive.
-
 
 ### Example nginx.conf
 
@@ -172,6 +125,13 @@ rtmp_auto_push directive.
                 live on;
                 hls on;
                 hls_path /tmp/hls;
+
+                # HLS memory slice
+                hls2memory on;
+                hls2_fragment 1s;
+                hls2_max_fragment 1500ms;
+                hls2_playlist_length 3s;
+
                 wait_key on;
                 wait_video on;
 
@@ -236,6 +196,10 @@ rtmp_auto_push directive.
                 }
                 root /tmp;
                 add_header Cache-Control no-cache;
+            }
+
+            location /hls2 {
+                hls2_live 1935 app=live;
             }
 
             location /dash {

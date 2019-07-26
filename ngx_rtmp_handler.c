@@ -787,7 +787,7 @@ ngx_rtmp_send_message(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *out,
     }
 
 send:
-    if (!s->connection->write->active) {
+    if (s->connection && !s->connection->write->active) {
         ngx_post_event(s->connection->write, &ngx_posted_events);
     }
 

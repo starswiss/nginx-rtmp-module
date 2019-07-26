@@ -1,3 +1,9 @@
+
+/*
+ * Copyright (C) Pingo cczjp89@gmail.com
+ */
+
+
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_event.h>
@@ -6,10 +12,6 @@
 #include "ngx_rbuf.h"
 #include "ngx_rtmp_mpegts_module.h"
 #include "ngx_rtmp_codec_module.h"
-
-#define NGX_RTMP_MPEGTS_TYPE_AUDIO   0x01
-#define NGX_RTMP_MPEGTS_TYPE_VIDEO   0x02
-#define NGX_RTMP_MPEGTS_TYPE_PATPMT  0x03
 
 static ngx_rtmp_play_pt              next_play;
 
@@ -597,12 +599,6 @@ static ngx_int_t
 ngx_rtmp_mpegts_postconfiguration(ngx_conf_t *cf);
 
 static ngx_command_t ngx_rtmp_mpegts_commands[] = {
-    { ngx_string("mpegts_cache_time"),
-      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
-      ngx_conf_set_msec_slot,
-      NGX_RTMP_APP_CONF_OFFSET,
-      offsetof(ngx_rtmp_mpegts_app_conf_t, cache_time),
-      NULL },
     { ngx_string("mpegts_audio_buffer_size"),
       NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_TAKE1,
       ngx_conf_set_size_slot,
@@ -782,7 +778,7 @@ ngx_rtmp_mpegts_shared_append_chain(ngx_mpegts_frame_t *f, ngx_buf_t *b,
 
         if (first) {
 
-            if (f->key) {
+            if (f->keyframe) {
                 packet[3] |= 0x20; /* adaptation */
 
                 *p++ = 7;    /* size */
@@ -920,7 +916,7 @@ ngx_rtmp_mpegts_copy(ngx_rtmp_session_t *s, void *dst, u_char **src, size_t n,
         *in = (*in)->next;
 
         if (*in == NULL) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "rtmp-mpegts: mpegts_copy| failed to read %uz byte(s)", n);
             return NGX_ERROR;
         }
@@ -993,7 +989,7 @@ ngx_rtmp_mpegts_append_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
 
     nnals &= 0x1f; /* 5lsb */
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: append_sps_pps| SPS number: %uz", nnals);
 
     /* SPS */
@@ -1007,12 +1003,12 @@ ngx_rtmp_mpegts_append_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
 
             ngx_rtmp_rmemcpy(&len, &rlen, 2);
 
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                            "rtmp-mpegts: append_sps_pps| header NAL length: %uz", (size_t) len);
 
             /* AnnexB prefix */
             if (out->end - out->last < 4) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "rtmp-mpegts: append_sps_pps| too small buffer for header NAL size");
                 return NGX_ERROR;
             }
@@ -1024,7 +1020,7 @@ ngx_rtmp_mpegts_append_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
 
             /* NAL body */
             if (out->end - out->last < len) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "rtmp-mpegts: append_sps_pps| too small buffer for header NAL");
                 return NGX_ERROR;
             }
@@ -1045,7 +1041,7 @@ ngx_rtmp_mpegts_append_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             return NGX_ERROR;
         }
 
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: append_sps_pps| PPS number: %uz", nnals);
     }
 
@@ -1067,14 +1063,14 @@ ngx_rtmp_mpegts_init_aac_codec(ngx_rtmp_session_t *s)
     }
 
     if (codec_ctx == NULL || codec_ctx->aac_header == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                    "rtmp-mpegts: aac_codec| codec ctx %p, aac_header is null", codec_ctx);
         return NGX_AGAIN;
     }
 
-    ctx->aac_codec = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_mpegts_aac_codec_t));
+    ctx->aac_codec = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_mpegts_aac_codec_t));
     if (ctx->aac_codec == NULL) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: aac_codec| alloc mpegts aac_codec failed");
         return NGX_ERROR;
     }
@@ -1102,14 +1098,14 @@ ngx_rtmp_mpegts_init_avc_codec(ngx_rtmp_session_t *s)
     }
 
     if (codec_ctx == NULL || codec_ctx->avc_header == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                    "rtmp-mpegts: avc_codec| codec ctx %p, avc_header is null", codec_ctx);
         return NGX_AGAIN;
     }
 
-    ctx->avc_codec = ngx_pcalloc(s->connection->pool, sizeof(ngx_rtmp_mpegts_avc_codec_t));
+    ctx->avc_codec = ngx_pcalloc(s->pool, sizeof(ngx_rtmp_mpegts_avc_codec_t));
     if (ctx->avc_codec == NULL) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: avc_codec| alloc mpegts avc_codec failed");
         return NGX_ERROR;
     }
@@ -1172,15 +1168,15 @@ ngx_rtmp_mpegts_flush_audio(ngx_rtmp_session_t *s)
     frame->cc = ctx->audio_cc;
     frame->pid = 0x101;
     frame->sid = 0xc0;
-    frame->type = NGX_RTMP_MPEGTS_TYPE_AUDIO;
+    frame->type = NGX_MPEGTS_MSG_AUDIO;
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: flush_audio| pts=%uL", frame->pts);
 
     rc = ngx_rtmp_mpegts_shared_append_chain(frame, b, 1);
 
     if (rc != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: flush_audio| flush failed");
     } else {
         ngx_rtmp_mpegts_append_out_chain(&s->out_chain, frame);
@@ -1291,7 +1287,7 @@ ngx_rtmp_mpegts_append_hevc_vps_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             nal_unit_len = 0;
             ngx_rtmp_rmemcpy(&nal_unit_len, &rnal_unit_len, 2);
             if (out->end - out->last < 4) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "hls: too small buffer for header NAL size");
                 return NGX_ERROR;
             }
@@ -1302,7 +1298,7 @@ ngx_rtmp_mpegts_append_hevc_vps_sps_pps(ngx_rtmp_session_t *s, ngx_buf_t *out)
             *out->last++ = 1;
 
             if (out->end - out->last < (ngx_int_t)nal_unit_len) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "hls: too small buffer for header NAL");
                 return NGX_ERROR;
             }
@@ -1352,7 +1348,7 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_mpegts_module);
     if (ctx == NULL || h->mlen < 1) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h265_handler| "
                        "resource error, mpegts_ctx=%p, h->mlen=%d",
                        ctx, h->mlen);
@@ -1362,7 +1358,7 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     if (ctx->avc_codec == NULL) {
         rc = ngx_rtmp_mpegts_init_avc_codec(s);
         if (rc == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h265_handler| init avc_codec failed");
             return NGX_OK;
         } else if (rc == NGX_AGAIN) {
@@ -1440,7 +1436,7 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
         nal_type = (src_nal_type & 0x7e) >> 1;
 
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h265_handler| h265 NAL type=%ui, len=%uD",
                        (ngx_uint_t) nal_type, len);
 
@@ -1452,7 +1448,7 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
             }
 
             if (0 != ngx_strcmp(nal_header, "\0\0\1")) {
-                ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                             "mpegts module: h265 hander|"
                                 "is not h265 NAL header [00 00 00 01]");
                 p -= 3;
@@ -1466,20 +1462,20 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
             nal_type = (src_nal_type & 0x7e) >> 1;
             if (0 == nal_type) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                     "mpegts hls: h265 NAL type reparse error");
                 return NGX_OK;
             }
 
 #define HEVC_NAL_AUD_LENGTH 0
             if (out.end - out.last < (ngx_int_t) (len + HEVC_NAL_AUD_LENGTH)) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                               "hls: not enough buffer for NAL");
                 return NGX_OK;
             }
 #if 1
             if (ngx_rtmp_mpegts_append_hevc_aud(s, &out) != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "hls: error appending AUD NAL");
             }
 #endif
@@ -1495,7 +1491,7 @@ ngx_rtmp_mpegts_h265_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
 NAL_TRAIL_N:
 
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "hls: h265 NAL type=%ui, len=%uD",
                        (ngx_uint_t) nal_type, len);
 
@@ -1511,7 +1507,7 @@ NAL_TRAIL_N:
             || nal_type == 39 || nal_type == 40)
         {
             if (out.end - out.last < (5 + len -1)) {
-                ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                ngx_log_error(NGX_LOG_ERR, s->log, 0,
                         "hls: not enough buffer for AnnexB prefix");
                 return NGX_OK;
             }
@@ -1519,7 +1515,7 @@ NAL_TRAIL_N:
                 ++vps_copy;
                 if(!aud_sent){
                     if (ngx_rtmp_mpegts_append_hevc_aud(s, &out) != NGX_OK) {
-                        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                       "hls: error appending AUD NAL");
                     }
                     aud_sent = 1;
@@ -1545,7 +1541,7 @@ NAL_TRAIL_N:
         }
 
         if (vps_copy > 0 && sps_copy > 0 && pps_copy > 0) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                     "mpegts vps_copy %i, sps_copy %i, pps_copy %i\n",
                         vps_copy, sps_copy, pps_copy);
             sps_pps_sent = 1;
@@ -1557,7 +1553,7 @@ NAL_TRAIL_N:
             } else if (!sps_pps_sent) {
                 if (ngx_rtmp_mpegts_append_hevc_vps_sps_pps(s, &out) != NGX_OK)
                 {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                       "hls: error appending AUD NAL");
                 }
                 aud_sent = 1;
@@ -1568,7 +1564,7 @@ NAL_TRAIL_N:
             if (!sps_pps_sent) {
                 if (ngx_rtmp_mpegts_append_hevc_vps_sps_pps(s, &out) != NGX_OK)
                 {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                   "hls: error appenging VPS/SPS/PPS NALs");
                 }
                 sps_pps_sent = 1;
@@ -1577,7 +1573,7 @@ NAL_TRAIL_N:
 
         /* AnnexB prefix */
         if (out.end - out.last < 5) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "hls: not enough buffer for AnnexB prefix");
             return NGX_OK;
         }
@@ -1595,7 +1591,7 @@ NAL_TRAIL_N:
 
         /* NAL body */
         if (out.end - out.last < (ngx_int_t) len) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "hls: not enough buffer for NAL");
             return NGX_OK;
         }
@@ -1609,7 +1605,7 @@ NAL_TRAIL_N:
 
     frame = ngx_rtmp_shared_alloc_mpegts_frame(NULL, 0);
     if (frame == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: h265_handler| "
                       "memory error, alloc mpegts frame failed");
         return NGX_ERROR;
@@ -1624,8 +1620,8 @@ NAL_TRAIL_N:
     frame->pid = 0x100;
     /* stream id, video range from 0xe0 to 0xef */
     frame->sid = 0xe0;
-    frame->key = (ftype == 1);
-    frame->type = NGX_RTMP_MPEGTS_TYPE_VIDEO;
+    frame->keyframe = (ftype == 1);
+    frame->type = NGX_MPEGTS_MSG_VIDEO;
 
     /*
      * start new fragment if
@@ -1638,12 +1634,12 @@ NAL_TRAIL_N:
         ngx_rtmp_mpegts_flush_audio(s);
     }
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: h265_handler| video pts=%uL, dts=%uL",
                    frame->pts, frame->dts);
 
     if (ngx_rtmp_mpegts_shared_append_chain(frame, &out, 1) != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: h264_handler| video frame failed");
     } else {
         ngx_rtmp_mpegts_append_out_chain(&s->out_chain, frame);
@@ -1684,7 +1680,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_mpegts_module);
     if (ctx == NULL || h->mlen < 1)
     {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h264_handler| "
                        "resource error, mpegts_ctx=%p, h->mlen=%d",
                        ctx, h->mlen);
@@ -1694,7 +1690,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     if (ctx->avc_codec == NULL) {
         rc = ngx_rtmp_mpegts_init_avc_codec(s);
         if (rc == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h264_handler| init avc_codec failed");
             return NGX_OK;
         } else if (rc == NGX_AGAIN) {
@@ -1768,7 +1764,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
         nal_type = src_nal_type & 0x1f;
 
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: h264_handler| h264 NAL type=%ui, len=%uD",
                        (ngx_uint_t) nal_type, len);
 
@@ -1785,7 +1781,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
                 case 5:
                 case 6:
                     if (ngx_rtmp_mpegts_append_aud(s, &out) != NGX_OK) {
-                        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                       "rtmp-mpegts: h264_handler| error appending AUD NAL");
                     }
                 case 9:
@@ -1803,7 +1799,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
                     break;
                 }
                 if (ngx_rtmp_mpegts_append_sps_pps(s, &out) != NGX_OK) {
-                    ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+                    ngx_log_error(NGX_LOG_ERR, s->log, 0,
                                   "rtmp-mpegts: h264_handler| error appenging SPS/PPS NALs");
                 }
                 sps_pps_sent = 1;
@@ -1813,7 +1809,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
         /* AnnexB prefix */
 
         if (out.end - out.last < 5) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "rtmp-mpegts: h264_handler| not enough buffer for AnnexB prefix");
             return NGX_OK;
         }
@@ -1832,7 +1828,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
         /* NAL body */
 
         if (out.end - out.last < (ngx_int_t) len) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                           "rtmp-mpegts: h264_handler| not enough buffer for NAL");
             return NGX_OK;
         }
@@ -1846,7 +1842,7 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
     frame = ngx_rtmp_shared_alloc_mpegts_frame(NULL, 0);
     if (frame == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: h264_handler| "
                       "memory error, alloc mpegts frame failed");
         return NGX_ERROR;
@@ -1857,8 +1853,8 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     frame->pts = frame->dts + cts * 90;
     frame->pid = 0x100;
     frame->sid = 0xe0;
-    frame->key = (ftype == 1);
-    frame->type = NGX_RTMP_MPEGTS_TYPE_VIDEO;
+    frame->keyframe = (ftype == 1);
+    frame->type = NGX_MPEGTS_MSG_VIDEO;
 
     if (ctx->aframe && ctx->aframe->last > ctx->aframe->pos &&
         ctx->aframe_pts + (uint64_t) ctx->audio_delay * 90  < frame->dts)
@@ -1866,12 +1862,12 @@ ngx_rtmp_mpegts_h264_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
         ngx_rtmp_mpegts_flush_audio(s);
     }
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: h264_handler| video pts=%uL, dts=%uL",
                    frame->pts, frame->dts);
 
     if (ngx_rtmp_mpegts_shared_append_chain(frame, &out, 1) != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: h264_handler| video frame failed");
     } else {
         ngx_rtmp_mpegts_append_out_chain(&s->out_chain, frame);
@@ -1913,7 +1909,7 @@ ngx_rtmp_mpegts_parse_aac_header(ngx_rtmp_session_t *s, ngx_uint_t *objtype,
 
     *objtype = b0 >> 3;
     if (*objtype == 0 || *objtype == 0x1f) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: parse_aac_header| "
                        "unsupported adts object type:%ui", *objtype);
         return NGX_ERROR;
@@ -1931,7 +1927,7 @@ ngx_rtmp_mpegts_parse_aac_header(ngx_rtmp_session_t *s, ngx_uint_t *objtype,
 
     *srindex = ((b0 << 1) & 0x0f) | ((b1 & 0x80) >> 7);
     if (*srindex == 0x0f) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: parse_aac_header| "
                        "unsupported adts sample rate:%ui", *srindex);
         return NGX_ERROR;
@@ -1939,7 +1935,7 @@ ngx_rtmp_mpegts_parse_aac_header(ngx_rtmp_session_t *s, ngx_uint_t *objtype,
 
     *chconf = (b1 >> 3) & 0x0f;
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: parse_aac_header| "
                    "aac object_type:%ui, sample_rate_index:%ui, "
                    "channel_config:%ui", *objtype, *srindex, *chconf);
@@ -1974,7 +1970,7 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     if (ctx->aac_codec == NULL) {
         rc = ngx_rtmp_mpegts_init_aac_codec(s);
         if (rc == NGX_ERROR) {
-            ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: aac_handler| init aac_codec failed");
             return NGX_OK;
         } else if(rc == NGX_AGAIN) {
@@ -1990,14 +1986,14 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 
     if (b == NULL) {
 
-        b = ngx_pcalloc(s->connection->pool, sizeof(ngx_buf_t));
+        b = ngx_pcalloc(s->pool, sizeof(ngx_buf_t));
         if (b == NULL) {
             return NGX_ERROR;
         }
 
         ctx->aframe = b;
 
-        b->start = ngx_palloc(s->connection->pool, ctx->audio_buffer_size);
+        b->start = ngx_palloc(s->pool, ctx->audio_buffer_size);
         if (b->start == NULL) {
             return NGX_ERROR;
         }
@@ -2010,7 +2006,7 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     pts = (uint64_t) h->timestamp * 90;
 
     if (b->start + size > b->end) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: aac_handler| too big audio frame");
         return NGX_OK;
     }
@@ -2025,11 +2021,11 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
         ngx_rtmp_mpegts_flush_audio(s);
     }
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: aac_handler| audio pts=%uL", pts);
 
     if (b->last + 7 > b->end) {
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                        "rtmp-mpegts: aac_handler| not enough buffer for audio header");
         return NGX_OK;
     }
@@ -2054,7 +2050,7 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     if (ngx_rtmp_mpegts_parse_aac_header(s, &objtype, &srindex, &chconf)
         != NGX_OK)
     {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "rtmp-mpegts: aac_handler| aac header error");
         return NGX_OK;
     }
@@ -2090,7 +2086,7 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
                                  ctx->aac_codec->sample_rate;
     dpts = (int64_t) (est_pts - pts);
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: aac_handler| audio sync dpts=%L (%.5fs)",
                    dpts, dpts / 90000.);
 
@@ -2105,7 +2101,7 @@ ngx_rtmp_mpegts_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
     ctx->aframe_base = pts;
     ctx->aframe_num  = 1;
 
-    ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                    "rtmp-mpegts: aac_handler| audio sync gap dpts=%L (%.5fs)",
                    dpts, dpts / 90000.);
 
@@ -2169,7 +2165,7 @@ ngx_rtmp_mpegts_mux(ngx_rtmp_session_t *s)
             break;
 
         default:
-            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->connection->log, 0,
+            ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                   "rtmp-mpegts: av| unknown frame-type=%d", f->hdr.type);
             break;
         }
@@ -2198,18 +2194,18 @@ ngx_rtmp_mpegts_ctx_init(ngx_rtmp_session_t *s)
 
     macf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_mpegts_module);
     if (macf == NULL) {
-        ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "rtmp-mpegts: ctx_init| get app conf failed");
         return NGX_ERROR;
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_mpegts_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->connection->pool,
+        ctx = ngx_pcalloc(s->pool,
                sizeof(ngx_rtmp_mpegts_ctx_t) +
                sizeof(ngx_mpegts_frame_t) * macf->out_queue);
         if (ctx == NULL) {
-            ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
                 "rtmp-mpegts: ctx_init| get ctx failed");
             return NGX_ERROR;
         }

@@ -17,6 +17,7 @@
 #define NGX_RTMP_MAX_NAME           256
 #define NGX_RTMP_MAX_FLASHVER       256
 #define NGX_RTMP_MAX_URL            256
+#define NGX_RTMP_MAX_SESSION        256
 #define NGX_RTMP_MAX_ARGS           NGX_RTMP_MAX_NAME
 
 
@@ -63,6 +64,7 @@ typedef struct {
 typedef struct {
     u_char                          name[NGX_RTMP_MAX_NAME];
     u_char                          args[NGX_RTMP_MAX_ARGS];
+    u_char                          session[NGX_RTMP_MAX_SESSION];
     double                          start;
     double                          duration;
     int                             reset;

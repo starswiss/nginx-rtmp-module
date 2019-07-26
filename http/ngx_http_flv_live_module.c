@@ -520,6 +520,8 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     s->connection = r->connection;
+    s->sockaddr = r->connection->sockaddr;
+    s->number = r->connection->number;
     ngx_rtmp_set_combined_log(s, r->connection->log->data,
             r->connection->log->handler);
     s->log->connection = r->connection->number;

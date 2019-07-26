@@ -6,7 +6,7 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
-#include <ngx_rtmp.h>
+#include "ngx_rtmp.h"
 
 
 #define NGX_RTMP_MP4_SAMPLE_SIZE        0x01

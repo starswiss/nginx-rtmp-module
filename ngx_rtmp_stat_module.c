@@ -331,15 +331,15 @@ ngx_rtmp_stat_client(ngx_http_request_t *r, ngx_chain_t ***lll,
     u_char  buf[NGX_INT_T_LEN];
 
 #ifdef NGX_RTMP_POOL_DEBUG
-    ngx_rtmp_stat_dump_pool(r, lll, s->connection->pool);
+    ngx_rtmp_stat_dump_pool(r, lll, s->pool);
 #endif
     NGX_RTMP_STAT_L("<id>");
     NGX_RTMP_STAT(buf, ngx_snprintf(buf, sizeof(buf), "%ui",
-                  (ngx_uint_t) s->connection->number) - buf);
+                  (ngx_uint_t) s->number) - buf);
     NGX_RTMP_STAT_L("</id>");
 
     NGX_RTMP_STAT_L("<address>");
-    NGX_RTMP_STAT_ES(&s->connection->addr_text);
+    NGX_RTMP_STAT_ES(s->addr_text);
     NGX_RTMP_STAT_L("</address>");
 
     NGX_RTMP_STAT_L("<time>");

@@ -111,10 +111,6 @@ ngx_rtmp_monitor_consume(ngx_event_t *ev)
     ngx_rtmp_monitor_ctx_t         *ctx;
     ngx_rtmp_codec_ctx_t           *cctx;
     ngx_rtmp_monitor_app_conf_t    *macf;
-    u_char                          peer[NGX_SOCKADDR_STRLEN];
-    u_char                          local[NGX_SOCKADDR_STRLEN];
-    struct sockaddr                 paddr, laddr;
-    socklen_t                       plen, llen;
 
     s = ev->data;
 
@@ -165,21 +161,10 @@ next:
         }
         ++ctx->buffered;
 
-        ngx_memzero(local, sizeof(local));
-        ngx_memzero(peer, sizeof(peer));
-        plen = sizeof(paddr);
-        llen = sizeof(laddr);
-
-        getpeername(s->connection->fd, &paddr, &plen);
-        getsockname(s->connection->fd, &laddr, &llen);
-
-        ngx_sock_ntop(&paddr, plen, peer, NGX_SOCKADDR_STRLEN, 1);
-        ngx_sock_ntop(&laddr, llen, local, NGX_SOCKADDR_STRLEN, 1);
-
         ngx_log_error(NGX_LOG_ERR, macf->buffered_log, 0,
                 "%p %s, peer: %s, local: %s, "
                 "stream: %V, buffered: %ui, time: %uis",
-                s, ctx->publishing ? "publisher" : "player", peer, local,
+                s, ctx->publishing ? "publisher" : "player", s->peer, s->local,
                 &s->stream, ctx->nbuffered, ctx->buffered);
     } else {
         ctx->buffered = 0;

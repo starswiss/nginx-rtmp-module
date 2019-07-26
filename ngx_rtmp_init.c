@@ -428,6 +428,7 @@ ngx_rtmp_init_session(ngx_rtmp_session_t *s, ngx_connection_t *c)
     ctx->client = &c->addr_text;
 
     s->log->connection = c->number;
+    s->sockaddr = c->sockaddr;
 
     c->log_error = NGX_ERROR_INFO;
 
@@ -628,12 +629,17 @@ ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf)
 
     s = ngx_pcalloc(pool, sizeof(ngx_rtmp_session_t) +
             sizeof(ngx_rtmp_frame_t *) * ((ngx_rtmp_core_srv_conf_t *)
-                addr_conf->default_server->ctx-> srv_conf[ngx_rtmp_core_module
+                addr_conf->default_server->ctx->srv_conf[ngx_rtmp_core_module
                     .ctx_index])->out_queue);
     if (s == NULL) {
         goto destroy;
     }
     s->pool = pool;
+
+    s->mpegts_out = ngx_pcalloc(pool,
+            sizeof(ngx_mpegts_frame_t *) * ((ngx_rtmp_core_srv_conf_t *)
+                addr_conf->default_server->ctx->srv_conf[ngx_rtmp_core_module
+                    .ctx_index])->out_queue);
 
     s->addr_conf = addr_conf;
 

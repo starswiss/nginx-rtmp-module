@@ -1249,9 +1249,9 @@ ngx_rtmp_rmemcpy(void *dst, const void* src, size_t n)
 }
 
 
-static ngx_int_t
+ngx_int_t
 ngx_rtmp_find_virtual_server(ngx_rtmp_virtual_names_t *virtual_names,
-    ngx_str_t *host, ngx_rtmp_session_t *s, ngx_rtmp_core_srv_conf_t **cscfp)
+    ngx_str_t *host, ngx_rtmp_core_srv_conf_t **cscfp)
 {
     ngx_rtmp_core_srv_conf_t   *cscf;
 
@@ -1312,7 +1312,7 @@ ngx_rtmp_set_virtual_server(ngx_rtmp_session_t *s, ngx_str_t *host)
 
     addr_conf = s->addr_conf;
 
-    rc = ngx_rtmp_find_virtual_server(addr_conf->virtual_names, host, s, &cscf);
+    rc = ngx_rtmp_find_virtual_server(addr_conf->virtual_names, host, &cscf);
 
     if (rc == NGX_ERROR) {
         return NGX_ERROR;

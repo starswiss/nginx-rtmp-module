@@ -716,7 +716,7 @@ ngx_live_record_aac(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_live_record_ctx_t          *ctx;
     ngx_rtmp_codec_ctx_t           *codec_ctx;
     uint64_t                        pts;
-    ngx_rtmp_mpegts_frame_t         frame;
+    ngx_mpegts_frame_t              frame;
     ngx_buf_t                       out;
     u_char                         *p;
     ngx_uint_t                      objtype, srindex, chconf, size;
@@ -850,7 +850,7 @@ ngx_live_record_aac(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: audio pts=%uL, dts=%uL", frame.pts, frame.dts);
 
-    if (ngx_rtmp_mpegts_write_frame(&ctx->ts, &frame, &out) != NGX_OK) {
+    if (ngx_rtmp_mpegts_write_frame(&ctx->ts, &frame, &out, NULL) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0, "record: audio frame failed");
     }
 
@@ -872,7 +872,7 @@ ngx_live_record_avc(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     uint32_t                        len, rlen;
     ngx_buf_t                       out;
     uint32_t                        cts;
-    ngx_rtmp_mpegts_frame_t         frame;
+    ngx_mpegts_frame_t              frame;
     ngx_uint_t                      nal_bytes;
     ngx_int_t                       aud_sent, sps_pps_sent;
     static u_char                   buffer[NGX_LIVE_RECORD_BUFSIZE];
@@ -1084,12 +1084,12 @@ ngx_live_record_avc(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     frame.pts = (h->timestamp + cts) * 90;
     frame.pid = 0x100;
     frame.sid = 0xe0;
-    frame.key = (ftype == 1);
+    frame.keyframe = (ftype == 1);
 
     ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "record: video pts=%uL, dts=%uL", frame.pts, frame.dts);
 
-    if (ngx_rtmp_mpegts_write_frame(&ctx->ts, &frame, &out) != NGX_OK) {
+    if (ngx_rtmp_mpegts_write_frame(&ctx->ts, &frame, &out, NULL) != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0, "record: video frame failed");
     }
 

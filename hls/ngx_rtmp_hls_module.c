@@ -6,11 +6,11 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
-#include <ngx_rtmp.h>
+#include "ngx_rtmp.h"
 #include <ngx_rtmp_cmd_module.h>
 #include <ngx_rtmp_codec_module.h>
 #include "ngx_rtmp_mpegts.h"
-
+#include "ngx_mpegts_gop_module.h"
 
 static ngx_rtmp_publish_pt              next_publish;
 static ngx_rtmp_close_stream_pt         next_close_stream;
@@ -73,6 +73,7 @@ typedef struct {
     ngx_uint_t                          key_frags;
 
     uint64_t                            aframe_base;
+    uint64_t                            aframe_duration;
     uint64_t                            aframe_num;
 
     ngx_buf_t                          *aframe;
@@ -1711,7 +1712,7 @@ ngx_rtmp_hls_update_fragment(ngx_rtmp_session_t *s, uint64_t ts,
     ngx_rtmp_hls_app_conf_t    *hacf;
     ngx_rtmp_hls_frag_t        *f;
     ngx_msec_t                  ts_frag_len;
-    ngx_int_t                   same_frag, force,discont;
+    ngx_int_t                   same_frag, force, discont;
     ngx_buf_t                  *b;
     int64_t                     d;
 
@@ -1779,14 +1780,27 @@ static ngx_int_t
 ngx_rtmp_hls_flush_audio(ngx_rtmp_session_t *s)
 {
     ngx_rtmp_hls_ctx_t             *ctx;
-    ngx_rtmp_mpegts_frame_t         frame;
+    ngx_mpegts_frame_t              frame;
     ngx_int_t                       rc;
     ngx_buf_t                      *b;
+    ngx_rtmp_header_t               header;
+    static ngx_buf_t               *ts_buf = NULL;
+    static ngx_chain_t              ts_chain;
+    ngx_rtmp_hls_app_conf_t        *hacf;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_hls_module);
 
     if (ctx == NULL || !ctx->opened) {
         return NGX_OK;
+    }
+
+    hacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_hls_module);
+
+    if (!ts_buf) {
+        ts_buf = ngx_create_temp_buf(ngx_cycle->pool,
+            hacf->audio_buffer_size * 2);
+        ts_chain.buf = ts_buf;
+        ts_chain.next = NULL;
     }
 
     b = ctx->aframe;
@@ -1795,8 +1809,7 @@ ngx_rtmp_hls_flush_audio(ngx_rtmp_session_t *s)
         return NGX_OK;
     }
 
-    ngx_memzero(&frame, sizeof(frame));
-
+    frame.length = 0;
     frame.dts = ctx->aframe_pts;
     frame.pts = frame.dts;
     frame.cc = ctx->audio_cc;
@@ -1806,12 +1819,24 @@ ngx_rtmp_hls_flush_audio(ngx_rtmp_session_t *s)
     ngx_log_debug1(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "hls: flush audio pts=%uL", frame.pts);
 
-    rc = ngx_rtmp_mpegts_write_frame(&ctx->file, &frame, b);
+    rc = ngx_rtmp_mpegts_write_frame(&ctx->file, &frame, b, &ts_buf);
 
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "hls: audio flush failed");
     }
+
+    if (frame.length) {
+        header.mlen = frame.length;
+        header.pts = ctx->aframe_pts;
+        header.type = NGX_MPEGTS_MSG_AUDIO;
+        header.keyframe = 0;
+        header.duration = ctx->aframe_duration;
+
+        ngx_rtmp_fire_event(s, NGX_MPEGTS_MSG_AUDIO, &header, &ts_chain);
+    }
+
+    ts_buf->last = ts_buf->pos;
 
     ctx->audio_cc = frame.cc;
     b->pos = b->last = b->start;
@@ -1974,6 +1999,9 @@ ngx_rtmp_hls_audio(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     if (p != b->start) {
         ctx->aframe_num++;
+        ctx->aframe_duration = pts > ctx->aframe_base ?
+            pts - ctx->aframe_base : 0;
+
         return NGX_OK;
     }
 
@@ -2027,11 +2055,20 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     uint32_t                        len, rlen;
     ngx_buf_t                       out, *b;
     uint32_t                        cts;
-    ngx_rtmp_mpegts_frame_t         frame;
+    ngx_mpegts_frame_t              frame;
     ngx_uint_t                      nal_bytes;
     ngx_int_t                       aud_sent, sps_pps_sent, boundary;
     static u_char                   buffer[NGX_RTMP_HLS_BUFSIZE];
     ngx_rtmp_core_app_conf_t       *cacf;
+    ngx_rtmp_header_t               header;
+    static ngx_buf_t               *ts_buf = NULL;
+    static ngx_chain_t              ts_chain;
+
+    if (!ts_buf) {
+        ts_buf = ngx_create_temp_buf(ngx_cycle->pool, NGX_RTMP_HLS_BUFSIZE * 2);
+        ts_chain.buf = ts_buf;
+        ts_chain.next = NULL;
+    }
 
     cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
 
@@ -2116,7 +2153,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         if (codec_ctx->video_codec_id == NGX_RTMP_VIDEO_H264) {
             nal_type = src_nal_type & 0x1f;
 
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
+            ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "hls: h264 NAL type=%ui, len=%uD",
                        (ngx_uint_t) nal_type, len);
 
@@ -2251,14 +2288,13 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         out.last += (len - 1);
     }
 
-    ngx_memzero(&frame, sizeof(frame));
-
+    frame.length = 0;
     frame.cc = ctx->video_cc;
     frame.dts = (uint64_t) h->timestamp * 90;
     frame.pts = frame.dts + cts * 90;
     frame.pid = 0x100;
     frame.sid = 0xe0;
-    frame.key = (ftype == 1);
+    frame.keyframe = (ftype == 1);
 
     /*
      * start new fragment if
@@ -2267,7 +2303,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
      */
 
     b = ctx->aframe;
-    boundary = frame.key && (codec_ctx->aac_header == NULL || !ctx->opened ||
+    boundary = frame.keyframe && (codec_ctx->aac_header == NULL || !ctx->opened ||
                              (b && b->last > b->pos));
 
     ngx_rtmp_hls_update_fragment(s, frame.dts, boundary, 1);
@@ -2279,12 +2315,23 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                    "hls: video pts=%uL, dts=%uL", frame.pts, frame.dts);
 
-    if (ngx_rtmp_mpegts_write_frame(&ctx->file, &frame, &out) != NGX_OK) {
+    if (ngx_rtmp_mpegts_write_frame(&ctx->file, &frame, &out, &ts_buf) != NGX_OK)
+    {
         ngx_log_error(NGX_LOG_ERR, s->log, 0,
                       "hls: video frame failed");
     }
 
+    if (frame.length) {
+        header.mlen = frame.length;
+        header.pts = frame.dts;
+        header.type = NGX_MPEGTS_MSG_VIDEO;
+        header.keyframe = frame.keyframe;
+
+        ngx_rtmp_fire_event(s, NGX_MPEGTS_MSG_VIDEO, &header, &ts_chain);
+    }
     ctx->video_cc = frame.cc;
+
+    ts_buf->last = ts_buf->pos;
 
     return NGX_OK;
 }

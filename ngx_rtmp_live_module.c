@@ -309,6 +309,10 @@ ngx_rtmp_live_start(ngx_rtmp_session_t *s)
     ngx_rtmp_frame_t           *status[3];
     size_t                      n, nstatus;
 
+    if (s->live_type == NGX_HLS_LIVE) {
+        return;
+    }
+
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
     control = ngx_rtmp_create_stream_begin(s, NGX_RTMP_MSID);
@@ -520,6 +524,7 @@ ngx_rtmp_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     ngx_rtmp_session_t             *ss;
     ngx_rtmp_live_ctx_t            *ctx, **cctx, *pctx;
     ngx_rtmp_live_app_conf_t       *lacf;
+    ngx_rtmp_core_ctx_t            *lctx;
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
     if (lacf == NULL) {
@@ -570,6 +575,12 @@ ngx_rtmp_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
                                    "live: no publisher");
                     ngx_rtmp_finalize_session(ss);
                 }
+            }
+
+            for (lctx = s->live_stream->hls_play_ctx; lctx; lctx = lctx->next) {
+                ngx_log_error(NGX_LOG_DEBUG, s->log, 0, "live: close_stream|"
+                    "close session %p", lctx->session);
+                ngx_rtmp_finalize_fake_session(lctx->session);
             }
         }
     }
@@ -1011,7 +1022,7 @@ ngx_rtmp_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
-    if (lacf == NULL || !lacf->live) {
+    if (lacf == NULL || !lacf->live || s->live_type == NGX_HLS_LIVE) {
         goto next;
     }
 
