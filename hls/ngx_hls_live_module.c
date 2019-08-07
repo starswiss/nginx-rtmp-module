@@ -606,10 +606,6 @@ ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
-                   "hls: publish: name='%s' type='%s'",
-                   v->name, v->type);
-
     ctx = ngx_rtmp_get_module_ctx(s, ngx_hls_live_module);
     if (ctx) {
         goto next;
