@@ -595,7 +595,7 @@ ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
         ((sctx->current_timestamp - keyframe->pts) > time_offset))
     {
         ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
-            "rtmp-gop: send_gop| curr %D - k %D, %D",
+            "mpegts-gop: offset_frames| curr %D - k %D, %D",
             sctx->current_timestamp, keyframe->pts, time_offset);
         frame = keyframe;
         keyframe = keyframe->next;

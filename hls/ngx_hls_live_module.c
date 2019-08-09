@@ -802,8 +802,8 @@ ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx)
         if (frame->type == NGX_MPEGTS_MSG_VIDEO) {
             ngx_hls_live_update_fragment(s, frame->pts, boundary);
         } else {
-            ngx_hls_live_update_fragment(s,
-                frame->pts + frame->duration, boundary);
+            ngx_hls_live_update_fragment(s, frame->pts, boundary);
+//                frame->pts + frame->duration, boundary);
         }
         if (!ctx->opened) {
             break;
