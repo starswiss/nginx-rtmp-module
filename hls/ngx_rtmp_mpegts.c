@@ -224,8 +224,6 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
     static u_char  buf[1024];
 
     if (!file->encrypt) {
-        ngx_log_debug1(NGX_LOG_DEBUG_CORE, file->log, 0,
-                       "mpegts: write %uz bytes", in_size);
 
         if (file->whandle == NULL) {
             rc = ngx_write_fd(file->fd, in, in_size);
@@ -245,9 +243,6 @@ ngx_rtmp_mpegts_write_file(ngx_rtmp_mpegts_file_t *file, u_char *in,
     }
 
     /* encrypt */
-
-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, file->log, 0,
-                   "mpegts: write %uz encrypted bytes", in_size);
 
     out = buf;
     out_size = sizeof(buf);

@@ -954,11 +954,6 @@ ngx_hls_http(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-    ngx_conf_log_error(NGX_LOG_ERR, cf, 0,
-            "\napp: %V\nflashver: %V\nswf_url: %V\ntc_url: %V\npage_url: %V",
-            &hlcf->app, &hlcf->flashver, &hlcf->swf_url, &hlcf->tc_url,
-            &hlcf->page_url);
-	
     return NGX_CONF_OK;
 }
 
