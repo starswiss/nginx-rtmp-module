@@ -967,7 +967,11 @@ ngx_rtmp_init_listening(ngx_conf_t *cf, ngx_rtmp_conf_port_t *port)
                 break;
         }
 
+#if nginx_version < 1015002
+        if (ngx_clone_listening(cf, ls) != NGX_OK) {
+#else 
         if (ngx_clone_listening(cf->cycle, ls) != NGX_OK) {
+#endif
             return NGX_ERROR;
         }
 
