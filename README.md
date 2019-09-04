@@ -332,3 +332,14 @@ http {
 | hls_cleanup | 布尔类型 | on | 这个参数用来控制是否实时删除过期的ts文件 |
 | hls_variant | 字符串 | 无 | 此选项用来实现多码率的hls流，例如低码率的流名叫 xxx_low 并且码率是320000bps，高码率的叫 xxx_high 码率为9600000bps，则需要配置两条配置 hls_variant _low BANDWIDTH=320000; 和 hls_variant _high BANDWIDTH=960000; 那么在请求hls流的时候只需要请求http://ip/location/xxx.m3u8即可让播放器实现自动切片码率的功能 |
 | hls_base_url | 字符串 | 空 | 如果你希望让播放器下载ts文件的时候使用与m3u8不同的域名可以通过这个来修改，例如不配置此项m3u8中ts记录为 xxx.ts，加了此项配置hls_base_url http://pingos.me/path; m3u8文件中ts记录则会变为 http://pingos.me/path/xxx.ts |
+
+# 录像服务
+
+| 配置项 | 参数类型 | 默认值 | 描述 |
+|--|--|--|--|
+| live_record | 布尔类型 | off | 录像功能开关，开启后将在指定目录存储直播内容文件（ts格式） |
+| live_record_path | 字符串 | 空 | 录像根目录，将在该目录下生成ts文件 |
+| live_record_interval | 时间 | 600000ms | 录制过程中重新打开索引文件和ts文件的时间间隔 |
+| live_record_min_fragment | 时间 | 8000ms | 录制过程中索引文件里记录的最小分片大小 |
+| live_record_max_fragment | 时间 | 12000ms | 录制过程中索引文件里记录的最大分片大小 |
+| live_record_buffer | 整型数 | 1024*1024 | 录制过程中数据缓冲大小 |
