@@ -209,6 +209,11 @@ ffmpeg -re -i your-input-file -vcodec libx264 -acodec aac -f flv rtmp://your-ser
 | timeout | 时间 | 60000ms | 连接超时时间，如果tcp连接建立长时间不发数据，服务器会断开这条tcp连接 |
 | ping | 时间 | 60000ms | rtmp服务的ping功能，rtmp连接建立后多久开始ping功能 |
 | ping_timeout | 时间 | 30000ms | rtmp服务多久没有收到ping回复超时 |
+| cache_time | 时间 | 0ms | 服务器端缓存多少时长的音视频数据，如果设置成0ms则没有秒开效果 |
+| low_latency | 布尔类型 | off | 只有在cache_time大于0时有效，当设置为on 服务器在收到新关键帧时会从新关键帧处下发数据 |
+| send_all | 布尔类型 | off | 只有在cache_time大于0时有效，当设置为on 服务器会将缓冲区中的数据一次性下发给客户端 |
+| fix_timestamp | 布尔类型 | off | 只有在cache_time大于0时有效，当设置为on 如果推流上来的时间戳出现回滚或者跳跃过大的情况则自动修复 |
+| zero_start | 布尔类型 | off | 只有在cache_time大于0时有效，当设置为on 播放端收到的码流中的时间戳值从0开始 |
  | max_streams | 整型 | 32 | rtmp通道内最大传输的流个数，rtmp协议允许一个通道内传输多条流 |
 | chunk_size | 整型 | 4096（单位：字节） | rtmp传输时一个碎片的长度，值越小cpu消耗越大，值越大内存和延时消耗越大，建议使用默认值 |
 | max_message | 整型 | 1048576（单位：字节） | 单个rtmp消息的最大长度，注意：如果传输大码率视频一个关键帧长度可能大于1MB，所以要根据真实场景调整该值 |
