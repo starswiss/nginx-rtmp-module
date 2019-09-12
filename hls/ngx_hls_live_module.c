@@ -598,7 +598,7 @@ ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ngx_hls_live_ctx_t             *ctx;
 
     hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
-    if (hacf == NULL || !hacf->hls) {
+    if (hacf == NULL || !hacf->hls || s->live_type != NGX_HLS_LIVE) {
         goto next;
     }
 
