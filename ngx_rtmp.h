@@ -100,7 +100,12 @@ typedef struct {
 #define NGX_RTMP_CONNECT                NGX_RTMP_MSG_MAX + 1
 #define NGX_RTMP_DISCONNECT             NGX_RTMP_MSG_MAX + 2
 #define NGX_RTMP_HANDSHAKE_DONE         NGX_RTMP_MSG_MAX + 3
-#define NGX_RTMP_MAX_EVENT              NGX_RTMP_MSG_MAX + 4
+#define NGX_MPEGTS_MSG_AUDIO            NGX_RTMP_MSG_MAX + 4
+#define NGX_MPEGTS_MSG_VIDEO            NGX_RTMP_MSG_MAX + 5
+#define NGX_MPEGTS_MSG_PATPMT           NGX_RTMP_MSG_MAX + 6
+#define NGX_MPEGTS_MSG_M3U8             NGX_RTMP_MSG_MAX + 7
+#define NGX_MPEGTS_MSG_CLOSE            NGX_RTMP_MSG_MAX + 8
+#define NGX_RTMP_MAX_EVENT              NGX_RTMP_MSG_MAX + 9
 
 
 /* RMTP control message types */
@@ -200,6 +205,7 @@ struct ngx_mpegts_frame_s {
 
     ngx_uint_t                  type;
     ngx_uint_t                  length;
+    size_t                      pos;
 
     ngx_mpegts_frame_t         *next;
     ngx_chain_t                *chain;
@@ -215,6 +221,7 @@ struct ngx_mpegts_frame_s {
 #define NGX_RTMP_LIVE       0
 #define NGX_HTTP_FLV_LIVE   1
 #define NGX_HLS_LIVE        2
+#define NGX_MPEGTS_LIVE     3
 
 typedef struct ngx_rtmp_session_s  ngx_rtmp_session_t;
 
@@ -253,6 +260,10 @@ typedef struct ngx_rtmp_addr_conf_s ngx_rtmp_addr_conf_t;
 #define NGX_LIVE_RELAY_CLOSE        15
 
 struct ngx_rtmp_session_s {
+    ngx_atomic_uint_t       number;
+    struct sockaddr        *sockaddr;
+    ngx_msec_t              roll_back;
+
     ngx_int_t               acodec;
     ngx_int_t               vcodec;
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */
@@ -272,6 +283,7 @@ struct ngx_rtmp_session_s {
     ngx_live_server_t      *live_server;
     ngx_live_stream_t      *live_stream;
 
+    ngx_str_t               remote_addr_text;
     ngx_str_t              *addr_text;
     int                     connected;
 
@@ -400,6 +412,7 @@ struct ngx_rtmp_session_s {
     unsigned                out_buffer:1;
     size_t                  out_queue;
     size_t                  out_cork;
+    ngx_mpegts_frame_t    **mpegts_out;
     ngx_rtmp_frame_t       *out[0];
 };
 
@@ -429,6 +442,7 @@ struct ngx_live_stream_s {
 
     ngx_rtmp_core_ctx_t        *publish_ctx;
     ngx_rtmp_core_ctx_t        *play_ctx;
+    ngx_rtmp_core_ctx_t        *hls_play_ctx;
 
     /* oclp */
     ngx_netcall_ctx_t          *stream_nctx;
@@ -802,6 +816,10 @@ ngx_rtmp_r64(uint64_t n)
                       ngx_rtmp_r32((uint32_t) (n >> 32));
 }
 
+
+ngx_int_t
+ngx_rtmp_find_virtual_server(ngx_rtmp_virtual_names_t *virtual_names,
+    ngx_str_t *host, ngx_rtmp_core_srv_conf_t **cscfp);
 
 /* Receiving messages */
 ngx_int_t ngx_rtmp_receive_message(ngx_rtmp_session_t *s,

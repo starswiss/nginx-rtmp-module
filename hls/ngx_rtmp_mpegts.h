@@ -55,5 +55,4 @@ ngx_int_t ngx_rtmp_mpegts_write_header(ngx_rtmp_mpegts_file_t *file);
 ngx_int_t ngx_rtmp_mpegts_write_frame(ngx_rtmp_mpegts_file_t *file,
     ngx_rtmp_mpegts_frame_t *f, ngx_buf_t *b);
 
-
 #endif /* _NGX_RTMP_MPEGTS_H_INCLUDED_ */

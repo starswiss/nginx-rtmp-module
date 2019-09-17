@@ -10,7 +10,7 @@
 #include "ngx_rtmp_mpegts.h"
 
 
-static u_char ngx_rtmp_mpegts_pat[] = {
+u_char ngx_rtmp_mpegts_pat[] = {
 
     /* TS */
     0x47, 0x40, 0x00, 0x10, 0x00,
@@ -138,18 +138,15 @@ ngx_rtmp_mpegts_crc32(u_char *crc_buf, const u_char *data, int len)
 }
 
 
-static ngx_int_t
-ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
+ngx_int_t
+ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec,
+    ngx_log_t *log, u_char *pmt)
 {
     u_char      *p, crc_buf[4], *pmt_pos;
     ngx_int_t    vpid, apid;
-    ngx_int_t    vcodec, acodec;
 
     vpid = -1;
     apid = -1;
-
-    vcodec = file->vcodec;
-    acodec = file->acodec;
 
     if (vcodec == acodec && vcodec == 0) {
         return NGX_ERROR;
@@ -174,8 +171,10 @@ ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
         break;
 
         default:
-            ngx_log_error(NGX_LOG_ERR, file->log, 0,
-                "rtmp: gen_pmt| unknown video codec (%d)", vcodec);
+            if (log) {
+                ngx_log_error(NGX_LOG_ERR, log, 0,
+                    "rtmp: gen_pmt| unknown video codec (%d)", vcodec);
+            }
     }
 
     switch (acodec) {
@@ -191,8 +190,10 @@ ngx_rtmp_mpegts_gen_pmt(ngx_rtmp_mpegts_file_t *file, u_char *pmt)
         break;
 
         default:
-            ngx_log_error(NGX_LOG_ERR, file->log, 0,
-                "rtmp: gen_pmt| unknown audio codec (%d)", acodec);
+            if (log) {
+                ngx_log_error(NGX_LOG_ERR, log, 0,
+                    "rtmp: gen_pmt| unknown video codec (%d)", vcodec);
+            }
     }
 
     if (vpid != -1) {
@@ -312,7 +313,9 @@ ngx_rtmp_mpegts_write_header(ngx_rtmp_mpegts_file_t *file)
         return ret;
     }
 
-    if (ngx_rtmp_mpegts_gen_pmt(file, pmt) != NGX_OK) {
+    if (ngx_rtmp_mpegts_gen_pmt(file->vcodec,
+        file->acodec, file->log, pmt) != NGX_OK)
+    {
         return NGX_ERROR;
     }
 

@@ -376,7 +376,11 @@ ngx_live_create_ctx(ngx_rtmp_session_t *s, unsigned publishing)
     if (publishing) {
         pctx = &s->live_stream->publish_ctx;
     } else {
-        pctx = &s->live_stream->play_ctx;
+        if (s->live_type == NGX_HLS_LIVE) {
+            pctx = &s->live_stream->hls_play_ctx;
+        } else {
+            pctx = &s->live_stream->play_ctx;
+        }
     }
 
     ctx->next = (*pctx);
@@ -396,7 +400,11 @@ ngx_live_delete_ctx(ngx_rtmp_session_t *s)
     if (ctx->publishing) {
         pctx = &s->live_stream->publish_ctx;
     } else {
-        pctx = &s->live_stream->play_ctx;
+        if (s->live_type == NGX_HLS_LIVE) {
+            pctx = &s->live_stream->hls_play_ctx;
+        } else {
+            pctx = &s->live_stream->play_ctx;
+        }
     }
 
     for (/* void */; *pctx; pctx = &(*pctx)->next) {

@@ -177,7 +177,7 @@ static u_char *
 ngx_rtmp_log_var_connection_getdata(ngx_rtmp_session_t *s, u_char *buf,
     ngx_rtmp_log_op_t *op)
 {
-    return ngx_sprintf(buf, "%ui", (ngx_uint_t) s->connection->number);
+    return ngx_sprintf(buf, "%ui", (ngx_uint_t) s->number);
 }
 
 
@@ -185,7 +185,7 @@ static size_t
 ngx_rtmp_log_var_remote_addr_getlen(ngx_rtmp_session_t *s,
     ngx_rtmp_log_op_t *op)
 {
-    return s->connection->addr_text.len;
+    return s->remote_addr_text.len;
 }
 
 
@@ -193,8 +193,8 @@ static u_char *
 ngx_rtmp_log_var_remote_addr_getdata(ngx_rtmp_session_t *s, u_char *buf,
     ngx_rtmp_log_op_t *op)
 {
-    return ngx_cpymem(buf, s->connection->addr_text.data,
-                           s->connection->addr_text.len);
+    return ngx_cpymem(buf, s->remote_addr_text.data,
+                           s->remote_addr_text.len);
 }
 
 

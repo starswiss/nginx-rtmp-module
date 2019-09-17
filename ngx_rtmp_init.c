@@ -171,6 +171,10 @@ ngx_rtmp_init_connection(ngx_connection_t *c)
         ngx_log_error(NGX_LOG_INFO, c->log, 0, "create rtmp session failed");
         return;
     }
+    s->number = c->number;
+    s->remote_addr_text.data = ngx_pcalloc(s->pool, c->addr_text.len);
+    s->remote_addr_text.len = c->addr_text.len;
+    ngx_memcpy(s->remote_addr_text.data, c->addr_text.data, c->addr_text.len);
 
     ngx_rtmp_init_session(s, c);
 
@@ -684,6 +688,10 @@ ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf)
 
     s->stage = NGX_LIVE_INIT;
     s->init_time = ngx_current_msec;
+
+    s->mpegts_out = ngx_pcalloc(s->pool, sizeof(ngx_mpegts_frame_t *) *
+                ((ngx_rtmp_core_srv_conf_t *) addr_conf->default_server->ctx->
+                srv_conf[ngx_rtmp_core_module.ctx_index])->out_queue);
 
     return s;
 

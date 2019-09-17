@@ -309,6 +309,10 @@ ngx_rtmp_live_start(ngx_rtmp_session_t *s)
     ngx_rtmp_frame_t           *status[3];
     size_t                      n, nstatus;
 
+    if (s->live_type == NGX_HLS_LIVE) {
+        return;
+    }
+
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
     control = ngx_rtmp_create_stream_begin(s, NGX_RTMP_MSID);
@@ -1005,13 +1009,13 @@ next:
 static ngx_int_t
 ngx_rtmp_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
-    ngx_rtmp_live_app_conf_t       *lacf;
-    ngx_rtmp_live_ctx_t            *ctx;
-    ngx_rtmp_session_t             *ps;
+    ngx_rtmp_live_app_conf_t   *lacf;
+    ngx_rtmp_live_ctx_t        *ctx;
+    ngx_rtmp_session_t         *ps;
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
-    if (lacf == NULL || !lacf->live) {
+    if (lacf == NULL || !lacf->live || s->live_type == NGX_HLS_LIVE) {
         goto next;
     }
 
