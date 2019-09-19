@@ -16,7 +16,6 @@
 #include "ngx_hls_live_module.h"
 #include "ngx_rbuf.h"
 #include "ngx_rtmp_dynamic.h"
-#include "ngx_hls_live_module.h"
 
 #ifndef NGX_HTTP_GONE
 #define NGX_HTTP_GONE 410
@@ -50,7 +49,8 @@ typedef struct {
     ngx_msec_t                  timeout;
 
     ngx_chain_t                *m3u8;
-    ngx_mpegts_frame_t         *out_frame;
+    ngx_uint_t                  out_pos;
+    ngx_uint_t                  out_last;
     ngx_chain_t                *out_chain;
     ngx_hls_live_frag_t        *frag;
 } ngx_hls_http_ctx_t;
@@ -244,7 +244,7 @@ ngx_hls_http_ctx_init(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
     stream->data = buf->pos;
     stream->len = buf->last - buf->pos;
 
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+    ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
             "hls-http: ctx_init| hls stream (%V).", stream);
 
     return NGX_OK;
@@ -397,17 +397,22 @@ ngx_hls_http_cleanup(void *data)
 {
     ngx_http_request_t   *r;
     ngx_hls_http_ctx_t   *ctx;
+    ngx_chain_t          *cl;
 
     r = data;
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
 
-    if (ctx && ctx->m3u8) {
-        ngx_put_chainbuf(ctx->m3u8);
-    }
-
     if (!ctx || !ctx->session) {
         return;
     }
+
+    cl = ctx->out_chain;
+    while (cl) {
+        ctx->out_chain = cl->next;
+        ngx_put_chainbuf(cl);
+        cl = ctx->out_chain;
+    }
+    ctx->out_chain = NULL;
 
     ctx->session->request = NULL;
     ctx->session->connection = NULL;
@@ -599,7 +604,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
     ngx_hls_http_ctx_t   *ctx;
     ngx_int_t             rc;
     ngx_rtmp_session_t   *s;
-    ngx_chain_t          *out;
+    ngx_chain_t           out;
     ngx_buf_t            *buf;
 
     ctx = ngx_hls_http_create_ctx(r, addr_conf);
@@ -609,9 +614,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    if (!ctx->m3u8) {
-        ctx->m3u8 = ngx_get_chainbuf(1024*512, 1);
-    }
+    buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
 
     s = ngx_hls_live_fetch_session(&ctx->serverid, &ctx->stream, &ctx->sid);
     if (s == NULL) {
@@ -635,17 +638,8 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
 
     ctx->session = s;
 
-    out = ctx->m3u8;
-
-    if (out == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-            "hls-http: m3u8_handler| hls session %V, create temp buf failed",
-            &ctx->sid);
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-    out->next = NULL;
-
-    buf = out->buf;
+    out.buf = buf;
+    out.next = NULL;
 
     buf->last = buf->pos = buf->start;
     buf->memory = 1;
@@ -667,7 +661,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
         return rc;
     }
 
-    rc = ngx_http_output_filter(r, out);
+    rc = ngx_http_output_filter(r, &out);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "hls-http: m3u8_handler| send http content failed");
@@ -731,6 +725,103 @@ ngx_hls_http_parse_frag(ngx_http_request_t *r, ngx_str_t *name)
 }
 
 
+static void
+ngx_hls_http_write_handler(ngx_http_request_t *r)
+{
+    ngx_hls_http_ctx_t   *ctx;
+    ngx_rtmp_session_t   *s;
+    ngx_event_t          *wev;
+    size_t                present, sent;
+    ngx_int_t             rc;
+    ngx_chain_t          *cl;
+    ngx_hls_live_frag_t  *frag;
+
+    wev = r->connection->write;           //wev->handler = ngx_http_request_handler;
+
+    if (r->connection->destroyed) {
+        return;
+    }
+
+    ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
+    s = ctx->session;
+    frag = ctx->frag;
+
+    if (wev->timedout) {
+        ngx_log_error(NGX_LOG_INFO, s->log, NGX_ETIMEDOUT,
+                "hls_http: write_handler| client timed out");
+        r->connection->timedout = 1;
+        if (r->header_sent) {
+            ngx_http_finalize_request(r, NGX_HTTP_CLIENT_CLOSED_REQUEST);
+        } else {
+            r->error_page = 1;
+            ngx_http_finalize_request(r, NGX_HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        return;
+    }
+
+    if (wev->timer_set) {
+        ngx_del_timer(wev);
+    }
+
+    if (ctx->out_chain == NULL) {
+        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 1);
+    }
+
+    rc = NGX_OK;
+
+    while (ctx->out_chain) {
+        present = r->connection->sent;
+
+        if (r->connection->buffered) {
+            rc = ngx_http_output_filter(r, NULL);
+        } else {
+            rc = ngx_http_output_filter(r, ctx->out_chain);
+        }
+
+        sent = r->connection->sent - present;
+
+        ngx_rtmp_update_bandwidth(&ngx_rtmp_bw_out, sent);
+
+        if (rc == NGX_AGAIN) {
+            ngx_add_timer(wev, s->timeout);
+            if (ngx_handle_write_event(wev, 0) != NGX_OK) {
+                ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
+                        "hls_http: write_handler| handle write event failed");
+                ngx_http_finalize_request(r, NGX_ERROR);
+            }
+            return;
+        }
+
+        if (rc == NGX_ERROR) {
+            ngx_log_error(NGX_LOG_ERR, s->log, ngx_errno,
+                    "hls_http: write_handler| send error");
+            ngx_http_finalize_request(r, NGX_ERROR);
+
+            return;
+        }
+
+        /* NGX_OK */
+        cl = ctx->out_chain;
+        while (cl) {
+            ctx->out_chain = cl->next;
+            ngx_put_chainbuf(cl);
+            cl = ctx->out_chain;
+        }
+
+        if (ctx->frag->content_pos == ctx->frag->content_last) {
+            ctx->out_chain = NULL;
+            break;
+        }
+
+        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 1);
+    }
+
+    if (wev->active) {
+        ngx_del_event(wev, NGX_WRITE_EVENT, 0);
+    }
+}
+
 static ngx_int_t
 ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 {
@@ -775,7 +866,7 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     ctx->frag = frag;
 
-    r->headers_out.content_length_n = frag->length + 376;
+    r->headers_out.content_length_n = frag->length;
     rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_ts_headers);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -783,9 +874,22 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    ctx->out_chain = ngx_hls_live_prepare_frag(s, frag);
+    ngx_rtmp_shared_acquire_frag(frag);
 
-    return ngx_http_output_filter(r, ctx->out_chain);
+    if (0) {
+        r->count++;
+        r->write_event_handler = ngx_hls_http_write_handler;
+
+        ngx_hls_http_write_handler(r);
+
+        return NGX_DONE;
+    } else {
+        ctx->out_chain = ngx_hls_live_prepare_frag(s, frag);
+
+        ngx_rtmp_update_bandwidth(&ngx_rtmp_bw_out, frag->length);
+
+        return ngx_http_output_filter(r, ctx->out_chain);
+    }
 }
 
 

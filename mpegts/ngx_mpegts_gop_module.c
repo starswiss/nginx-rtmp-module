@@ -585,7 +585,7 @@ ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
     while (time_offset && keyframe &&
         ((sctx->current_timestamp - keyframe->pts) > time_offset * 90))
     {
-        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, ss->log, 0,
             "mpegts-gop: offset_frames| curr %D - k %D, %D",
             sctx->current_timestamp, keyframe->pts, time_offset);
         frame = keyframe;
@@ -610,7 +610,7 @@ ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
         if (frame->type == ssctx->base_type &&
             frame->pts - ssctx->first_timestamp >= duration * 90)
         {
-            ngx_log_error(NGX_LOG_INFO, s->log, 0, "gone %D, first %D, curr %D",
+            ngx_log_error(NGX_LOG_INFO, ss->log, 0, "gone %D, first %D, curr %D",
                 frame->pts, ssctx->first_timestamp, sctx->current_timestamp);
             ssctx->send_gop = 2;
             break;

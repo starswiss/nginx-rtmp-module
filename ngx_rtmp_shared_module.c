@@ -304,11 +304,13 @@ ngx_rtmp_shared_alloc_mpegts_frame(ngx_chain_t *cl, ngx_flag_t mandatory)
     frame = rscf->free_mpegts_frame;
     if (frame) {
         rscf->free_mpegts_frame = frame->next;
+        --rscf->nfree_frame;
     } else {
         frame = ngx_pcalloc(rscf->pool, sizeof(ngx_mpegts_frame_t));
         if (frame == NULL) {
             return NULL;
         }
+        ++rscf->nalloc_frame;
     }
 
     ngx_memset(frame, 0, sizeof(ngx_mpegts_frame_t));
@@ -344,6 +346,7 @@ ngx_rtmp_shared_free_mpegts_frame(ngx_mpegts_frame_t *frame)
     /* recycle frame */
     frame->next = rscf->free_mpegts_frame;
     rscf->free_mpegts_frame = frame;
+    ++rscf->nfree_frame;
 }
 
 ngx_chain_t *

@@ -82,5 +82,8 @@ ngx_chain_t* ngx_hls_live_prepare_frag(ngx_rtmp_session_t *s,
 void ngx_hls_live_free_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag);
 ngx_rtmp_session_t* ngx_hls_live_fetch_session(ngx_str_t *server,
     ngx_str_t *stream, ngx_str_t *session);
+void ngx_rtmp_shared_acquire_frag(ngx_hls_live_frag_t *frag);
+ngx_chain_t *ngx_hls_live_prepare_out_chain(ngx_rtmp_session_t *s,
+    ngx_hls_live_frag_t *frag, ngx_int_t nframes);
 
 #endif
