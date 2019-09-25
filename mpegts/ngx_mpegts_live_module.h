@@ -15,9 +15,9 @@ ngx_int_t
 ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec,
     ngx_log_t *log, u_char *pmt);
 ngx_int_t
-ngx_mpegts_mux_video_filter(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame);
+ngx_mpegts_live_video_filter(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame);
 ngx_int_t
-ngx_mpegts_mux_audio_filter(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame);
+ngx_mpegts_live_audio_filter(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame);
 
 extern u_char ngx_rtmp_mpegts_pat[];
 

@@ -11,7 +11,8 @@
 #include <ngx_rtmp_codec_module.h>
 #include "ngx_rbuf.h"
 #include "ngx_hls_live_module.h"
-#include "ngx_mpegts_mux_module.h"
+#include "ngx_mpegts_live_module.h"
+#include "ngx_rtmp_live_module.h"
 #include "ngx_mpegts_gop_module.h"
 
 static ngx_rtmp_play_pt                 next_play;
@@ -253,7 +254,7 @@ ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out)
 
     for (i = 0; i < ctx->nfrags; i++) {
         frag = ngx_hls_live_get_frag(s, i);
-        if (frag->duration > max_frag) {
+        if (frag && frag->duration > max_frag) {
             max_frag = (ngx_uint_t) (frag->duration + .5);
         }
     }
@@ -410,10 +411,11 @@ ngx_hls_live_prepare_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag)
         while (cl) {
             *ll = ngx_get_chainbuf(0, 0);
             *((*ll)->buf) = *(cl->buf);
-            (*ll)->buf->flush = 1;
+            (*ll)->buf->memory = 1;
 
             if (frag->content_pos == frag->content_last && cl->next == NULL) {
                 (*ll)->buf->last_in_chain = 1;
+                (*ll)->buf->flush = 1;
             }
 
             ll = &((*ll)->next);
@@ -433,17 +435,15 @@ ngx_hls_live_fetch_session(ngx_str_t *server,
     ngx_str_t *stream, ngx_str_t *session)
 {
     ngx_live_stream_t    *live_stream;
-    ngx_rtmp_core_ctx_t  *lctx;
     ngx_hls_live_ctx_t   *ctx;
 
     live_stream = ngx_live_fetch_stream(server, stream);
     if (live_stream) {
-        for (lctx = live_stream->hls_play_ctx; lctx; lctx = lctx->next) {
-            ctx = ngx_rtmp_get_module_ctx(lctx->session, ngx_hls_live_module);
+        for (ctx = live_stream->hls_ctx; ctx; ctx = ctx->next) {
             if (session->len == ctx->sid.len &&
                 !ngx_strncmp(ctx->sid.data, session->data, session->len))
             {
-                return lctx->session;
+                return ctx->session;
             }
         }
     }
@@ -476,7 +476,7 @@ ngx_hls_live_close_fragment(ngx_rtmp_session_t *s)
         return NGX_OK;
     }
 
-    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+    ngx_log_error(NGX_LOG_INFO, s->log, 0,
                    "hls: close fragment id=%uL", ctx->nfrag);
 
     ctx->opened = 0;
@@ -538,7 +538,7 @@ ngx_hls_live_create_frag(ngx_rtmp_session_t *s) {
             sizeof(ngx_mpegts_frame_t*) * s->out_queue);
     }
 
-    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+    ngx_log_error(NGX_LOG_INFO, s->log, 0,
         "hls-live: create_frag| create frag[%p]", frag);
 
     return frag;
@@ -566,7 +566,7 @@ ngx_hls_live_open_fragment(ngx_rtmp_session_t *s, uint64_t ts,
 
     id = ngx_hls_live_get_fragment_id(s, ts);
 
-    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+    ngx_log_error(NGX_LOG_INFO, s->log, 0,
             "hls: open_fragment| create frag[%uL] timestamp %uL", id, ts);
 
     ffrag = &(ctx->frags[id % (hacf->winfrags * 2 + 1)]);
@@ -628,6 +628,72 @@ ngx_hls_live_timeout(ngx_event_t *ev)
 
 
 static ngx_int_t
+ngx_hls_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
+{
+    ngx_hls_live_ctx_t           *ctx;
+    ngx_live_stream_t            *st;
+    ngx_rtmp_live_app_conf_t     *lacf;
+    ngx_hls_live_app_conf_t      *hacf;
+
+    hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
+
+    lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
+    if (lacf == NULL) {
+        return NGX_ERROR;
+    }
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_hls_live_module);
+    if (ctx && ctx->stream) {
+        ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
+                       "mpegts-live: join| already joined");
+        return NGX_ERROR;
+    }
+
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_hls_live_ctx_t));
+        ngx_rtmp_set_ctx(s, ctx, ngx_hls_live_module);
+
+        ctx->frags = ngx_pcalloc(s->pool,
+            sizeof(ngx_hls_live_frag_t *) * (hacf->winfrags * 2 + 1));
+        if (ctx->frags == NULL) {
+            return NGX_ERROR;
+        }
+    }
+
+    ctx->session = s;
+
+    ngx_log_error(NGX_LOG_INFO, s->log, 0,
+                   "mpegts-live: join| join '%s'", name);
+
+    st = s->live_stream;
+
+    if (!(publisher || st->publish_ctx || lacf->idle_streams)) {
+        ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                      "mpegts-live: join| stream not found");
+
+        s->status = 404;
+
+        ngx_rtmp_finalize_session(s);
+
+        return NGX_ERROR;
+    }
+
+    ctx->stream = st;
+    ctx->next = st->hls_ctx;
+
+    st->hls_ctx = ctx;
+
+    ctx->ev.data = s;
+    ctx->ev.handler = ngx_hls_live_timeout;
+    ctx->ev.log = s->log;
+    ctx->timeout = hacf->timeout;
+
+    ngx_add_timer(&ctx->ev, (ctx->timeout + 3000) / 3);
+
+    return NGX_OK;
+}
+
+static ngx_int_t
 ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
     ngx_hls_live_app_conf_t        *hacf;
@@ -638,36 +704,19 @@ ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    if (s->interprocess) {
+    if (s->interprocess || s->live_type != NGX_HLS_LIVE) {
         goto next;
+    }
+
+    if (ngx_hls_live_join(s, v->name, 0) == NGX_ERROR) {
+        return NGX_ERROR;
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_hls_live_module);
-    if (ctx) {
-        goto next;
-    }
-
-    ctx = ngx_pcalloc(s->pool, sizeof(ngx_hls_live_ctx_t));
-    ngx_rtmp_set_ctx(s, ctx, ngx_hls_live_module);
 
     ctx->sid.len = ngx_strlen(v->session);
     ctx->sid.data = ngx_pcalloc(s->pool, ctx->sid.len);
     ngx_memcpy(ctx->sid.data, v->session, ctx->sid.len);
-
-    if (ctx->frags == NULL) {
-        ctx->frags = ngx_pcalloc(s->pool,
-            sizeof(ngx_hls_live_frag_t *) * (hacf->winfrags * 2 + 1));
-        if (ctx->frags == NULL) {
-            return NGX_ERROR;
-        }
-    }
-
-    ctx->ev.data = s;
-    ctx->ev.handler = ngx_hls_live_timeout;
-    ctx->ev.log = s->log;
-    ctx->timeout = hacf->timeout;
-
-    ngx_add_timer(&ctx->ev, (ctx->timeout + 3000) / 3);
 
 next:
     return next_play(s, v);
@@ -678,7 +727,7 @@ static ngx_int_t
 ngx_hls_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
 {
     ngx_hls_live_app_conf_t   *hacf;
-    ngx_hls_live_ctx_t        *ctx;
+    ngx_hls_live_ctx_t        *ctx, **cctx;
     ngx_uint_t                 i;
     ngx_hls_live_frag_t       *frag;
 
@@ -706,6 +755,18 @@ ngx_hls_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
         if (frag) {
             ngx_hls_live_free_frag(s, frag);
         }
+    }
+
+    for (cctx = &ctx->stream->hls_ctx; *cctx; cctx = &(*cctx)->next) {
+        if (*cctx == ctx) {
+            *cctx = ctx->next;
+            break;
+        }
+    }
+
+    if (ctx->stream->hls_ctx) {
+        ctx->stream = NULL;
+        goto next;
     }
 
 next:
@@ -858,7 +919,7 @@ static ngx_int_t
 ngx_hls_live_av(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame)
 {
     ngx_live_stream_t         *live_stream;
-    ngx_rtmp_core_ctx_t       *live_ctx;
+    ngx_hls_live_ctx_t        *ctx;
     ngx_rtmp_session_t        *ss;
     ngx_rtmp_codec_ctx_t      *codec_ctx;
     ngx_hls_live_app_conf_t   *hacf;
@@ -871,10 +932,8 @@ ngx_hls_live_av(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame)
             frame->dts/90, frame->type, frame->key);
 
     live_stream = s->live_stream;
-    for (live_ctx = live_stream->hls_play_ctx; live_ctx;
-        live_ctx = live_ctx->next)
-    {
-        ss = live_ctx->session;
+    for (ctx = live_stream->hls_ctx; ctx; ctx = ctx->next) {
+        ss = ctx->session;
 
         switch (ngx_mpegts_gop_link(s, ss, hacf->playlen, hacf->playlen)) {
         case NGX_DECLINED:

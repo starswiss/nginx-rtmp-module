@@ -8,7 +8,6 @@
 
 typedef struct ngx_hls_live_frag_s ngx_hls_live_frag_t;
 typedef struct ngx_hls_live_play_s ngx_hls_live_play_t;
-typedef struct ngx_hls_live_ctx_s  ngx_hls_live_ctx_t;
 
 struct ngx_hls_live_play_s {
     ngx_str_t               name;
@@ -48,9 +47,10 @@ struct ngx_hls_live_ctx_s {
     unsigned                playing:1;
 
     ngx_buf_t              *patpmt;
+    ngx_rtmp_session_t     *session;
 
     ngx_str_t               sid;
-    ngx_str_t               stream;
+    ngx_live_stream_t      *stream;
     ngx_str_t               name;
 
     uint64_t                nfrag;
@@ -72,6 +72,7 @@ struct ngx_hls_live_ctx_s {
     ngx_event_t             ev;
     ngx_msec_t              timeout;
     ngx_msec_t              last_time;
+    ngx_hls_live_ctx_t     *next;
 };
 
 ngx_int_t ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out);

@@ -819,6 +819,10 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         ss = pctx->session;
         cs = &pctx->cs[csidx];
 
+        if (ss->live_type == NGX_MPEGTS_LIVE || ss->live_type == NGX_HLS_LIVE) {
+            continue;
+        }
+
         /* send gop cache is set */
         switch (ngx_rtmp_gop_send(s, ss)) {
         case NGX_DECLINED:
@@ -1015,7 +1019,9 @@ ngx_rtmp_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
 
-    if (lacf == NULL || !lacf->live || s->live_type == NGX_HLS_LIVE) {
+    if (lacf == NULL || !lacf->live ||
+        s->live_type == NGX_HLS_LIVE || s->live_type == NGX_MPEGTS_LIVE)
+    {
         goto next;
     }
 

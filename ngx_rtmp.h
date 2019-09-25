@@ -384,6 +384,7 @@ struct ngx_rtmp_session_s {
     ngx_connection_t       *connection;
 
     /* merge frame and send */
+    ngx_mpegts_frame_t       *prepare_mpegts_frame[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_rtmp_frame_t       *prepare_frame[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_chain_t            *merge[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_uint_t              nframe;
@@ -422,6 +423,8 @@ struct ngx_rtmp_session_s {
 
 typedef struct ngx_rtmp_core_ctx_s      ngx_rtmp_core_ctx_t;
 typedef struct ngx_rtmp_live_ctx_s      ngx_rtmp_live_ctx_t;
+typedef struct ngx_mpegts_live_ctx_s    ngx_mpegts_live_ctx_t;
+typedef struct ngx_hls_live_ctx_s       ngx_hls_live_ctx_t;
 
 struct ngx_rtmp_core_ctx_s {
     ngx_rtmp_core_ctx_t    *next;
@@ -442,7 +445,6 @@ struct ngx_live_stream_s {
 
     ngx_rtmp_core_ctx_t        *publish_ctx;
     ngx_rtmp_core_ctx_t        *play_ctx;
-    ngx_rtmp_core_ctx_t        *hls_play_ctx;
 
     /* oclp */
     ngx_netcall_ctx_t          *stream_nctx;
@@ -452,6 +454,8 @@ struct ngx_live_stream_s {
     /* for live */
     ngx_map_t                   pubctx;
     ngx_rtmp_live_ctx_t        *ctx;
+    ngx_mpegts_live_ctx_t      *mpegts_ctx;
+    ngx_hls_live_ctx_t         *hls_ctx;
     ngx_rtmp_bandwidth_t        bw_in;
     ngx_rtmp_bandwidth_t        bw_in_audio;
     ngx_rtmp_bandwidth_t        bw_in_video;

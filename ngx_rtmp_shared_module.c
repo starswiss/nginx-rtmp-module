@@ -122,7 +122,11 @@ ngx_rtmp_prepare_merge_frame(ngx_rtmp_session_t *s)
         }
 
         // save frame prepare to send
-        s->prepare_frame[n] = s->out[s->out_pos];
+        if (s->live_type == NGX_MPEGTS_LIVE) {
+            s->prepare_frame[n] = s->out[s->out_pos];
+        } else {
+            s->prepare_mpegts_frame[n] = s->mpegts_out[s->out_pos];
+        }
 
         ++s->out_pos;
         s->out_pos %= s->out_queue;
@@ -138,12 +142,22 @@ ngx_rtmp_free_merge_frame(ngx_rtmp_session_t *s)
 {
     ngx_uint_t                  n;
 
-    for (n = 0; n < s->nframe; ++n) {
-        ngx_put_chainbufs(s->merge[n]);
-        s->merge[n] = NULL;
+    if (s->live_type == NGX_MPEGTS_LIVE) {
+        for (n = 0; n < s->nframe; ++n) {
+            ngx_put_chainbufs(s->merge[n]);
+            s->merge[n] = NULL;
 
-        ngx_rtmp_shared_free_frame(s->prepare_frame[n]);
-        s->prepare_frame[n] = NULL;
+            ngx_rtmp_shared_free_mpegts_frame(s->prepare_mpegts_frame[n]);
+            s->prepare_mpegts_frame[n] = NULL;
+        }
+    } else {
+        for (n = 0; n < s->nframe; ++n) {
+            ngx_put_chainbufs(s->merge[n]);
+            s->merge[n] = NULL;
+
+            ngx_rtmp_shared_free_frame(s->prepare_frame[n]);
+            s->prepare_frame[n] = NULL;
+        }
     }
 }
 

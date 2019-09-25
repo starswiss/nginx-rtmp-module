@@ -8,7 +8,7 @@
 #include "ngx_rtmp.h"
 #include "ngx_rtmp_codec_module.h"
 #include "ngx_rtmp_live_module.h"
-#include "ngx_mpegts_mux_module.h"
+#include "ngx_mpegts_live_module.h"
 
 
 static ngx_rtmp_close_stream_pt         next_close_stream;
@@ -42,10 +42,10 @@ typedef struct {
     uint32_t                    first_timestamp;
     uint32_t                    current_timestamp;
 
-    ngx_uint_t                   base_type;
+    ngx_uint_t                  base_type;
 
     /* only for publisher, must at last of ngx_mpegts_gop_ctx_t */
-    ngx_mpegts_frame_t           *cache[];
+    ngx_mpegts_frame_t         *cache[];
 } ngx_mpegts_gop_ctx_t;
 
 typedef struct {
@@ -171,7 +171,7 @@ ngx_mpegts_gop_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
 
     ngx_conf_merge_msec_value(conf->cache_time, prev->cache_time, 0);
     ngx_conf_merge_msec_value(conf->roll_back, prev->roll_back, conf->cache_time);
-    ngx_conf_merge_msec_value(conf->one_off_send, prev->one_off_send, 2000);
+    ngx_conf_merge_msec_value(conf->one_off_send, prev->one_off_send, 3000);
     ngx_conf_merge_value(conf->low_latency, prev->low_latency, 0);
     ngx_conf_merge_value(conf->send_all, prev->send_all, 0);
     ngx_conf_merge_msec_value(conf->fix_timestamp, prev->fix_timestamp, 10000);
@@ -419,6 +419,7 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
         ssctx->send_gop = 1;
         ssctx->first_timestamp = sctx->cache[ssctx->gop_pos]->pts;
+        ssctx->base_type = sctx->cache[ssctx->gop_pos]->type;
     } else {
         if (sctx->cache[ssctx->gop_pos] == NULL) {
             ssctx->gop_pos = sctx->gop_pos;
@@ -431,7 +432,7 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     while (ss->roll_back && keyframe &&
         ((sctx->current_timestamp - keyframe->pts) > ss->roll_back * 90))
     {
-        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+        ngx_log_error(NGX_LOG_INFO, s->log, 0,
             "rtmp-gop: send_gop| curr %D - k %D, %D",
             sctx->current_timestamp, keyframe->pts, ss->roll_back * 90);
         frame = keyframe;
@@ -447,15 +448,20 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
     while (frame) {
 
+        ngx_log_error(NGX_LOG_INFO, s->log, 0, "send gop link %D, type %d, curr %D",
+                frame->pts/90, frame->type, sctx->current_timestamp/90);
         if (ngx_mpegts_gop_link_frame(ss, frame) == NGX_AGAIN) {
             break;
         }
 
-        if (!gacf->send_all &&
+        if (!gacf->send_all && frame->type == ssctx->base_type &&
             frame->pts - ssctx->first_timestamp >= gacf->one_off_send * 90)
         {
-            ngx_log_error(NGX_LOG_INFO, s->log, 0, "gone %D, curr %D",
-                frame->pts, sctx->current_timestamp);
+            ngx_log_error(NGX_LOG_INFO, s->log, 0,
+                "gone %D, type %d, first %D, curr %D, send %D",
+                frame->pts/90, frame->type, ssctx->first_timestamp/90,
+                sctx->current_timestamp/90, gacf->one_off_send);
+
             ssctx->send_gop = 2;
             break;
         }

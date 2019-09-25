@@ -12,7 +12,7 @@
 #include <math.h>
 #include <ngx_rtmp_cmd_module.h>
 #include "ngx_http_set_header.h"
-#include "ngx_mpegts_mux_module.h"
+#include "ngx_mpegts_live_module.h"
 #include "ngx_hls_live_module.h"
 #include "ngx_rbuf.h"
 #include "ngx_rtmp_dynamic.h"
@@ -397,7 +397,7 @@ ngx_hls_http_cleanup(void *data)
 {
     ngx_http_request_t   *r;
     ngx_hls_http_ctx_t   *ctx;
-    ngx_chain_t          *cl;
+//    ngx_chain_t          *cl;
 
     r = data;
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
@@ -405,7 +405,7 @@ ngx_hls_http_cleanup(void *data)
     if (!ctx || !ctx->session) {
         return;
     }
-
+/*
     cl = ctx->out_chain;
     while (cl) {
         ctx->out_chain = cl->next;
@@ -413,7 +413,7 @@ ngx_hls_http_cleanup(void *data)
         cl = ctx->out_chain;
     }
     ctx->out_chain = NULL;
-
+*/
     ctx->session->request = NULL;
     ctx->session->connection = NULL;
 
@@ -592,7 +592,7 @@ ngx_hls_http_create_session(ngx_http_request_t *r)
         return NULL;
     }
 
-    ngx_add_timer(r->connection->write, s->timeout);
+//    ngx_add_timer(r->connection->write, s->timeout);
 
     return s;
 }
@@ -604,7 +604,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
     ngx_hls_http_ctx_t   *ctx;
     ngx_int_t             rc;
     ngx_rtmp_session_t   *s;
-    ngx_chain_t           out;
+    ngx_chain_t          *out;
     ngx_buf_t            *buf;
 
     ctx = ngx_hls_http_create_ctx(r, addr_conf);
@@ -638,8 +638,8 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
 
     ctx->session = s;
 
-    out.buf = buf;
-    out.next = NULL;
+    out = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
+    out->buf = buf;
 
     buf->last = buf->pos = buf->start;
     buf->memory = 1;
@@ -661,7 +661,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
         return rc;
     }
 
-    rc = ngx_http_output_filter(r, &out);
+    rc = ngx_http_output_filter(r, out);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "hls-http: m3u8_handler| send http content failed");
@@ -734,7 +734,6 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
     size_t                present, sent;
     ngx_int_t             rc;
     ngx_chain_t          *cl;
-    ngx_hls_live_frag_t  *frag;
 
     wev = r->connection->write;           //wev->handler = ngx_http_request_handler;
 
@@ -744,7 +743,6 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
 
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
     s = ctx->session;
-    frag = ctx->frag;
 
     if (wev->timedout) {
         ngx_log_error(NGX_LOG_INFO, s->log, NGX_ETIMEDOUT,
@@ -876,7 +874,7 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     ngx_rtmp_shared_acquire_frag(frag);
 
-    if (0) {
+    if (1) {
         r->count++;
         r->write_event_handler = ngx_hls_http_write_handler;
 
@@ -1027,7 +1025,7 @@ ngx_http_hls(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_hls_http_loc_conf_t            *hlcf;
     ngx_str_t                          *value;
     ngx_uint_t                          n;
-	
+
     clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
     clcf->handler = ngx_hls_http_handler;
 

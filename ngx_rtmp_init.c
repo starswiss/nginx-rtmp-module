@@ -368,7 +368,9 @@ ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
 
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "finalize session");
 
-    if (s->live_type != NGX_RTMP_LIVE) {
+    if (s->live_type == NGX_HLS_LIVE) {
+        ngx_rtmp_finalize_fake_session(s);
+    } else if (s->live_type != NGX_RTMP_LIVE) {
         e = &s->close;
         e->data = s;
         if (s->relay) {
