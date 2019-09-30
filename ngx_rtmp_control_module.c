@@ -212,14 +212,14 @@ ngx_rtmp_control_walk_session(ngx_http_request_t *r, ngx_rtmp_core_ctx_t *cctx)
 
     s = cctx->session;
 
-    if (s == NULL || s->connection == NULL) {
+    if (s == NULL) {
         return NGX_CONF_OK;
     }
 
     if (ngx_http_arg(r, (u_char *) "addr", sizeof("addr") - 1, &addr)
             == NGX_OK)
     {
-        paddr = &s->connection->addr_text;
+        paddr = s->addr_text;
         if (paddr->len != addr.len ||
                 ngx_strncmp(paddr->data, addr.data, addr.len))
         {
@@ -231,7 +231,7 @@ ngx_rtmp_control_walk_session(ngx_http_request_t *r, ngx_rtmp_core_ctx_t *cctx)
                 &clientid)
             == NGX_OK)
     {
-        if (s->connection->number !=
+        if (s->number !=
                 (ngx_uint_t) ngx_atoi(clientid.data, clientid.len))
         {
             return NGX_CONF_OK;

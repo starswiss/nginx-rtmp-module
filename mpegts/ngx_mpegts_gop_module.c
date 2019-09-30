@@ -39,8 +39,8 @@ typedef struct {
 
     ngx_uint_t                  meta_version;
 
-    uint32_t                    first_timestamp;
-    uint32_t                    current_timestamp;
+    uint64_t                    first_timestamp;
+    uint64_t                    current_timestamp;
 
     ngx_uint_t                  base_type;
 
@@ -448,8 +448,9 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
     while (frame) {
 
-        ngx_log_error(NGX_LOG_INFO, s->log, 0, "send gop link %D, type %d, curr %D",
-                frame->pts/90, frame->type, sctx->current_timestamp/90);
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+            "send gop link %D, type %d, curr %D",
+            frame->pts/90, frame->type, sctx->current_timestamp/90);
         if (ngx_mpegts_gop_link_frame(ss, frame) == NGX_AGAIN) {
             break;
         }
@@ -457,7 +458,7 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         if (!gacf->send_all && frame->type == ssctx->base_type &&
             frame->pts - ssctx->first_timestamp >= gacf->one_off_send * 90)
         {
-            ngx_log_error(NGX_LOG_INFO, s->log, 0,
+            ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                 "gone %D, type %d, first %D, curr %D, send %D",
                 frame->pts/90, frame->type, ssctx->first_timestamp/90,
                 sctx->current_timestamp/90, gacf->one_off_send);
@@ -512,26 +513,13 @@ ngx_mpegts_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     }
 
     pos = ngx_mpegts_gop_prev(s, sctx->gop_last);
-    /* new frame is video key frame */
-    if (sctx->cache[pos]->key) {
-        if (gacf->low_latency && !ss->roll_back && pos != ssctx->gop_pos) {
-            ssctx->gop_pos = pos;
+    if (sctx->cache[ssctx->gop_pos] == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ss->log, 0,
+                "mpegts-gop: gop_send| current gop pos is NULL, "
+                "skip to new postion [pos %d last %d] %d",
+                sctx->gop_pos, sctx->gop_last, ssctx->gop_pos);
 
-            ss->out_pos = ss->out_last;
-
-            ngx_log_error(NGX_LOG_INFO, ss->log, 0,
-                    "gop, low latency, chase to new keyframe");
-        }
-
-    } else {
-        if (sctx->cache[ssctx->gop_pos] == NULL) {
-            ngx_log_error(NGX_LOG_ERR, ss->log, 0,
-                    "gop, current gop pos is NULL, "
-                    "skip to new postion [pos %d last %d] %d",
-                    sctx->gop_pos, sctx->gop_last, ssctx->gop_pos);
-
-            ssctx->gop_pos = sctx->gop_pos;
-        }
+        ssctx->gop_pos = sctx->gop_pos;
     }
 
     frame = sctx->cache[ssctx->gop_pos];
@@ -544,8 +532,6 @@ ngx_mpegts_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
 
     return NGX_OK;
 }
-
-
 
 static ngx_int_t
 ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
@@ -592,8 +578,9 @@ ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
         ((sctx->current_timestamp - keyframe->pts) > time_offset * 90))
     {
         ngx_log_error(NGX_LOG_DEBUG, ss->log, 0,
-            "mpegts-gop: offset_frames| curr %D - k %D, %D",
-            sctx->current_timestamp, keyframe->pts, time_offset);
+            "mpegts-gop: offset_frames| curr %D - k %D = %D, %D",
+            sctx->current_timestamp, keyframe->pts,
+            (sctx->current_timestamp - keyframe->pts) / 90, time_offset);
         frame = keyframe;
         keyframe = keyframe->next;
         ssctx->first_timestamp = frame->pts;
@@ -642,7 +629,6 @@ ngx_mpegts_gop_link(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
     ngx_mpegts_gop_app_conf_t    *gacf;
     ngx_mpegts_gop_ctx_t         *sctx, *ssctx;
     ngx_mpegts_frame_t           *frame;
-    size_t                        pos;
 
     gacf = ngx_rtmp_get_module_app_conf(s, ngx_mpegts_gop_module);
     if (gacf->cache_time == 0) {
@@ -668,27 +654,14 @@ ngx_mpegts_gop_link(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
         return NGX_OK;
     }
 
-    pos = ngx_mpegts_gop_prev(s, sctx->gop_last);
     /* new frame is video key frame */
-    if (sctx->cache[pos]->key) {
-        if (gacf->low_latency && !ss->roll_back && pos != ssctx->gop_pos) {
-            ssctx->gop_pos = pos;
+    if (sctx->cache[ssctx->gop_pos] == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ss->log, 0,
+                "mpegts-gop: link| current gop pos is NULL, "
+                "skip to new postion [pos %d last %d] %d",
+                sctx->gop_pos, sctx->gop_last, ssctx->gop_pos);
 
-            ss->out_pos = ss->out_last;
-
-            ngx_log_error(NGX_LOG_INFO, ss->log, 0,
-                    "gop, low latency, chase to new keyframe");
-        }
-
-    } else {
-        if (sctx->cache[ssctx->gop_pos] == NULL) {
-            ngx_log_error(NGX_LOG_ERR, ss->log, 0,
-                    "gop, current gop pos is NULL, "
-                    "skip to new postion [pos %d last %d] %d",
-                    sctx->gop_pos, sctx->gop_last, ssctx->gop_pos);
-
-            ssctx->gop_pos = sctx->gop_pos;
-        }
+        ssctx->gop_pos = sctx->gop_pos;
     }
 
     frame = sctx->cache[ssctx->gop_pos];

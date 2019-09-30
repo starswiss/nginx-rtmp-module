@@ -72,15 +72,6 @@ struct ngx_mpegts_live_ctx_s {
     ngx_uint_t                    aframe_num;
     ngx_msec_t                    aframe_base;
     ngx_buf_t                    *aframe;
-
-    /* gop cache */
-    ngx_mpegts_frame_t           *last_video;
-    ngx_mpegts_frame_t           *last_audio;
-    ngx_mpegts_frame_t           *keyframe;
-    ngx_msec_t                    cache_length;
-    ngx_uint_t                    cache_pos;
-    ngx_uint_t                    cache_last;
-    ngx_mpegts_frame_t           *cache[];
 };
 
 /* 700 ms PCR delay */
@@ -1453,7 +1444,7 @@ ngx_mpegts_live_aac_handler(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *f)
 {
     ngx_rtmp_header_t              *h;
     ngx_chain_t                    *in;
-    ngx_mpegts_live_ctx_t           *ctx;
+    ngx_mpegts_live_ctx_t          *ctx;
     uint64_t                        pts, est_pts;
     int64_t                         dpts;
     size_t                          bsize;
@@ -1713,12 +1704,10 @@ ngx_mpegts_live_ctx_init(ngx_rtmp_session_t *s)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_mpegts_live_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(s->pool,
-               sizeof(ngx_mpegts_live_ctx_t) +
-               sizeof(ngx_mpegts_frame_t) * macf->out_queue);
+        ctx = ngx_pcalloc(s->pool, sizeof(ngx_mpegts_live_ctx_t));
         if (ctx == NULL) {
             ngx_log_error(NGX_LOG_ERR, s->log, 0,
-                "rtmp-mpegts: ctx_init| get ctx failed");
+                "rtmp-mpegts: ctx_init| pcalloc ctx failed");
             return NGX_ERROR;
         }
 
@@ -1734,7 +1723,7 @@ ngx_mpegts_live_ctx_init(ngx_rtmp_session_t *s)
     return NGX_OK;
 }
 
-static void
+static ngx_int_t
 ngx_mpegts_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
 {
     ngx_mpegts_live_ctx_t        *ctx;
@@ -1743,18 +1732,24 @@ ngx_mpegts_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
 
     lacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_live_module);
     if (lacf == NULL) {
-        return;
+        return NGX_ERROR;
     }
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_mpegts_live_module);
     if (ctx && ctx->stream) {
         ngx_log_debug0(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "mpegts-live: join| already joined");
-        return;
+        return NGX_ERROR;
     }
 
     if (ctx == NULL) {
         ctx = ngx_pcalloc(s->pool, sizeof(ngx_mpegts_live_ctx_t));
+        if (ctx == NULL) {
+            ngx_log_error(NGX_LOG_ERR, s->log, 0,
+                "mpegts-live: join| pcalloc ctx failed");
+            return NGX_ERROR;
+        }
+
         ngx_rtmp_set_ctx(s, ctx, ngx_mpegts_live_module);
     }
 
@@ -1773,15 +1768,15 @@ ngx_mpegts_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
 
         s->status = 404;
 
-        ngx_rtmp_finalize_session(s);
-
-        return;
+        return NGX_ERROR;
     }
 
     ctx->stream = st;
     ctx->next = st->mpegts_ctx;
 
     st->mpegts_ctx = ctx;
+
+    return NGX_OK;
 }
 
 static ngx_int_t
@@ -1799,7 +1794,9 @@ ngx_mpegts_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
         goto next;
     }
 
-    ngx_mpegts_live_join(s, v->name, 0);
+    if (ngx_mpegts_live_join(s, v->name, 0) == NGX_ERROR) {
+        return NGX_ERROR;
+    }
 
 next:
     return next_play(s, v);

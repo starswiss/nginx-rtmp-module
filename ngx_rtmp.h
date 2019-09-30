@@ -264,6 +264,8 @@ struct ngx_rtmp_session_s {
     struct sockaddr        *sockaddr;
     ngx_msec_t              roll_back;
 
+    unsigned int            destroyed:1;
+
     ngx_int_t               acodec;
     ngx_int_t               vcodec;
     uint32_t                signature;  /* "RTMP" */ /* <-- FIXME wtf */

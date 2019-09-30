@@ -199,7 +199,7 @@ ngx_rtmp_gop_link_frame(ngx_rtmp_session_t *s, ngx_rtmp_frame_t *frame)
 
         cs->last_timestamp = frame->hdr.timestamp;
 
-        ngx_log_error(NGX_LOG_DEBUG, s->connection->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
             "gop: link_frame| type %d, delta %d,"
             " timestamp %uD, fixed timestamp %uD",
             frame->hdr.type, delta, frame->hdr.timestamp, cs->timestamp);

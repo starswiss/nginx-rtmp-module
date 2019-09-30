@@ -22,6 +22,7 @@ static ngx_rtmp_close_stream_pt         next_close_stream;
 #define ngx_hls_live_prev(s, pos) (pos == 0 ? s->out_queue - 1 : pos - 1)
 
 static ngx_int_t ngx_hls_live_postconfiguration(ngx_conf_t *cf);
+static void * ngx_hls_live_create_main_conf(ngx_conf_t *cf);
 static void * ngx_hls_live_create_app_conf(ngx_conf_t *cf);
 static char * ngx_hls_live_merge_app_conf(ngx_conf_t *cf,
        void *parent, void *child);
@@ -46,11 +47,16 @@ typedef struct {
     ngx_flag_t                          cleanup;
     ngx_array_t                        *variant;
     ngx_str_t                           base_url;
-    ngx_hls_live_frag_t                *free_frag;
     ngx_pool_t                         *pool;
     ngx_msec_t                          timeout;
 } ngx_hls_live_app_conf_t;
 
+typedef struct {
+    ngx_hls_live_frag_t                *free_frag;
+    ngx_pool_t                         *pool;
+} ngx_hls_live_main_conf_t;
+
+ngx_hls_live_main_conf_t *ngx_hls_live_main_conf = NULL;
 
 #define NGX_RTMP_HLS_NAMING_SEQUENTIAL  1
 #define NGX_RTMP_HLS_NAMING_TIMESTAMP   2
@@ -173,7 +179,7 @@ static ngx_rtmp_module_t  ngx_hls_live_module_ctx = {
     NULL,                               /* preconfiguration */
     ngx_hls_live_postconfiguration,     /* postconfiguration */
 
-    NULL,                               /* create main configuration */
+    ngx_hls_live_create_main_conf,      /* create main configuration */
     NULL,                               /* init main configuration */
 
     NULL,                               /* create server configuration */
@@ -374,19 +380,13 @@ ngx_hls_live_prepare_out_chain(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag,
     while (i < nframes && frag->content_pos != frag->content_last) {
         frame = frag->content[frag->content_pos];
 
-        cl = frame->chain;
-        while (cl) {
+        for (cl = frame->chain; cl; cl = cl->next) {
             *ll = ngx_get_chainbuf(0, 0);
-            *((*ll)->buf) = *(cl->buf);
+            (*ll)->buf->pos = cl->buf->pos;
+            (*ll)->buf->last = cl->buf->last;
             (*ll)->buf->flush = 1;
-            (*ll)->buf->memory = 1;
 
-            if (frag->content_pos == frag->content_last && cl->next == NULL) {
-                (*ll)->buf->last_in_chain = 1;
-            }
-
-            ll = &((*ll)->next);
-            cl = cl->next;
+            ll = &(*ll)->next;
         }
 
         *ll = NULL;
@@ -407,19 +407,13 @@ ngx_hls_live_prepare_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag)
     while (frag->content_pos != frag->content_last) {
         frame = frag->content[frag->content_pos];
 
-        cl = frame->chain;
-        while (cl) {
+        for (cl = frame->chain; cl; cl = cl->next) {
             *ll = ngx_get_chainbuf(0, 0);
-            *((*ll)->buf) = *(cl->buf);
-            (*ll)->buf->memory = 1;
+            (*ll)->buf->pos = cl->buf->pos;
+            (*ll)->buf->last = cl->buf->last;
+            (*ll)->buf->flush = 1;
 
-            if (frag->content_pos == frag->content_last && cl->next == NULL) {
-                (*ll)->buf->last_in_chain = 1;
-                (*ll)->buf->flush = 1;
-            }
-
-            ll = &((*ll)->next);
-            cl = cl->next;
+            ll = &(*ll)->next;
         }
 
         *ll = NULL;
@@ -494,22 +488,19 @@ ngx_hls_live_close_fragment(ngx_rtmp_session_t *s)
 
 
 void
-ngx_hls_live_free_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag)
+ngx_hls_live_free_frag(ngx_hls_live_frag_t *frag)
 {
     ngx_mpegts_frame_t        *frame;
     ngx_uint_t                 i;
-    ngx_hls_live_app_conf_t   *hacf;
-
-    hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
 
     frag->ref--;
-
-    ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
-        "hls-live: free_frag| frag[%p] ref %ui", frag, frag->ref);
 
     if (frag->ref > 0) {
         return;
     }
+
+    ngx_log_error(NGX_LOG_DEBUG, ngx_cycle->log, 0,
+        "hls-live: free_frag| frag[%p] ref %ui", frag, frag->ref);
 
     for (i = 0; i < frag->content_last; ++i) {
         frame = frag->content[i];
@@ -518,23 +509,25 @@ ngx_hls_live_free_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag)
         }
     }
 
-    frag->next = hacf->free_frag;
-    hacf->free_frag = frag;
+    frag->next = ngx_hls_live_main_conf->free_frag;
+    ngx_hls_live_main_conf->free_frag = frag;
 }
 
 
 static ngx_hls_live_frag_t*
 ngx_hls_live_create_frag(ngx_rtmp_session_t *s) {
     ngx_hls_live_frag_t       *frag;
-    ngx_hls_live_app_conf_t   *hacf;
 
-    hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
+    if (ngx_hls_live_main_conf->free_frag) {
+        frag = ngx_hls_live_main_conf->free_frag;
+        ngx_hls_live_main_conf->free_frag =
+            ngx_hls_live_main_conf->free_frag->next;
 
-    if (hacf->free_frag) {
-        frag = hacf->free_frag;
-        hacf->free_frag = hacf->free_frag->next;
+        ngx_memzero(frag, sizeof(ngx_hls_live_frag_t) +
+            sizeof(ngx_mpegts_frame_t*) * s->out_queue);
     } else {
-        frag = ngx_pcalloc(hacf->pool, sizeof(ngx_hls_live_frag_t) +
+        frag = ngx_pcalloc(ngx_hls_live_main_conf->pool,
+            sizeof(ngx_hls_live_frag_t) +
             sizeof(ngx_mpegts_frame_t*) * s->out_queue);
     }
 
@@ -571,7 +564,7 @@ ngx_hls_live_open_fragment(ngx_rtmp_session_t *s, uint64_t ts,
 
     ffrag = &(ctx->frags[id % (hacf->winfrags * 2 + 1)]);
     if (*ffrag) {
-        ngx_hls_live_free_frag(s, *ffrag);
+        ngx_hls_live_free_frag(*ffrag);
     }
     *ffrag = ngx_hls_live_create_frag(s);
 
@@ -586,7 +579,6 @@ ngx_hls_live_open_fragment(ngx_rtmp_session_t *s, uint64_t ts,
 
     ctx->opened = 1;
     ctx->frag_ts = ts;
-
 
     ngx_memzero(&patpmt, sizeof(patpmt));
     patpmt.buf = ngx_create_temp_buf(s->pool, 376);
@@ -623,7 +615,7 @@ ngx_hls_live_timeout(ngx_event_t *ev)
         return;
     }
 
-    ngx_add_timer(ev, (ctx->timeout + 3000) / 3);
+    ngx_add_timer(ev, (ctx->timeout + 3000));
 }
 
 
@@ -688,7 +680,7 @@ ngx_hls_live_join(ngx_rtmp_session_t *s, u_char *name, unsigned publisher)
     ctx->ev.log = s->log;
     ctx->timeout = hacf->timeout;
 
-    ngx_add_timer(&ctx->ev, (ctx->timeout + 3000) / 3);
+    ngx_add_timer(&ctx->ev, (ctx->timeout + 3000));
 
     return NGX_OK;
 }
@@ -753,7 +745,7 @@ ngx_hls_live_close_stream(ngx_rtmp_session_t *s, ngx_rtmp_close_stream_t *v)
     for (i = 0; i < 2 * hacf->winfrags + 1; i++) {
         frag = ctx->frags[i % (hacf->winfrags * 2 + 1)];
         if (frag) {
-            ngx_hls_live_free_frag(s, frag);
+            ngx_hls_live_free_frag(frag);
         }
     }
 
@@ -866,6 +858,9 @@ ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx)
     ngx_hls_live_ctx_t   *ctx;
     ngx_mpegts_frame_t   *frame;
     ngx_int_t             boundary;
+    ngx_buf_t            *b;
+
+    b = NULL;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_hls_live_module);
 
@@ -888,8 +883,10 @@ ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx)
         if (frame->type == NGX_MPEGTS_MSG_AUDIO) {
             boundary = codec_ctx->avc_header == NULL;
         } else if (frame->type == NGX_MPEGTS_MSG_VIDEO) {
+            b = ctx->aframe;
             boundary = frame->key &&
-                (codec_ctx->aac_header == NULL || !ctx->opened);
+                (codec_ctx->aac_header == NULL || !ctx->opened ||
+                (b && b->last > b->pos));
         } else {
             return NGX_ERROR;
         }
@@ -935,7 +932,7 @@ ngx_hls_live_av(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame)
     for (ctx = live_stream->hls_ctx; ctx; ctx = ctx->next) {
         ss = ctx->session;
 
-        switch (ngx_mpegts_gop_link(s, ss, hacf->playlen, hacf->playlen)) {
+        switch (ngx_mpegts_gop_link(s, ss, 0, hacf->playlen)) {
         case NGX_DECLINED:
             continue;
         case NGX_ERROR:
@@ -957,6 +954,21 @@ ngx_hls_live_av(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame)
     return NGX_ERROR;
 }
 
+static void *
+ngx_hls_live_create_main_conf(ngx_conf_t *cf)
+{
+    ngx_hls_live_main_conf_t *conf;
+
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_hls_live_main_conf_t));
+    if (conf == NULL) {
+        return NULL;
+    }
+
+    conf->pool = ngx_create_pool(1024, ngx_cycle->log);
+    ngx_hls_live_main_conf = conf;
+
+    return conf;
+}
 
 static void *
 ngx_hls_live_create_app_conf(ngx_conf_t *cf)

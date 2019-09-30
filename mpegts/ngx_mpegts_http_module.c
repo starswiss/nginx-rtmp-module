@@ -455,11 +455,16 @@ ngx_mpegts_http_handler(ngx_http_request_t *r)
     if (s == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+    ctx->session = s;
     s->connection = r->connection;
     ngx_rtmp_set_combined_log(s, r->connection->log->data,
             r->connection->log->handler);
     s->log->connection = r->connection->number;
-    ctx->session = s;
+    s->number = r->connection->number;
+    s->remote_addr_text.data = ngx_pcalloc(s->pool, r->connection->addr_text.len);
+    s->remote_addr_text.len = r->connection->addr_text.len;
+    ngx_memcpy(s->remote_addr_text.data,
+        r->connection->addr_text.data, r->connection->addr_text.len);
 
     /* get host, app, stream name */
     ngx_memzero(&v, sizeof(ngx_rtmp_play_t));

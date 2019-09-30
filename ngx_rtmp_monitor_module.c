@@ -170,17 +170,20 @@ next:
         plen = sizeof(paddr);
         llen = sizeof(laddr);
 
-        getpeername(s->connection->fd, &paddr, &plen);
-        getsockname(s->connection->fd, &laddr, &llen);
+        if (s->connection) {
+            getpeername(s->connection->fd, &paddr, &plen);
+            getsockname(s->connection->fd, &laddr, &llen);
 
-        ngx_sock_ntop(&paddr, plen, peer, NGX_SOCKADDR_STRLEN, 1);
-        ngx_sock_ntop(&laddr, llen, local, NGX_SOCKADDR_STRLEN, 1);
+            ngx_sock_ntop(&paddr, plen, peer, NGX_SOCKADDR_STRLEN, 1);
+            ngx_sock_ntop(&laddr, llen, local, NGX_SOCKADDR_STRLEN, 1);
 
-        ngx_log_error(NGX_LOG_ERR, macf->buffered_log, 0,
-                "%p %s, peer: %s, local: %s, "
-                "stream: %V, buffered: %ui, time: %uis",
-                s, ctx->publishing ? "publisher" : "player", peer, local,
-                &s->stream, ctx->nbuffered, ctx->buffered);
+            ngx_log_error(NGX_LOG_ERR, macf->buffered_log, 0,
+                    "%p %s, peer: %s, local: %s, "
+                    "stream: %V, buffered: %ui, time: %uis",
+                    s, ctx->publishing ? "publisher" : "player", peer, local,
+                    &s->stream, ctx->nbuffered, ctx->buffered);
+
+        }
     } else {
         ctx->buffered = 0;
     }

@@ -285,20 +285,20 @@ ngx_rtmp_access(ngx_rtmp_session_t *s, ngx_uint_t flag)
     }
 
     /* relay etc */
-    if (s->connection->sockaddr == NULL) {
+    if (s->sockaddr == NULL) {
         return NGX_OK;
     }
 
-    switch (s->connection->sockaddr->sa_family) {
+    switch (s->sockaddr->sa_family) {
 
     case AF_INET:
-        sin = (struct sockaddr_in *) s->connection->sockaddr;
+        sin = (struct sockaddr_in *) s->sockaddr;
         return ngx_rtmp_access_inet(s, sin->sin_addr.s_addr, flag);
 
 #if (NGX_HAVE_INET6)
 
     case AF_INET6:
-        sin6 = (struct sockaddr_in6 *) s->connection->sockaddr;
+        sin6 = (struct sockaddr_in6 *) s->sockaddr;
         p = sin6->sin6_addr.s6_addr;
 
         if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {

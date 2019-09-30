@@ -171,10 +171,13 @@ ngx_rtmp_init_connection(ngx_connection_t *c)
         ngx_log_error(NGX_LOG_INFO, c->log, 0, "create rtmp session failed");
         return;
     }
+    s->log->connection = c->number;
     s->number = c->number;
     s->remote_addr_text.data = ngx_pcalloc(s->pool, c->addr_text.len);
     s->remote_addr_text.len = c->addr_text.len;
     ngx_memcpy(s->remote_addr_text.data, c->addr_text.data, c->addr_text.len);
+    s->sockaddr = ngx_pcalloc(s->pool, sizeof(struct sockaddr));
+    ngx_memcpy(s->sockaddr, c->sockaddr, sizeof(struct sockaddr));
 
     ngx_rtmp_init_session(s, c);
 
@@ -361,6 +364,16 @@ ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
     ngx_event_t        *e;
     ngx_connection_t   *c;
 
+    if (s->live_type == NGX_HLS_LIVE) {
+        ngx_rtmp_finalize_fake_session(s);
+    }
+
+    if (s->destroyed) {
+        return;
+    }
+
+    s->destroyed = 1;
+
     c = s->connection;
     if (c && c->destroyed) {
         return;
@@ -368,9 +381,7 @@ ngx_rtmp_finalize_session(ngx_rtmp_session_t *s)
 
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "finalize session");
 
-    if (s->live_type == NGX_HLS_LIVE) {
-        ngx_rtmp_finalize_fake_session(s);
-    } else if (s->live_type != NGX_RTMP_LIVE) {
+    if (s->live_type != NGX_RTMP_LIVE) {
         e = &s->close;
         e->data = s;
         if (s->relay) {
@@ -399,6 +410,12 @@ void
 ngx_rtmp_finalize_fake_session(ngx_rtmp_session_t *s)
 {
     ngx_log_error(NGX_LOG_INFO, s->log, 0, "finalize fake session");
+
+    if (s->destroyed) {
+        return;
+    }
+
+    s->destroyed = 1;
 
     ngx_rtmp_fire_event(s, NGX_RTMP_DISCONNECT, NULL, NULL);
 
@@ -646,7 +663,11 @@ ngx_rtmp_create_session(ngx_rtmp_addr_conf_t *addr_conf)
     s->main_conf = addr_conf->default_server->ctx->main_conf;
     s->srv_conf = addr_conf->default_server->ctx->srv_conf;
 
-    s->addr_text = &addr_conf->addr_text;
+    s->addr_text = ngx_pcalloc(s->pool, sizeof(ngx_str_t));
+    s->addr_text->data = ngx_pcalloc(s->pool, addr_conf->addr_text.len);
+    s->addr_text->len = addr_conf->addr_text.len;
+    ngx_memcpy(s->addr_text->data,
+        addr_conf->addr_text.data, addr_conf->addr_text.len);
 
     s->ctx = ngx_pcalloc(pool, sizeof(void *) * ngx_rtmp_max_module);
     if (s->ctx == NULL) {

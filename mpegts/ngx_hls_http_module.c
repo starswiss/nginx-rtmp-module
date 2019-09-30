@@ -402,7 +402,7 @@ ngx_hls_http_cleanup(void *data)
     r = data;
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
 
-    if (!ctx || !ctx->session) {
+    if (!ctx) {
         return;
     }
 /*
@@ -414,8 +414,11 @@ ngx_hls_http_cleanup(void *data)
     }
     ctx->out_chain = NULL;
 */
-    ctx->session->request = NULL;
-    ctx->session->connection = NULL;
+
+    if (ctx->session) {
+        ctx->session->request = NULL;
+        ctx->session->connection = NULL;
+    }
 
     ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
             "hls-http: cleanup_handler| http cleanup");
@@ -423,7 +426,7 @@ ngx_hls_http_cleanup(void *data)
     if (ctx->frag) {
         ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
             "hls-http: cleanup_handler| free frag[%p]", ctx->frag);
-        ngx_hls_live_free_frag(ctx->session, ctx->frag);
+        ngx_hls_live_free_frag(ctx->frag);
         ctx->frag = NULL;
     }
 }
@@ -550,6 +553,8 @@ ngx_hls_http_create_session(ngx_http_request_t *r)
     }
     cscf = ngx_rtmp_get_module_srv_conf(s, ngx_rtmp_core_module);
 
+    s->log->connection = r->connection->number;
+    s->number = r->connection->number;
     s->live_type = NGX_HLS_LIVE;
     s->live_server = ngx_live_create_server(&s->serverid);
     s->remote_addr_text.data = ngx_pcalloc(s->pool, r->connection->addr_text.len);
@@ -586,13 +591,13 @@ ngx_hls_http_create_session(ngx_http_request_t *r)
 
     s->stage = NGX_LIVE_PLAY;
     s->ptime = ngx_current_msec;
-    s->connection = r->connection;
+//    s->connection = r->connection;
 
     if (ngx_rtmp_play_filter(s, &v) != NGX_OK) {
         return NULL;
     }
 
-//    ngx_add_timer(r->connection->write, s->timeout);
+    ngx_add_timer(r->connection->write, s->timeout);
 
     return s;
 }
@@ -631,7 +636,8 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
         }
         s->log->connection = r->connection->number;
         s->number = r->connection->number;
-        s->sockaddr = r->connection->sockaddr;
+        s->sockaddr = ngx_pcalloc(s->pool, sizeof(struct sockaddr));
+        ngx_memcpy(s->sockaddr, r->connection->sockaddr, sizeof(struct sockaddr));
     }
 
     s->request = r;
@@ -1008,6 +1014,10 @@ ngx_hls_http_close(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
     if (!ctx) {
         return NGX_OK;
     }
+
+    s->request = NULL;
+    s->connection = NULL;
+    ctx->session = NULL;
 
     ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
         "hls-http: close| finalize http request");
