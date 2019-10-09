@@ -102,6 +102,11 @@ rtmp {
             live on;
             hls on;
             hls_path /tmp/hls;
+	    hls2memory on;
+            mpegts_cache_time 20s;
+            hls2_fragment 1300ms;
+            hls2_max_fragment 1800ms;
+            hls2_playlist_length 3900ms;
             wait_key on;
             wait_video on;
             cache_time 2s;
