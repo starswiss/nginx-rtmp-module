@@ -182,6 +182,7 @@ rtmp://your-server-ip/live/stream-name
 - http-ts播放地址：http://your-server-ip/ts/stream-name
 - hls播放地址：http://your-server-ip/hls/stream-name.m3u8
 - “hls+”播放地址：http://your-server-ip/hls2/stream-name.m3u8
+
 **hls+ 模式下可以提供更低延时的hls直播服务，缺点是目前仅支持单进程下使用，未来会支持多进程场景。**
 
 常用的推流工具有OBS和ffmpeg，具体使用方法这里不再赘述，只给出ffmpeg推送文件的命令。
