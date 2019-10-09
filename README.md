@@ -27,7 +27,7 @@
  2. 使rtmp、http-flv、hls、http-ts直播支持mp3、h265编码
  3. 支持http-ts直播协议
  4. 支持直播时移服务
- 5. 支持hls+（内存切片）服务（目前仅在dev分支，经过进一步测试后会合并到master分支上）
+ 5. 支持hls+（内存切片）服务（目前仅支持单进程下使用，多进程下无法正常使用，未来将支持多进程下的hls+）
  6. 支持服务器端自动修复异常的音视频时间戳功能
  7. 修复流状态监控后台页面
 
@@ -145,6 +145,9 @@ http {
             root /tmp;
             add_header Cache-Control no-cache;
         }
+	location /hls2 {
+            hls2_live 1935 app=live;
+        }
         location /dash {
             # Serve DASH fragments
             root /tmp;
@@ -178,7 +181,8 @@ rtmp://your-server-ip/live/stream-name
 - http-flv播放地址：http://your-server-ip/flv/stream-name
 - http-ts播放地址：http://your-server-ip/ts/stream-name
 - hls播放地址：http://your-server-ip/hls/stream-name.m3u8
-
+- “hls+”播放地址：http://your-server-ip/hls2/stream-name.m3u8
+**hls+ 模式下可以提供更低延时的hls直播服务，缺点是目前仅支持单进程下使用，未来会支持多进程场景。**
 
 常用的推流工具有OBS和ffmpeg，具体使用方法这里不再赘述，只给出ffmpeg推送文件的命令。
 
