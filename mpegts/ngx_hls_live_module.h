@@ -30,6 +30,7 @@ struct ngx_hls_live_play_s {
 struct ngx_hls_live_frag_s {
     ngx_uint_t              ref;
     ngx_hls_live_frag_t    *next;
+    time_t                  last_modified_time;
     uint64_t                id;
     uint64_t                key_id;
     double                  duration;
@@ -72,10 +73,13 @@ struct ngx_hls_live_ctx_s {
     ngx_event_t             ev;
     ngx_msec_t              timeout;
     ngx_msec_t              last_time;
+    time_t                  playlist_modified_time;
+    ngx_buf_t              *playlist;
     ngx_hls_live_ctx_t     *next;
 };
 
-ngx_int_t ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out);
+ngx_int_t ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out,
+    time_t *last_modified_time);
 ngx_hls_live_frag_t* ngx_hls_live_find_frag(ngx_rtmp_session_t *s,
     ngx_str_t *name);
 ngx_chain_t* ngx_hls_live_prepare_frag(ngx_rtmp_session_t *s,

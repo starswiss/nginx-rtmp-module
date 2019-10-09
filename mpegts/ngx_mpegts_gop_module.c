@@ -464,6 +464,7 @@ ngx_mpegts_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
                 sctx->current_timestamp/90, gacf->one_off_send);
 
             ssctx->send_gop = 2;
+            pos = ngx_mpegts_gop_next(s, pos);
             break;
         }
 
@@ -487,7 +488,6 @@ ngx_mpegts_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
     ngx_mpegts_gop_app_conf_t   *gacf;
     ngx_mpegts_gop_ctx_t        *sctx, *ssctx;
     ngx_mpegts_frame_t          *frame;
-    size_t                       pos;
 
     gacf = ngx_rtmp_get_module_app_conf(s, ngx_mpegts_gop_module);
     if (gacf->cache_time == 0) {
@@ -512,7 +512,6 @@ ngx_mpegts_gop_send(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
         return NGX_OK;
     }
 
-    pos = ngx_mpegts_gop_prev(s, sctx->gop_last);
     if (sctx->cache[ssctx->gop_pos] == NULL) {
         ngx_log_error(NGX_LOG_ERR, ss->log, 0,
                 "mpegts-gop: gop_send| current gop pos is NULL, "
@@ -606,6 +605,7 @@ ngx_mpegts_gop_offset_frames(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss,
             ngx_log_error(NGX_LOG_INFO, ss->log, 0, "gone %D, first %D, curr %D",
                 frame->pts, ssctx->first_timestamp, sctx->current_timestamp);
             ssctx->send_gop = 2;
+            pos = ngx_mpegts_gop_next(s, pos);
             break;
         }
 

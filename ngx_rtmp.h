@@ -1011,6 +1011,5 @@ extern ngx_thread_volatile ngx_event_t     *ngx_rtmp_init_queue;
 extern ngx_uint_t                           ngx_rtmp_max_module;
 extern ngx_module_t                         ngx_rtmp_module;
 extern ngx_module_t                         ngx_rtmp_core_module;
-extern u_char ngx_rtmp_mpegts_header[];
 
 #endif /* _NGX_RTMP_H_INCLUDED_ */

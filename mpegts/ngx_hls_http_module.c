@@ -259,6 +259,11 @@ ngx_hls_http_send_header(ngx_http_request_t *r, ngx_uint_t status, ngx_keyval_t 
     r->headers_out.status = status;
     r->keepalive = 0; /* set Connection to closed */
 
+    //set eTag
+    if (ngx_http_set_etag(r) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
     while (h && h->key.len) {
         rc = ngx_http_set_header_out(r, &h->key, &h->value);
         if (rc != NGX_OK) {
@@ -332,7 +337,7 @@ ngx_hls_http_redirect_handler(ngx_http_request_t *r,
     r->headers_out.content_length_n = 0;
     r->header_only = 1;
 
-    rc = ngx_hls_http_send_header(r, NGX_HTTP_MOVED_TEMPORARILY, ngx_m3u8_headers);
+    rc = ngx_hls_http_send_header(r, NGX_HTTP_MOVED_TEMPORARILY, NULL);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "hls-http: redirect_handler| "
@@ -397,7 +402,7 @@ ngx_hls_http_cleanup(void *data)
 {
     ngx_http_request_t   *r;
     ngx_hls_http_ctx_t   *ctx;
-//    ngx_chain_t          *cl;
+    ngx_chain_t          *cl;
 
     r = data;
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
@@ -405,7 +410,7 @@ ngx_hls_http_cleanup(void *data)
     if (!ctx) {
         return;
     }
-/*
+
     cl = ctx->out_chain;
     while (cl) {
         ctx->out_chain = cl->next;
@@ -413,7 +418,6 @@ ngx_hls_http_cleanup(void *data)
         cl = ctx->out_chain;
     }
     ctx->out_chain = NULL;
-*/
 
     if (ctx->session) {
         ctx->session->request = NULL;
@@ -619,8 +623,6 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
-
     s = ngx_hls_live_fetch_session(&ctx->serverid, &ctx->stream, &ctx->sid);
     if (s == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -634,8 +636,6 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
 
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
-        s->log->connection = r->connection->number;
-        s->number = r->connection->number;
         s->sockaddr = ngx_pcalloc(s->pool, sizeof(struct sockaddr));
         ngx_memcpy(s->sockaddr, r->connection->sockaddr, sizeof(struct sockaddr));
     }
@@ -644,27 +644,33 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
 
     ctx->session = s;
 
-    out = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
-    out->buf = buf;
+    if (!ctx->m3u8) {
+        ctx->m3u8 = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
+        ctx->m3u8->buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
+    }
 
+    out = ctx->m3u8;
+    buf = out->buf;
     buf->last = buf->pos = buf->start;
     buf->memory = 1;
     buf->flush = 1;
-    buf->last_in_chain = 1;
-    buf->last_buf = 1;
+//    buf->last_in_chain = 1;
+//    buf->last_buf = 1;
 
-    rc = ngx_hls_live_write_playlist(s, buf);
+    rc = ngx_hls_live_write_playlist(s, buf, &r->headers_out.last_modified_time);
     if (rc != NGX_OK) {
         goto again;
     }
 
     r->headers_out.content_length_n = buf->last - buf->pos;
 
-    rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_m3u8_headers);
-    if (rc != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-            "hls-http: m3u8_handler| send http header failed");
-        return rc;
+    if (!r->header_sent) {
+        rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_m3u8_headers);
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                "hls-http: m3u8_handler| send http header failed");
+            return rc;
+        }
     }
 
     rc = ngx_http_output_filter(r, out);
@@ -769,7 +775,7 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
     }
 
     if (ctx->out_chain == NULL) {
-        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 1);
+        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 4);
     }
 
     rc = NGX_OK;
@@ -818,7 +824,7 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
             break;
         }
 
-        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 1);
+        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 4);
     }
 
     if (wev->active) {
@@ -871,6 +877,7 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
     ctx->frag = frag;
 
     r->headers_out.content_length_n = frag->length;
+    r->headers_out.last_modified_time = frag->last_modified_time;
     rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_ts_headers);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -880,7 +887,7 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     ngx_rtmp_shared_acquire_frag(frag);
 
-    if (1) {
+    if (0) {
         r->count++;
         r->write_event_handler = ngx_hls_http_write_handler;
 
@@ -904,6 +911,7 @@ ngx_hls_http_handler(ngx_http_request_t *r)
     ngx_int_t                   rc;
     ngx_http_cleanup_t         *cln;
     ngx_str_t                   sstr;
+    ngx_hls_http_ctx_t         *ctx;
 
     hlcf = ngx_http_get_module_loc_conf(r, ngx_hls_http_module);
 
@@ -919,14 +927,16 @@ ngx_hls_http_handler(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    cln = ngx_http_cleanup_add(r, 0);
-    if (cln == NULL) {
-
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
+    if (!ctx) {
+        cln = ngx_http_cleanup_add(r, 0);
+        if (cln == NULL) {
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        cln->handler = ngx_hls_http_cleanup;
+        cln->data = r;
+        r->read_event_handler = ngx_http_test_reading;
     }
-    cln->handler = ngx_hls_http_cleanup;
-    cln->data = r;
-    r->read_event_handler = ngx_http_test_reading;
 
     if(!ngx_strncmp(r->uri.data + r->uri.len - 5, ".m3u8", 5)) {
 
@@ -963,22 +973,19 @@ ngx_hls_http_m3u8(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
 
     if (!ctx->m3u8) {
-        ctx->m3u8 = ngx_get_chainbuf(1024*512, 1);
+        ctx->m3u8 = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
+        ctx->m3u8->buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
     }
 
     out = ctx->m3u8;
-
-    out->next = NULL;
-
     buf = out->buf;
-
     buf->last = buf->pos = buf->start;
     buf->memory = 1;
     buf->flush = 1;
-    buf->last_in_chain = 1;
-    buf->last_buf = 1;
+//    buf->last_in_chain = 1;
+//    buf->last_buf = 1;
 
-    ngx_hls_live_write_playlist(s, buf);
+    ngx_hls_live_write_playlist(s, buf, &r->headers_out.last_modified_time);
 
     r->headers_out.content_length_n = buf->last - buf->pos;
 
@@ -996,7 +1003,7 @@ ngx_hls_http_m3u8(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
         return rc;
     }
 
-    return rc;
+    return NGX_OK;
 }
 
 static ngx_int_t

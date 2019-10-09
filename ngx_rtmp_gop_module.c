@@ -559,6 +559,7 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
             frame->hdr.timestamp - ssctx->first_timestamp >= gacf->cache_time)
         {
             ssctx->send_gop = 3;
+            pos = ngx_rtmp_gop_next(s, pos);
             break;
         }
 /*
