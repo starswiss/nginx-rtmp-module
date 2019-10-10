@@ -991,7 +991,7 @@ ngx_hls_live_av(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame)
     for (ctx = live_stream->hls_ctx; ctx; ctx = ctx->next) {
         ss = ctx->session;
 
-        switch (ngx_mpegts_gop_link(s, ss, 0, hacf->playlen)) {
+        switch (ngx_mpegts_gop_link(s, ss, hacf->playlen, hacf->playlen)) {
         case NGX_DECLINED:
             continue;
         case NGX_ERROR:
