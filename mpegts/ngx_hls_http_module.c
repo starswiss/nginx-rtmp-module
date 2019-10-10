@@ -664,6 +664,8 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
 
     r->headers_out.content_length_n = buf->last - buf->pos;
 
+    s->out_bytes += r->headers_out.content_length_n;
+
     if (!r->header_sent) {
         rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_m3u8_headers);
         if (rc != NGX_OK) {
@@ -878,6 +880,8 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     r->headers_out.content_length_n = frag->length;
     r->headers_out.last_modified_time = frag->last_modified_time;
+    s->out_bytes += r->headers_out.content_length_n;
+
     rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_ts_headers);
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -988,6 +992,8 @@ ngx_hls_http_m3u8(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
     ngx_hls_live_write_playlist(s, buf, &r->headers_out.last_modified_time);
 
     r->headers_out.content_length_n = buf->last - buf->pos;
+
+    s->out_bytes += r->headers_out.content_length_n;
 
     rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_m3u8_headers);
     if (rc != NGX_OK) {
