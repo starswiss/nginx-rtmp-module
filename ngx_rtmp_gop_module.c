@@ -559,17 +559,9 @@ ngx_rtmp_gop_send_gop(ngx_rtmp_session_t *s, ngx_rtmp_session_t *ss)
             frame->hdr.timestamp - ssctx->first_timestamp >= gacf->cache_time)
         {
             ssctx->send_gop = 3;
-            pos = ngx_rtmp_gop_next(s, pos);
             break;
         }
-/*
-        frame->hdr.timestamp = 0;
-        if (frame->hdr.type == NGX_RTMP_MSG_AUDIO) {
-            pos = ngx_rtmp_gop_next(s, pos);
-            frame = sctx->cache[pos];
-            continue;
-        }
-*/
+
         if (ngx_rtmp_gop_link_frame(ss, frame) == NGX_AGAIN) {
             break;
         }

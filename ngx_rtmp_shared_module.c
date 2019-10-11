@@ -123,9 +123,9 @@ ngx_rtmp_prepare_merge_frame(ngx_rtmp_session_t *s)
 
         // save frame prepare to send
         if (s->live_type == NGX_MPEGTS_LIVE) {
-            s->prepare_frame[n] = s->out[s->out_pos];
-        } else {
             s->prepare_mpegts_frame[n] = s->mpegts_out[s->out_pos];
+        } else {
+            s->prepare_frame[n] = s->out[s->out_pos];
         }
 
         ++s->out_pos;

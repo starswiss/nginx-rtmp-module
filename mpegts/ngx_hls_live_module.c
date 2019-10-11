@@ -30,6 +30,8 @@ static ngx_int_t
 ngx_hls_live_write_frame(ngx_rtmp_session_t *s, ngx_mpegts_frame_t *frame);
 static void
 ngx_hls_live_update_playlist(ngx_rtmp_session_t *s);
+static ngx_int_t
+ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx);
 
 static ngx_mpegts_video_pt next_mpegts_video;
 static ngx_mpegts_audio_pt next_mpegts_audio;
@@ -263,7 +265,7 @@ ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out,
     m3u8.data = out->pos;
     m3u8.len = out->last - out->pos;
 
-    ngx_log_error(NGX_LOG_DEBUG, s->log, 0, "hls-live: playlist| %V, %D",
+    ngx_log_error(NGX_LOG_INFO, s->log, 0, "hls-live: playlist| %V, %D",
         &m3u8, ctx->last_time);
 
     return NGX_OK;
@@ -377,7 +379,8 @@ ngx_hls_live_prepare_frag(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag)
         frame = frag->content[frag->content_pos];
 
         ngx_log_error(NGX_LOG_DEBUG, s->log, 0, "hls-live: prepare_frag| "
-        "pos %D, last %D, frame chain %p", frag->content_pos, frag->content_last,
+        "pos %D, last %D, frame chain %p",
+        frag->content_pos, frag->content_last,
         frame);
         for (cl = frame->chain; cl; cl = cl->next) {
             *ll = ngx_get_chainbuf(0, 0);
@@ -748,6 +751,7 @@ ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
 {
     ngx_hls_live_app_conf_t        *hacf;
     ngx_hls_live_ctx_t             *ctx;
+//    ngx_rtmp_codec_ctx_t           *codec_ctx;
 
     hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
     if (hacf == NULL || !hacf->hls || s->live_type != NGX_HLS_LIVE) {
@@ -767,7 +771,17 @@ ngx_hls_live_play(ngx_rtmp_session_t *s, ngx_rtmp_play_t *v)
     ctx->sid.len = ngx_strlen(v->session);
     ctx->sid.data = ngx_pcalloc(s->pool, ctx->sid.len);
     ngx_memcpy(ctx->sid.data, v->session, ctx->sid.len);
+/*
+    if (s->live_stream->publish_ctx) {
 
+        codec_ctx = ngx_rtmp_get_module_ctx(s->live_stream->publish_ctx->session,
+            ngx_rtmp_codec_module);
+
+        ngx_mpegts_gop_link(s->live_stream->publish_ctx->session,
+            s, hacf->playlen, hacf->playlen);
+        ngx_hls_live_update(s, codec_ctx);
+    }
+*/
 next:
     return next_play(s, v);
 }
@@ -925,13 +939,9 @@ ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx)
 
     while (s->out_pos != s->out_last) {
 
-        if (s->out_pos == s->out_last) {
-            break;
-        }
-
         frame = s->mpegts_out[s->out_pos];
 #if 1
-        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
+        ngx_log_error(NGX_LOG_INFO, s->log, 0,
             "hls-live: update| "
             "frame[%p] pos[%O] last[%O] pts[%uL] type [%d], key %d, opened %d",
             frame, s->out_pos, s->out_last,frame->pts,
