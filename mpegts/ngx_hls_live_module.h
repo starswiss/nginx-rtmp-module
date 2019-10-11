@@ -6,6 +6,9 @@
 #ifndef _NGX_HLS_LIVE_MODULE_H_INCLUDE_
 #define _NGX_HLS_LIVE_MODULE_H_INCLUDE_
 
+#define ngx_hls_live_next(s, pos) ((pos + 1) % s->out_queue)
+#define ngx_hls_live_prev(s, pos) (pos == 0 ? s->out_queue - 1 : pos - 1)
+
 typedef struct ngx_hls_live_frag_s ngx_hls_live_frag_t;
 typedef struct ngx_hls_live_play_s ngx_hls_live_play_t;
 
@@ -88,7 +91,5 @@ void ngx_hls_live_free_frag(ngx_hls_live_frag_t *frag);
 ngx_rtmp_session_t* ngx_hls_live_fetch_session(ngx_str_t *server,
     ngx_str_t *stream, ngx_str_t *session);
 void ngx_rtmp_shared_acquire_frag(ngx_hls_live_frag_t *frag);
-ngx_chain_t *ngx_hls_live_prepare_out_chain(ngx_rtmp_session_t *s,
-    ngx_hls_live_frag_t *frag, ngx_int_t nframes);
 
 #endif

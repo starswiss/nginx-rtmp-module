@@ -18,9 +18,6 @@
 static ngx_rtmp_play_pt                 next_play;
 static ngx_rtmp_close_stream_pt         next_close_stream;
 
-#define ngx_hls_live_next(s, pos) ((pos + 1) % s->out_queue)
-#define ngx_hls_live_prev(s, pos) (pos == 0 ? s->out_queue - 1 : pos - 1)
-
 static ngx_int_t ngx_hls_live_postconfiguration(ngx_conf_t *cf);
 static void * ngx_hls_live_create_main_conf(ngx_conf_t *cf);
 static void * ngx_hls_live_create_app_conf(ngx_conf_t *cf);
@@ -328,35 +325,6 @@ void
 ngx_rtmp_shared_acquire_frag(ngx_hls_live_frag_t *frag)
 {
     frag->ref++;
-}
-
-ngx_chain_t *
-ngx_hls_live_prepare_out_chain(ngx_rtmp_session_t *s, ngx_hls_live_frag_t *frag,
-    ngx_int_t nframes)
-{
-    ngx_chain_t          *out, *cl, **ll;
-    ngx_mpegts_frame_t   *frame;
-    ngx_int_t             i = 0;
-
-    ll = &out;
-    while (i < nframes && frag->content_pos != frag->content_last) {
-        frame = frag->content[frag->content_pos];
-
-        for (cl = frame->chain; cl; cl = cl->next) {
-            *ll = ngx_get_chainbuf(0, 0);
-            (*ll)->buf->pos = cl->buf->pos;
-            (*ll)->buf->last = cl->buf->last;
-            (*ll)->buf->flush = 1;
-
-            ll = &(*ll)->next;
-        }
-
-        *ll = NULL;
-        frag->content_pos = ngx_hls_live_next(s, frag->content_pos);
-        i++;
-    }
-
-    return out;
 }
 
 ngx_chain_t*
@@ -941,7 +909,7 @@ ngx_hls_live_update(ngx_rtmp_session_t *s, ngx_rtmp_codec_ctx_t *codec_ctx)
 
         frame = s->mpegts_out[s->out_pos];
 #if 1
-        ngx_log_error(NGX_LOG_INFO, s->log, 0,
+        ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
             "hls-live: update| "
             "frame[%p] pos[%O] last[%O] pts[%uL] type [%d], key %d, opened %d",
             frame, s->out_pos, s->out_last,frame->pts,

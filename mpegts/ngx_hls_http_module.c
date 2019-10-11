@@ -47,7 +47,7 @@ typedef struct {
     ngx_str_t                   sid;
     ngx_rtmp_session_t         *session;
     ngx_msec_t                  timeout;
-
+    ngx_uint_t                  content_pos;
     ngx_chain_t                *m3u8;
     ngx_uint_t                  out_pos;
     ngx_uint_t                  out_last;
@@ -411,13 +411,16 @@ ngx_hls_http_cleanup(void *data)
         return;
     }
 
-    cl = ctx->out_chain;
-    while (cl) {
-        ctx->out_chain = cl->next;
-        ngx_put_chainbuf(cl);
+    if (ctx->out_chain == NULL) {
         cl = ctx->out_chain;
+        while (cl) {
+            ctx->out_chain = cl->next;
+            ngx_put_chainbuf(cl);
+            cl = ctx->out_chain;
+        }
     }
-    ctx->out_chain = NULL;
+
+    ctx->content_pos = 0;
 
     if (ctx->session) {
         ctx->session->request = NULL;
@@ -645,7 +648,7 @@ ngx_hls_http_m3u8_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf
     ctx->session = s;
 
     if (!ctx->m3u8) {
-        ctx->m3u8 = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
+        ctx->m3u8 = ngx_pcalloc(r->connection->pool, sizeof(ngx_chain_t));
         ctx->m3u8->buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
     }
 
@@ -738,6 +741,42 @@ ngx_hls_http_parse_frag(ngx_http_request_t *r, ngx_str_t *name)
     return NGX_OK;
 }
 
+static ngx_chain_t *
+ngx_hls_http_prepare_out_chain(ngx_http_request_t *r, ngx_int_t nframes)
+{
+    ngx_hls_http_ctx_t   *ctx;
+     ngx_hls_live_frag_t *frag;
+    ngx_rtmp_session_t   *s;
+    ngx_chain_t          *out, *cl, **ll;
+    ngx_mpegts_frame_t   *frame;
+    ngx_int_t             i = 0;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
+    s = ctx->session;
+    frag = ctx->frag;
+
+    out = NULL;
+
+    ll = &out;
+    while (i < nframes && ctx->content_pos != frag->content_last) {
+        frame = frag->content[ctx->content_pos];
+
+        for (cl = frame->chain; cl; cl = cl->next) {
+            *ll = ngx_get_chainbuf(0, 0);
+            (*ll)->buf->pos = cl->buf->pos;
+            (*ll)->buf->last = cl->buf->last;
+            (*ll)->buf->flush = 1;
+
+            ll = &(*ll)->next;
+        }
+
+        *ll = NULL;
+        ctx->content_pos = ngx_hls_live_next(s, ctx->content_pos);
+        i++;
+    }
+
+    return out;
+}
 
 static void
 ngx_hls_http_write_handler(ngx_http_request_t *r)
@@ -777,7 +816,7 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
     }
 
     if (ctx->out_chain == NULL) {
-        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 4);
+        ctx->out_chain = ngx_hls_http_prepare_out_chain(r, 4);
     }
 
     rc = NGX_OK;
@@ -826,7 +865,7 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
             break;
         }
 
-        ctx->out_chain = ngx_hls_live_prepare_out_chain(s, ctx->frag, 4);
+        ctx->out_chain = ngx_hls_http_prepare_out_chain(r, 4);
     }
 
     if (wev->active) {
@@ -891,9 +930,10 @@ ngx_hls_http_ts_handler(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     ngx_rtmp_shared_acquire_frag(frag);
 
-    if (0) {
-        r->count++;
+    if (1) {
         r->write_event_handler = ngx_hls_http_write_handler;
+
+        r->count++;
 
         ngx_hls_http_write_handler(r);
 
@@ -977,7 +1017,7 @@ ngx_hls_http_m3u8(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
 
     if (!ctx->m3u8) {
-        ctx->m3u8 = ngx_pcalloc(s->pool, sizeof(ngx_chain_t));
+        ctx->m3u8 = ngx_pcalloc(r->connection->pool, sizeof(ngx_chain_t));
         ctx->m3u8->buf = ngx_create_temp_buf(r->connection->pool, 1024*512);
     }
 
