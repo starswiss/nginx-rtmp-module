@@ -144,6 +144,7 @@ ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec,
 {
     u_char      *p, crc_buf[4], *pmt_pos;
     ngx_int_t    vpid, apid;
+    u_char       section_length;
 
     vpid = -1;
     apid = -1;
@@ -196,13 +197,18 @@ ngx_rtmp_mpegts_gen_pmt(ngx_int_t vcodec, ngx_int_t acodec,
             }
     }
 
+    section_length = 13;
     if (vpid != -1) {
         p = ngx_cpymem(p, ngx_mpegts_pid[vpid], 5);
+        section_length += 5;
     }
 
     if (apid != -1) {
         p = ngx_cpymem(p, ngx_mpegts_pid[apid], 5);
+        section_length += 5;
     }
+
+    pmt_pos[2] = section_length;
 
     ngx_rtmp_mpegts_crc32(crc_buf, pmt_pos, p - pmt_pos);
     p = ngx_cpymem(p, crc_buf, 4);
