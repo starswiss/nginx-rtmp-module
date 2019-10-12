@@ -262,7 +262,7 @@ ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out,
     m3u8.data = out->pos;
     m3u8.len = out->last - out->pos;
 
-    ngx_log_error(NGX_LOG_INFO, s->log, 0, "hls-live: playlist| %V, %D",
+    ngx_log_error(NGX_LOG_DEBUG, s->log, 0, "hls-live: playlist| %V, %D",
         &m3u8, ctx->last_time);
 
     return NGX_OK;
