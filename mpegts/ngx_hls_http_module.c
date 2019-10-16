@@ -275,13 +275,97 @@ ngx_hls_http_send_header(ngx_http_request_t *r, ngx_uint_t status, ngx_keyval_t 
     return ngx_http_send_header(r);
 }
 
+static ngx_int_t
+ngx_hls_http_master_m3u8_handler(ngx_http_request_t *r,
+    ngx_rtmp_addr_conf_t *addr_conf)
+{
+
+    ngx_int_t                            rc;
+    ngx_str_t                            m3u8_url;
+    ngx_str_t                            host;
+    u_char                               sstr[NGX_RTMP_MAX_SESSION] = {0};
+    static ngx_uint_t                    sindex = 0;
+    ngx_str_t                            location = ngx_string("");
+    ngx_str_t                            uri;
+    ngx_str_t                            uri_tail;
+    ngx_buf_t                           *m3u8;
+    ngx_chain_t                          out;
+
+    host = r->headers_in.host->value;
+
+    rc = ngx_http_discard_request_body(r);
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
+    *ngx_snprintf(sstr, sizeof(sstr) - 1, "%uDt-%uDi-%dp-%uDc",
+             time(NULL), sindex++, ngx_process_slot, r->connection->number) = 0;
+
+    ngx_http_arg(r, (u_char*)"location", 8, &location);
+    if (location.len == 0) {
+        uri = r->uri;
+    } else {
+        uri_tail.data =
+        ngx_strlchr(r->uri.data + 1, r->uri.data + r->uri.len - 1, '/');
+        if (uri_tail.data == NULL) {
+            uri_tail = r->uri;
+        } else {
+            uri_tail.len = r->uri.data+r->uri.len - uri_tail.data;
+        }
+
+        uri.len = location.len + uri_tail.len;
+        uri.data = ngx_pcalloc(r->pool, uri.len);
+        if (uri.data == NULL) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                "hls-http: master_m3u8_handler| pcalloc uri buffer failed");
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        ngx_snprintf(uri.data, uri.len, "%V%V", &location, &uri_tail);
+    }
+
+    m3u8_url.len = ngx_strlen("http://") +
+               host.len +
+               uri.len +
+               NGX_HLS_LIVE_ARG_SESSION_LENGTH + 2 +
+               ngx_strlen(sstr);
+
+    m3u8_url.data = ngx_pcalloc(r->connection->pool, m3u8_url.len);
+
+    ngx_snprintf(m3u8_url.data, m3u8_url.len, "http://%V%V?%s=%s",
+                   &host, &uri, NGX_HLS_LIVE_ARG_SESSION, sstr);
+
+    m3u8 = ngx_create_temp_buf(r->connection->pool, 64 * 1024);
+    m3u8->memory = 1;
+    m3u8->flush = 1;
+    out.buf = m3u8;
+    out.next = NULL;
+
+    m3u8->last = ngx_snprintf(m3u8->pos, m3u8->end - m3u8->start,
+        "#EXTM3U\n"
+        "#EXT-X-STREAM-INF:BANDWIDTH=1280000,AVERAGE-BANDWIDTH=1000000\n"
+        "%V\n", &m3u8_url);
+
+    r->headers_out.content_length_n = m3u8->last - m3u8->pos;
+
+    rc = ngx_hls_http_send_header(r, NGX_HTTP_OK, ngx_m3u8_headers);
+    if (rc != NGX_OK) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+            "hls-http: master_m3u8_handler| "
+            "send header failed, redirect url: %V, rc=%d", &m3u8_url, rc);
+    } else {
+        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                "hls-http: master_m3u8_handler| redirect url %V", &m3u8_url);
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
 
 static ngx_int_t
 ngx_hls_http_redirect_handler(ngx_http_request_t *r,
     ngx_rtmp_addr_conf_t *addr_conf)
 {
     ngx_int_t                            rc;
-    ngx_str_t                            loc;
+    ngx_str_t                            m3u8_url;
     ngx_str_t                            host;
     u_char                               sstr[NGX_RTMP_MAX_SESSION] = {0};
     static ngx_uint_t                    sindex = 0;
@@ -321,18 +405,18 @@ ngx_hls_http_redirect_handler(ngx_http_request_t *r,
         ngx_snprintf(uri.data, uri.len, "%V%V", &location, &uri_tail);
     }
 
-    loc.len = ngx_strlen("http://") +
+    m3u8_url.len = ngx_strlen("http://") +
                host.len +
                uri.len +
                NGX_HLS_LIVE_ARG_SESSION_LENGTH + 2 +
                ngx_strlen(sstr);
 
-    loc.data = ngx_pcalloc(r->connection->pool, loc.len);
+    m3u8_url.data = ngx_pcalloc(r->connection->pool, m3u8_url.len);
 
-    ngx_snprintf(loc.data, loc.len, "http://%V%V?%s=%s",
+    ngx_snprintf(m3u8_url.data, m3u8_url.len, "http://%V%V?%s=%s",
                    &host, &uri, NGX_HLS_LIVE_ARG_SESSION, sstr);
 
-    ngx_http_set_header_out(r, &ngx_302_headers[0].key, &loc);
+    ngx_http_set_header_out(r, &ngx_302_headers[0].key, &m3u8_url);
 
     r->headers_out.content_length_n = 0;
     r->header_only = 1;
@@ -341,10 +425,10 @@ ngx_hls_http_redirect_handler(ngx_http_request_t *r,
     if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "hls-http: redirect_handler| "
-            "send header failed, redirect url: %V, rc=%d", &loc, rc);
+            "send header failed, redirect url: %V, rc=%d", &m3u8_url, rc);
     } else {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-                "hls-http: redirect_handler| redirect url %V", &loc);
+                "hls-http: redirect_handler| redirect url %V", &m3u8_url);
     }
 
     return rc;
@@ -994,7 +1078,11 @@ ngx_hls_http_handler(ngx_http_request_t *r)
                          NGX_HLS_LIVE_ARG_SESSION_LENGTH, &sstr);
 
         if (rc != NGX_OK || sstr.len == 0) {
-            return ngx_hls_http_redirect_handler(r, hlcf->addr_conf);
+            if (1) {
+                return ngx_hls_http_master_m3u8_handler(r, hlcf->addr_conf);
+            } else {
+                return ngx_hls_http_redirect_handler(r, hlcf->addr_conf);
+            }
         } else {
             return ngx_hls_http_m3u8_handler(r, hlcf->addr_conf);
         }
