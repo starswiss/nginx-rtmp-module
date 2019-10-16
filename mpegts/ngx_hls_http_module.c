@@ -959,6 +959,12 @@ ngx_hls_http_handler(ngx_http_request_t *r)
 
     hlcf = ngx_http_get_module_loc_conf(r, ngx_hls_http_module);
 
+    rc = ngx_http_discard_request_body(r);
+
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
     if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD))) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "hls-http: live_handler| donnot support the method");

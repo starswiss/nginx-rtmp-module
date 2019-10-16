@@ -9,6 +9,7 @@
 #include <ngx_event.h>
 #include <nginx.h>
 #include "ngx_rtmp.h"
+#include "ngx_rtmp_variables.h"
 
 
 static char *ngx_rtmp_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);

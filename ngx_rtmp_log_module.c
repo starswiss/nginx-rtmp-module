@@ -166,6 +166,43 @@ ngx_rtmp_log_var_default_getdata(ngx_rtmp_session_t *s, u_char *buf,
     return ngx_cpymem(buf, op->value.data, op->value.len);
 }
 
+static size_t
+ngx_rtmp_log_var_parg_getlen(ngx_rtmp_session_t *s, ngx_rtmp_log_op_t *op)
+{
+    ngx_str_t                  *name = &(op->value);
+    u_char                     *arg;
+    size_t                      len;
+    ngx_str_t                   value;
+
+    len = name->len - (sizeof("parg_") - 1);
+    arg = name->data + sizeof("parg_") - 1;
+
+    if (ngx_rtmp_arg(s, arg, len, &value) != NGX_OK) {
+        return op->value.len;
+    }
+
+    return value.len;
+}
+
+
+static u_char *
+ngx_rtmp_log_var_parg_getdata(ngx_rtmp_session_t *s, u_char *buf,
+    ngx_rtmp_log_op_t *op)
+{
+    ngx_str_t                  *name = &(op->value);
+    u_char                     *arg;
+    size_t                      len;
+    ngx_str_t                   value;
+
+    len = name->len - (sizeof("parg_") - 1);
+    arg = name->data + sizeof("parg_") - 1;
+
+    if (ngx_rtmp_arg(s, arg, len, &value) != NGX_OK) {
+        return ngx_cpymem(buf, op->value.data, op->value.len);
+    }
+
+    return ngx_cpymem(buf, value.data, value.len);
+}
 
 static size_t
 ngx_rtmp_log_var_connection_getlen(ngx_rtmp_session_t *s, ngx_rtmp_log_op_t *op)
@@ -424,6 +461,16 @@ static ngx_rtmp_log_var_t ngx_rtmp_log_vars[] = {
       ngx_rtmp_log_var_session_string_getlen,
       ngx_rtmp_log_var_session_string_getdata,
       offsetof(ngx_rtmp_session_t, tc_url) },
+
+    { ngx_string("domain"),
+      ngx_rtmp_log_var_session_string_getlen,
+      ngx_rtmp_log_var_session_string_getdata,
+      offsetof(ngx_rtmp_session_t, domain) },
+
+    { ngx_string("parg_"),
+      ngx_rtmp_log_var_parg_getlen,
+      ngx_rtmp_log_var_parg_getdata,
+      0 },
 
     { ngx_string("pageurl"),
       ngx_rtmp_log_var_session_string_getlen,
@@ -731,9 +778,10 @@ ngx_rtmp_log_compile_format(ngx_conf_t *cf, ngx_array_t *ops, ngx_array_t *args,
     size_t              i, len;
     u_char             *data, *d, c;
     ngx_uint_t          bracket;
-    ngx_str_t          *value, var;
+    ngx_str_t          *value, var, pre_var;
     ngx_rtmp_log_op_t  *op;
     ngx_rtmp_log_var_t *v;
+    u_char             *p;
 
     value = args->elts;
 
@@ -809,6 +857,29 @@ ngx_rtmp_log_compile_format(ngx_conf_t *cf, ngx_array_t *ops, ngx_array_t *args,
                         op->getdata = v->getdata;
                         op->offset = v->offset;
                         break;
+                    }
+                }
+
+                if (v->name.len == 0) {
+                    p = ngx_strnstr(var.data, "_", var.len);
+                    if (p == NULL) {
+                        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                                       "unknown variable \"%V\"", &var);
+                        return NGX_CONF_ERROR;
+                    }
+
+                    pre_var.data = var.data;
+                    pre_var.len = p - var.data + 1;
+                    for (v = ngx_rtmp_log_vars; v->name.len; ++v) {
+                        if (v->name.len == pre_var.len &&
+                            !ngx_strncmp(v->name.data, pre_var.data, pre_var.len))
+                        {
+                            op->getlen = v->getlen;
+                            op->getdata = v->getdata;
+                            op->offset = v->offset;
+                            op->value = var;
+                            break;
+                        }
                     }
                 }
 

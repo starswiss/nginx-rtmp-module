@@ -678,8 +678,8 @@ ngx_rtmp_variable_argument(ngx_rtmp_session_t *s,
     size_t                      len;
     ngx_str_t                   value;
 
-    len = name->len - (sizeof("arg_") - 1);
-    arg = name->data + sizeof("arg_") - 1;
+    len = name->len - (sizeof("parg_") - 1);
+    arg = name->data + sizeof("parg_") - 1;
 
     if (ngx_rtmp_arg(s, arg, len, &value) != NGX_OK) {
         v->not_found = 1;

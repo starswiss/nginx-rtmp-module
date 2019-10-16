@@ -300,6 +300,8 @@ ngx_rtmp_core_create_main_conf(ngx_conf_t *cf)
 
     cmcf->server_names_hash_max_size = NGX_CONF_UNSET_UINT;
     cmcf->server_names_hash_bucket_size = NGX_CONF_UNSET_UINT;
+    cmcf->variables_hash_max_size = 1024;
+    cmcf->variables_hash_bucket_size = 64;
 
     return cmcf;
 }

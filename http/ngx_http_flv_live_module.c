@@ -498,6 +498,12 @@ ngx_http_flv_live_handler(ngx_http_request_t *r)
     ngx_rtmp_core_app_conf_t          **cacfp;
     ngx_http_cleanup_t                 *cln;
 
+    rc = ngx_http_discard_request_body(r);
+
+    if (rc != NGX_OK) {
+        return rc;
+    }
+
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_flv_live_ctx_t));
     if (ctx == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
