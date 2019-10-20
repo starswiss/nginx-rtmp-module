@@ -257,7 +257,7 @@ ngx_hls_http_send_header(ngx_http_request_t *r, ngx_uint_t status, ngx_keyval_t 
     ngx_int_t                           rc;
 
     r->headers_out.status = status;
-    r->keepalive = 0; /* set Connection to closed */
+//    r->keepalive = 0; /* set Connection to closed */
 
     //set eTag
     if (ngx_http_set_etag(r) != NGX_OK) {
@@ -342,7 +342,8 @@ ngx_hls_http_master_m3u8_handler(ngx_http_request_t *r,
 
     m3u8->last = ngx_snprintf(m3u8->pos, m3u8->end - m3u8->start,
         "#EXTM3U\n"
-        "#EXT-X-STREAM-INF:BANDWIDTH=1280000,AVERAGE-BANDWIDTH=1000000\n"
+        "#EXT-X-STREAM-INF:BANDWIDTH=1,AVERAGE-BANDWIDTH=1\n"
+        //"#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1\n"
         "%V\n", &m3u8_url);
 
     r->headers_out.content_length_n = m3u8->last - m3u8->pos;
@@ -955,6 +956,8 @@ ngx_hls_http_write_handler(ngx_http_request_t *r)
     if (wev->active) {
         ngx_del_event(wev, NGX_WRITE_EVENT, 0);
     }
+
+    ngx_http_finalize_request(r, NGX_HTTP_OK);
 }
 
 static ngx_int_t
@@ -1142,6 +1145,8 @@ ngx_hls_http_m3u8(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h, ngx_chain_t *in)
             "hls-http: m3u8| send http content failed");
         return rc;
     }
+
+    ngx_http_finalize_request(r, NGX_HTTP_OK);
 
     return NGX_OK;
 }

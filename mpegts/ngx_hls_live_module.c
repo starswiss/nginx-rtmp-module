@@ -464,9 +464,9 @@ ngx_hls_live_update_playlist(ngx_rtmp_session_t *s)
 
         p = ngx_slprintf(p, end,
             "#EXTINF:%.3f,\n"
-            "%V%V-%uL.ts?session=%V\n",
+            "%V%V-%uL.ts?session=%V&slot=%d\n",
             frag->duration, &hacf->base_url,
-            &name_part, frag->id, &ctx->sid);
+            &name_part, frag->id, &ctx->sid, ngx_process_slot);
 
         ngx_log_debug5(NGX_LOG_DEBUG_RTMP, s->log, 0,
             "hls: fragment nfrag=%uL, n=%ui/%ui, duration=%.3f, "
