@@ -241,14 +241,17 @@ ngx_int_t
 ngx_hls_live_write_playlist(ngx_rtmp_session_t *s, ngx_buf_t *out,
     time_t *last_modified_time)
 {
-    ngx_hls_live_ctx_t   *ctx;
-    ngx_str_t             m3u8;
+    ngx_hls_live_ctx_t        *ctx;
+    ngx_str_t                  m3u8;
+    ngx_hls_live_app_conf_t   *hacf;
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_hls_live_module);
 
     ctx->last_time = time(NULL);
 
-    if (ctx->nfrags < 2 || ctx->playing == 0) {
+    hacf = ngx_rtmp_get_module_app_conf(s, ngx_hls_live_module);
+
+    if (ctx->nfrags < hacf->minfrags || ctx->playing == 0) {
         return NGX_AGAIN;
     }
 
@@ -428,6 +431,8 @@ ngx_hls_live_update_playlist(ngx_rtmp_session_t *s)
 
     max_frag = hacf->fraglen / 1000;
 
+    frag = NULL;
+
     for (i = 0; i < ctx->nfrags; i++) {
         frag = ngx_hls_live_get_frag(s, i);
         if (frag && frag->duration > max_frag) {
@@ -473,7 +478,15 @@ ngx_hls_live_update_playlist(ngx_rtmp_session_t *s)
             "discont=%i",
             ctx->nfrag, i + 1, ctx->nfrags, frag->duration, frag->discont);
     }
-
+/*
+    for (; frag && i < hacf->winfrags; i++) {
+        p = ngx_slprintf(p, end,
+                    "#EXTINF:%.3f,\n"
+                    "%V%V-%uL.ts?session=%V&slot=%d\n",
+                    hacf->fraglen/1000.0, &hacf->base_url,
+                    &name_part, i, &ctx->sid, ngx_process_slot);
+    }
+*/
     ctx->playlist->last = p;
     m3u8.data = ctx->playlist->pos;
     m3u8.len = ctx->playlist->last - ctx->playlist->pos;
@@ -831,9 +844,9 @@ ngx_hls_live_update_fragment(ngx_rtmp_session_t *s, uint64_t ts,
             ngx_log_error(NGX_LOG_DEBUG, s->log, 0,
                         "hls: force fragment split: %.3f sec, ", d / 90000.);
             force = 1;
-            if (!boundary) {
+//            if (!boundary) {
                 discont = 0;
-            }
+//            }
         } else {
             frag->duration = (ts - ctx->frag_ts) / 90000.;
             discont = 0;
