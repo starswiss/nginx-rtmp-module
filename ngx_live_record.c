@@ -241,10 +241,12 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
     size_t                          len;
     struct tm                       tm;
     u_char                         *p;
+    ngx_rtmp_codec_ctx_t           *codec_ctx;
 
     lracf = ngx_rtmp_get_module_app_conf(s, ngx_live_record_module);
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
+    codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
     len = lracf->path.len + sizeof("/") - 1 + s->domain.len + sizeof("/") - 1
         + s->app.len + sizeof("/") - 1 + s->name.len + sizeof("/") - 1
@@ -313,6 +315,8 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
     ctx->ts.fd = ctx->file.fd;
     ctx->ts.log = s->log;
     ctx->ts.file_size = file_size;
+    ctx->ts.vcodec = codec_ctx->video_codec_id;
+    ctx->ts.acodec = codec_ctx->audio_codec_id;
 
     if (file_size == 0) { // empty file
         if (ngx_rtmp_mpegts_write_header(&ctx->ts) != NGX_OK) {
