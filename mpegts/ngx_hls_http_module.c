@@ -439,9 +439,6 @@ ngx_hls_http_create_ctx(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
     ngx_hls_http_ctx_t         *ctx;
     ngx_rtmp_core_srv_conf_t   *cscf;
     u_char                     *p;
-    ngx_hls_http_loc_conf_t    *hlcf;
-
-    hlcf = ngx_http_get_module_loc_conf(r, ngx_hls_http_module);
 
     cscf = addr_conf->default_server->ctx->
             srv_conf[ngx_rtmp_core_module.ctx_index];
