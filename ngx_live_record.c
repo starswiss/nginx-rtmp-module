@@ -248,7 +248,7 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
     ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
     codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
-    len = lracf->path.len + sizeof("/") - 1 + s->domain.len + sizeof("/") - 1
+    len = lracf->path.len + sizeof("/") - 1 + s->serverid.len + sizeof("/") - 1
         + s->app.len + sizeof("/") - 1 + s->name.len + sizeof("/") - 1
         + sizeof("YYYYMMDD/") - 1 + s->name.len
         + NGX_OFF_T_LEN + sizeof("_.ts") - 1;
@@ -267,7 +267,7 @@ ngx_live_record_open_file(ngx_rtmp_session_t *s)
 
     p = ngx_snprintf(ctx->file.name.data, len,
             "%V/%V/%V/%V/%04d%02d%02d/%V_%d.ts",
-            &lracf->path, &s->domain, &s->app, &s->name,
+            &lracf->path, &s->serverid, &s->app, &s->name,
             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
             &s->name, ctx->last_time);
     *p = 0;
@@ -346,7 +346,7 @@ ngx_live_record_write_index(ngx_rtmp_session_t *s, ngx_live_record_ctx_t *ctx,
     ctx->endsize = ctx->ts.file_size - 1;
 
     p = ngx_snprintf(buf, sizeof(buf) - 1,
-            "%V_%d.ts?startsize=%O&endsize=%O&starttime=%M&endtime=%M\n",
+            "%V-%D.ts?startsize=%O&endsize=%O&starttime=%M&endtime=%M\n",
             &s->name, ctx->last_time, ctx->startsize, ctx->endsize,
             ctx->starttime, ctx->endtime);
     *p = 0;
@@ -375,10 +375,10 @@ ngx_live_record_open_index(ngx_rtmp_session_t *s)
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_live_record_module);
 
-    len = lracf->path.len + sizeof("/") - 1 + s->domain.len + sizeof("/") - 1
+    len = lracf->path.len + sizeof("/") - 1 + s->serverid.len + sizeof("/") - 1
         + s->app.len + sizeof("/") - 1 + s->name.len + sizeof("/") - 1
         + sizeof("index/YYYYMMDD/") - 1 + s->name.len
-        + NGX_OFF_T_LEN + sizeof("_.m3u8") - 1;
+        + NGX_OFF_T_LEN + sizeof("-.m3u8") - 1;
 
     if (ctx->index.name.len == 0) { // first create in current session
         ctx->index.name.data = ngx_pcalloc(s->pool, len + 1);
@@ -393,8 +393,8 @@ ngx_live_record_open_index(ngx_rtmp_session_t *s)
     ngx_libc_localtime(ctx->last_time, &tm);
 
     p = ngx_snprintf(ctx->index.name.data, len,
-            "%V/%V/%V/%V/index/%04d%02d%02d/%V_%d.m3u8",
-            &lracf->path, &s->domain, &s->app, &s->name,
+            "%V/%V/%V/%V/index/%04d%02d%02d/%V-%D.m3u8",
+            &lracf->path, &s->serverid, &s->app, &s->name,
             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
             &s->name, ctx->last_time);
     *p = 0;

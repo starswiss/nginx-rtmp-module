@@ -386,7 +386,7 @@ struct ngx_rtmp_session_s {
     ngx_connection_t       *connection;
 
     /* merge frame and send */
-    ngx_mpegts_frame_t       *prepare_mpegts_frame[NGX_RTMP_MAX_MERGE_FRAME];
+    ngx_mpegts_frame_t     *prepare_mpegts_frame[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_rtmp_frame_t       *prepare_frame[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_chain_t            *merge[NGX_RTMP_MAX_MERGE_FRAME];
     ngx_uint_t              nframe;

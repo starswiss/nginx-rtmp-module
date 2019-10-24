@@ -57,16 +57,13 @@ typedef struct {
 
 
 typedef struct {
-	ngx_str_t                   app;
+    ngx_str_t                   app;
     ngx_str_t                   flashver;
     ngx_str_t                   swf_url;
     ngx_str_t                   tc_url;
     ngx_str_t                   page_url;
-	size_t                      out_queue;
 	ngx_msec_t                  timeout;
     ngx_rtmp_addr_conf_t       *addr_conf;
-    ngx_array_t                *hls;
-    size_t                      hls_queue;
 } ngx_hls_http_loc_conf_t;
 
 static u_char  NGX_HLS_LIVE_ARG_SESSION[] = "session";
@@ -451,8 +448,7 @@ ngx_hls_http_create_ctx(ngx_http_request_t *r, ngx_rtmp_addr_conf_t *addr_conf)
 
     ctx = ngx_http_get_module_ctx(r, ngx_hls_http_module);
     if (ctx == NULL) {
-        p = ngx_pcalloc(r->connection->pool, sizeof(ngx_hls_http_ctx_t) +
-            sizeof(ngx_mpegts_frame_t) * hlcf->out_queue);
+        p = ngx_pcalloc(r->connection->pool, sizeof(ngx_hls_http_ctx_t));
 
         if (p == NULL) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,

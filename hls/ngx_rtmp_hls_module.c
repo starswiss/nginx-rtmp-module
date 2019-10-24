@@ -2116,7 +2116,7 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         if (codec_ctx->video_codec_id == NGX_RTMP_VIDEO_H264) {
             nal_type = src_nal_type & 0x1f;
 
-        ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
+            ngx_log_debug2(NGX_LOG_DEBUG_RTMP, s->log, 0,
                        "hls: h264 NAL type=%ui, len=%uD",
                        (ngx_uint_t) nal_type, len);
 
