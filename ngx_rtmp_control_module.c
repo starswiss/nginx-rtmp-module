@@ -59,8 +59,8 @@ static ngx_conf_bitmask_t           ngx_rtmp_control_masks[] = {
     { ngx_string("record"),         NGX_RTMP_CONTROL_RECORD    },
     { ngx_string("drop"),           NGX_RTMP_CONTROL_DROP      },
     { ngx_string("redirect"),       NGX_RTMP_CONTROL_REDIRECT  },
-    { ngx_string("pause"),          NGX_RTMP_CONTROL_PAUSE  },
-    { ngx_string("resume"),         NGX_RTMP_CONTROL_RESUME  },
+    { ngx_string("pause"),          NGX_RTMP_CONTROL_PAUSE     },
+    { ngx_string("resume"),         NGX_RTMP_CONTROL_RESUME    },
     { ngx_null_string,              0                          }
 };
 

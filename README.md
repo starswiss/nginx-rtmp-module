@@ -1,4 +1,36 @@
-# NGINX-based Media Streaming Server
+- [Pingos Media Streaming Server](#pingos-media-streaming-server)
+  - [nginx-rtmp-module](#nginx-rtmp-module)
+    - [项目博客](#项目博客)
+    - [QQ交流群: 697773082](#qq交流群-697773082)
+- [服务器介绍](#服务器介绍)
+  - [服务器功能](#服务器功能)
+  - [我所做的改进](#我所做的改进)
+- [搭建流程](#搭建流程)
+  - [编译过程](#编译过程)
+    - [环境](#环境)
+    - [安装依赖](#安装依赖)
+    - [安装](#安装)
+  - [配置文件](#配置文件)
+    - [修改配置](#修改配置)
+    - [配置模板（此配置能够满足单点服务）](#配置模板此配置能够满足单点服务)
+  - [开启流监控页面](#开启流监控页面)
+  - [启动nginx](#启动nginx)
+  - [注意事项](#注意事项)
+  - [推流](#推流)
+  - [后台监控](#后台监控)
+- [全局配置](#全局配置)
+- [rtmp服务配置](#rtmp服务配置)
+- [http-flv配置](#http-flv配置)
+- [http-ts服务配置](#http-ts服务配置)
+- [hls服务配置](#hls服务配置)
+- [录像服务](#录像服务)
+- [http控制接口](#http控制接口)
+  - [配置说明](#配置说明)
+  - [控制接口说明](#控制接口说明)
+  - [配置模板](#配置模板)
+
+
+# Pingos Media Streaming Server
 ## nginx-rtmp-module
 
 ### 项目博客
@@ -6,7 +38,8 @@
 * https://blog.csdn.net/impingo
 
 * http://pingos.me
-* QQ交流群:流媒体人的后院(697773082)
+
+### QQ交流群: 697773082
 
 # 服务器介绍
 
@@ -257,15 +290,37 @@ rtmp推流地址：rtmp://ip/live1/stream-name
 
 通过这个配置你可以实现自定义的location名字，无需跟application名保持一致。
 ```nginx
+user  root;
+daemon on;
+master_process on;
+worker_processes  1;
+#worker_rlimit 4g;
+#working_directory /usr/local/openresty/nginx/logs;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+error_log  logs/error.log  info;
+
+worker_rlimit_nofile 102400;
+worker_rlimit_core   2G;
+working_directory    /tmp;
+
+#pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+stream_zone buckets=1024 streams=4096;
+
 rtmp {
     server {
         listen 1935;
         application live0 {
             live on;
-		}
-		application live1 {
-		    live on;
-		}
+        }
+        application live1 {
+            live on;
+        }
     }
 }
 
@@ -297,15 +352,37 @@ rtmp推流地址：rtmp://ip/live1/stream-name
 对应的http-ts播放地址：http://ip/live1/stream-name 和 http://ip/ts1/stream-name
 
 ```nginx
+user  root;
+daemon on;
+master_process on;
+worker_processes  1;
+#worker_rlimit 4g;
+#working_directory /usr/local/openresty/nginx/logs;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+error_log  logs/error.log  info;
+
+worker_rlimit_nofile 102400;
+worker_rlimit_core   2G;
+working_directory    /tmp;
+
+#pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+stream_zone buckets=1024 streams=4096;
+
 rtmp {
     server {
         listen 1935;
         application live0 {
             live on;
-		}
-		application live1 {
-		    live on;
-		}
+        }
+        application live1 {
+            live on;
+        }
     }
 }
 
@@ -358,3 +435,66 @@ http {
 | live_record_min_fragment | 时间 | 8000ms | 录制过程中索引文件里记录的最小分片大小 |
 | live_record_max_fragment | 时间 | 12000ms | 录制过程中索引文件里记录的最大分片大小 |
 | live_record_buffer | 整型数 | 1024*1024 | 录制过程中数据缓冲大小 |
+
+# http控制接口
+## 配置说明
+| 配置项 | 参数类型 | 默认值 | 描述 |
+|--|--|--|--|
+| rtmp_control | 选项 | all | all： 开启所有控制接口。record： 只开启录像控制接口。drop：只开启关闭连接控制接口。redirect：只开启重定向控制接口。pause：只开启暂停接口。 resume：只开启恢复接口 |
+
+
+## 控制接口说明
+
+| 接口名 | 请求 | 回复 | 描述 |
+|--|--|--|--|
+| 暂停推流 | /\${location}/pause/publisher?srv=\${serverid}&app=\${app}&name=\${name} | 参考 http ack | 服务器停止转发收到的直播流 |
+| 恢复推流 | /\${location}/resume/publisher?srv=\${serverid}&app=\${app}&name=\${name} | 参考 http ack | 服务器恢复转发收到的直播流 |
+| 暂停录像 | /\${location}/record/stop?srv=\${serverid}&app=\${app}&name=\${name}&rec=\${recorder} | 参考 http ack | 暂停某条流的录像 |
+| 恢复录像 | /\${location}/record/start?srv=\${serverid}&app=\${app}&name=\${name}&rec=\${recorder} | 参考 http ack | 恢复某条流的录像 |
+
+## 配置模板
+```nginx
+user  root;
+daemon on;
+master_process on;
+worker_processes  1;
+#worker_rlimit 4g;
+#working_directory /usr/local/openresty/nginx/logs;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+error_log  logs/error.log  info;
+
+worker_rlimit_nofile 102400;
+worker_rlimit_core   2G;
+working_directory    /tmp;
+
+#pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+stream_zone buckets=1024 streams=4096;
+
+rtmp {
+    server {
+        listen 1935;
+        application live {
+            live on;
+            recorder rc0 {
+                record all;
+                record_path /tmp;
+            }
+        }
+    }
+}
+
+http {
+    server {
+        listen 80;
+        location control {
+            rtmp_control all;
+        }
+    }
+}
+```
