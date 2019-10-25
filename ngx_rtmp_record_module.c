@@ -1001,7 +1001,7 @@ ngx_rtmp_record_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_record_module);
 
-    if (ctx == NULL) {
+    if (ctx == NULL || s->pause) {
         return NGX_OK;
     }
 

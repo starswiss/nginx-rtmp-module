@@ -11,6 +11,7 @@
 #include "ngx_live.h"
 #include "ngx_rtmp_live_module.h"
 #include "ngx_live_record.h"
+#include "ngx_rtmp_record_module.h"
 #include "ngx_rtmp_dynamic.h"
 
 
@@ -28,6 +29,8 @@ typedef const char * (*ngx_rtmp_control_handler_t)(ngx_http_request_t *r,
 #define NGX_RTMP_CONTROL_RECORD     0x01
 #define NGX_RTMP_CONTROL_DROP       0x02
 #define NGX_RTMP_CONTROL_REDIRECT   0x04
+#define NGX_RTMP_CONTROL_PAUSE      0x08
+#define NGX_RTMP_CONTROL_RESUME     0x10
 
 
 enum {
@@ -41,6 +44,7 @@ typedef struct {
     ngx_uint_t                      count;
     ngx_uint_t                      filter;
     ngx_str_t                       method;
+    ngx_str_t                       path;
     ngx_array_t                     sessions; /* ngx_rtmp_session_t * */
 } ngx_rtmp_control_ctx_t;
 
@@ -55,6 +59,8 @@ static ngx_conf_bitmask_t           ngx_rtmp_control_masks[] = {
     { ngx_string("record"),         NGX_RTMP_CONTROL_RECORD    },
     { ngx_string("drop"),           NGX_RTMP_CONTROL_DROP      },
     { ngx_string("redirect"),       NGX_RTMP_CONTROL_REDIRECT  },
+    { ngx_string("pause"),          NGX_RTMP_CONTROL_PAUSE  },
+    { ngx_string("resume"),         NGX_RTMP_CONTROL_RESUME  },
     { ngx_null_string,              0                          }
 };
 
@@ -107,17 +113,36 @@ static const char *
 ngx_rtmp_control_record_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
 {
     ngx_rtmp_control_ctx_t      *ctx;
+    ngx_uint_t                   rn;
+    ngx_str_t                    rec = ngx_null_string;
+    ngx_rtmp_core_app_conf_t    *cacf;
+    ngx_rtmp_record_app_conf_t  *racf;
 
     ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+    cacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_core_module);
+    racf = cacf->app_conf[ngx_rtmp_record_module.ctx_index];
+
+    if (ngx_http_arg(r, (u_char *) "rec", sizeof("rec") - 1, &rec) != NGX_OK) {
+        rec.len = 0;
+    }
+
+    rn = ngx_rtmp_record_find(racf, &rec);
+    if (rn == NGX_CONF_UNSET_UINT) {
+        return "Recorder not found";
+    }
 
     if (ctx->method.len == sizeof("start") - 1 &&
         ngx_strncmp(ctx->method.data, "start", ctx->method.len) == 0)
     {
+        ngx_rtmp_record_open(s, rn, &ctx->path);
+
         return ngx_live_record_open(s);
 
     } else if (ctx->method.len == sizeof("stop") - 1 &&
-               ngx_strncmp(ctx->method.data, "stop", ctx->method.len) == 0)
+        ngx_strncmp(ctx->method.data, "stop", ctx->method.len) == 0)
     {
+        ngx_rtmp_record_close(s, rn, &ctx->path);
+
         return ngx_live_record_close(s);
 
     } else {
@@ -202,6 +227,33 @@ ngx_rtmp_control_redirect_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
     return NGX_CONF_OK;
 }
 
+static const char *
+ngx_rtmp_control_pause_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_control_ctx_t  *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+
+    s->pause = 1;
+
+    ++ctx->count;
+
+    return NGX_CONF_OK;
+}
+
+static const char *
+ngx_rtmp_control_resume_handler(ngx_http_request_t *r, ngx_rtmp_session_t *s)
+{
+    ngx_rtmp_control_ctx_t  *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+
+    s->pause = 0;
+
+    ++ctx->count;
+
+    return NGX_CONF_OK;
+}
 
 static const char *
 ngx_rtmp_control_walk_session(ngx_http_request_t *r, ngx_rtmp_core_ctx_t *cctx)
@@ -328,11 +380,14 @@ ngx_rtmp_control_walk_server(ngx_http_request_t *r, ngx_live_server_t *srv)
         name.len = 0;
     }
 
+    serverid.data = srv->serverid;
+    serverid.len = ngx_strlen(srv->serverid);
+
     /* serverid/app/name */
-    stream.len = ngx_strlen(srv->serverid) + 1 + app.len + 1 + name.len;
+    stream.len = serverid.len + 1 + app.len + 1 + name.len;
     stream.data = ngx_pcalloc(r->pool, stream.len);
     p = stream.data;
-    p = ngx_copy(p, srv->serverid, ngx_strlen(srv->serverid));
+    p = ngx_copy(p, serverid.data, serverid.len);
     *p++ = '/';
     p = ngx_copy(p, app.data, app.len);
     *p++ = '/';
@@ -367,7 +422,8 @@ static const char *
 ngx_rtmp_control_walk(ngx_http_request_t *r, ngx_rtmp_control_handler_t h)
 {
     ngx_live_server_t                      *server;
-    ngx_str_t                               srv, serverid;
+    ngx_str_t                               srv;
+    ngx_str_t                               serverid = ngx_null_string;
     ngx_uint_t                              n;
     const char                             *msg;
     ngx_rtmp_session_t                    **s;
@@ -377,7 +433,14 @@ ngx_rtmp_control_walk(ngx_http_request_t *r, ngx_rtmp_control_handler_t h)
         return "Server not set";
     }
 
-    ngx_rmtp_get_serverid_by_domain(&serverid, &srv);
+    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+
+    serverid = srv;
+
+    if (!serverid.len) {
+        ngx_rmtp_get_serverid_by_domain(&serverid, &srv);
+    }
+
     server = ngx_live_fetch_server(&serverid);
     if (server == NULL) {
         return NGX_CONF_OK;
@@ -387,8 +450,6 @@ ngx_rtmp_control_walk(ngx_http_request_t *r, ngx_rtmp_control_handler_t h)
     if (msg != NGX_CONF_OK) {
         return msg;
     }
-
-    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
 
     s = ctx->sessions.elts;
     for (n = 0; n < ctx->sessions.nelts; n++) {
@@ -599,6 +660,154 @@ error:
 
 
 static ngx_int_t
+ngx_rtmp_control_pause(ngx_http_request_t *r, ngx_str_t *method)
+{
+    size_t                   len;
+    u_char                  *p;
+    ngx_buf_t               *b;
+    ngx_chain_t              cl;
+    const char              *msg;
+    ngx_rtmp_control_ctx_t  *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+
+    if (ctx->method.len == sizeof("publisher") - 1 &&
+        ngx_memcmp(ctx->method.data, "publisher", ctx->method.len) == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_PUBLISHER;
+
+    } else if (ctx->method.len == sizeof("subscriber") - 1 &&
+               ngx_memcmp(ctx->method.data, "subscriber", ctx->method.len)
+               == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_SUBSCRIBER;
+
+    } else if (method->len == sizeof("client") - 1 &&
+               ngx_memcmp(ctx->method.data, "client", ctx->method.len) == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_CLIENT;
+
+    } else {
+        msg = "Undefined filter";
+        goto error;
+    }
+
+    msg = ngx_rtmp_control_walk(r, ngx_rtmp_control_pause_handler);
+    if (msg != NGX_CONF_OK) {
+        goto error;
+    }
+
+    /* output count */
+
+    len = NGX_INT_T_LEN;
+
+    p = ngx_palloc(r->connection->pool, len);
+    if (p == NULL) {
+        return NGX_ERROR;
+    }
+
+    len = (size_t) (ngx_snprintf(p, len, "%ui", ctx->count) - p);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = len;
+
+    b = ngx_calloc_buf(r->pool);
+    if (b == NULL) {
+        goto error;
+    }
+
+    b->start = b->pos = p;
+    b->end = b->last = p + len;
+    b->temporary = 1;
+    b->last_buf = 1;
+
+    ngx_memzero(&cl, sizeof(cl));
+    cl.buf = b;
+
+    ngx_http_send_header(r);
+
+    return ngx_http_output_filter(r, &cl);
+
+error:
+    return NGX_HTTP_INTERNAL_SERVER_ERROR;
+}
+
+
+static ngx_int_t
+ngx_rtmp_control_resume(ngx_http_request_t *r, ngx_str_t *method)
+{
+    size_t                   len;
+    u_char                  *p;
+    ngx_buf_t               *b;
+    ngx_chain_t              cl;
+    const char              *msg;
+    ngx_rtmp_control_ctx_t  *ctx;
+
+    ctx = ngx_http_get_module_ctx(r, ngx_rtmp_control_module);
+
+    if (ctx->method.len == sizeof("publisher") - 1 &&
+        ngx_memcmp(ctx->method.data, "publisher", ctx->method.len) == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_PUBLISHER;
+
+    } else if (ctx->method.len == sizeof("subscriber") - 1 &&
+               ngx_memcmp(ctx->method.data, "subscriber", ctx->method.len)
+               == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_SUBSCRIBER;
+
+    } else if (method->len == sizeof("client") - 1 &&
+               ngx_memcmp(ctx->method.data, "client", ctx->method.len) == 0)
+    {
+        ctx->filter = NGX_RTMP_CONTROL_FILTER_CLIENT;
+
+    } else {
+        msg = "Undefined filter";
+        goto error;
+    }
+
+    msg = ngx_rtmp_control_walk(r, ngx_rtmp_control_resume_handler);
+    if (msg != NGX_CONF_OK) {
+        goto error;
+    }
+
+    /* output count */
+
+    len = NGX_INT_T_LEN;
+
+    p = ngx_palloc(r->connection->pool, len);
+    if (p == NULL) {
+        return NGX_ERROR;
+    }
+
+    len = (size_t) (ngx_snprintf(p, len, "%ui", ctx->count) - p);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = len;
+
+    b = ngx_calloc_buf(r->pool);
+    if (b == NULL) {
+        goto error;
+    }
+
+    b->start = b->pos = p;
+    b->end = b->last = p + len;
+    b->temporary = 1;
+    b->last_buf = 1;
+
+    ngx_memzero(&cl, sizeof(cl));
+    cl.buf = b;
+
+    ngx_http_send_header(r);
+
+    return ngx_http_output_filter(r, &cl);
+
+error:
+    return NGX_HTTP_INTERNAL_SERVER_ERROR;
+}
+
+
+static ngx_int_t
 ngx_rtmp_control_handler(ngx_http_request_t *r)
 {
     u_char                       *p;
@@ -662,6 +871,8 @@ ngx_rtmp_control_handler(ngx_http_request_t *r)
     NGX_RTMP_CONTROL_SECTION(RECORD, record);
     NGX_RTMP_CONTROL_SECTION(DROP, drop);
     NGX_RTMP_CONTROL_SECTION(REDIRECT, redirect);
+    NGX_RTMP_CONTROL_SECTION(PAUSE, pause);
+    NGX_RTMP_CONTROL_SECTION(RESUME, resume);
 
 #undef NGX_RTMP_CONTROL_SECTION
 

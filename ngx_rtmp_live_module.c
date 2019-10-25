@@ -669,7 +669,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_ERROR;
     }
 
-    if (!lacf->live || in == NULL  || in->buf == NULL) {
+    if (!lacf->live || in == NULL  || in->buf == NULL || s->pause) {
         return NGX_OK;
     }
 
@@ -812,7 +812,7 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         }
 
         // do not send to publish session
-        if (pctx->publishing || pctx->paused) {
+        if (pctx->publishing || pctx->paused || s->pause) {
             continue;
         }
 
