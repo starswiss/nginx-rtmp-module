@@ -342,6 +342,10 @@ ngx_rtmp_stat_client(ngx_http_request_t *r, ngx_chain_t ***lll,
     NGX_RTMP_STAT_ES(s->addr_text);
     NGX_RTMP_STAT_L("</address>");
 
+    NGX_RTMP_STAT_L("<remote_address>");
+    NGX_RTMP_STAT_ES(&(s->remote_addr_text));
+    NGX_RTMP_STAT_L("</remote_address>");
+
     NGX_RTMP_STAT_L("<time>");
     NGX_RTMP_STAT(buf, ngx_snprintf(buf, sizeof(buf), "%i",
                   (ngx_int_t) (ngx_current_msec - s->epoch)) - buf);
@@ -422,6 +426,7 @@ ngx_rtmp_stat_live(ngx_http_request_t *r, ngx_chain_t ***lll,
     ngx_rtmp_stat_loc_conf_t       *slcf;
     ngx_live_conf_t                *lcf;
     u_char                         *cname;
+    u_char                         *p;
 
     slcf = ngx_http_get_module_loc_conf(r, ngx_rtmp_stat_module);
     lcf = (ngx_live_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
@@ -435,7 +440,16 @@ ngx_rtmp_stat_live(ngx_http_request_t *r, ngx_chain_t ***lll,
             NGX_RTMP_STAT_L("<stream>\r\n");
 
             NGX_RTMP_STAT_L("<name>");
-            NGX_RTMP_STAT_ECS(stream->name);
+            p = stream->name + ngx_strlen(stream->name);
+            while (*p != '/' && p != stream->name) {
+                p--;
+            }
+
+            if (p != stream->name) {
+                p++;
+            }
+
+            NGX_RTMP_STAT_ECS(p);
             NGX_RTMP_STAT_L("</name>\r\n");
 
             NGX_RTMP_STAT_L("<time>");
@@ -665,6 +679,11 @@ ngx_rtmp_stat_handler(ngx_http_request_t *r)
     for (n = 0; n < lcf->server_buckets; ++n) {
         for (psrv = lcf->servers[n]; psrv; psrv = psrv->next) {
             NGX_RTMP_STAT_L("<server>\r\n");
+
+            NGX_RTMP_STAT_L("<serverid>");
+            NGX_RTMP_STAT(psrv->serverid, ngx_strlen(psrv->serverid));
+            NGX_RTMP_STAT_L("</serverid>\r\n");
+
             ngx_rtmp_stat_live(r, lll, psrv);
             NGX_RTMP_STAT_L("</server>\r\n");
         }
