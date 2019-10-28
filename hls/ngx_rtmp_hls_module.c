@@ -1854,6 +1854,10 @@ ngx_rtmp_hls_audio(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_OK;
     }
 
+    if (s->pause) {
+        return NGX_OK;
+    }
+
     b = ctx->aframe;
 
     if (b == NULL) {
@@ -2051,6 +2055,10 @@ ngx_rtmp_hls_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     if (codec_ctx->video_codec_id != NGX_RTMP_VIDEO_H264 &&
         codec_ctx->video_codec_id != cacf->hevc_codec)
     {
+        return NGX_OK;
+    }
+
+    if (s->pause) {
         return NGX_OK;
     }
 

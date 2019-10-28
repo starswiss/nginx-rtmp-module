@@ -1626,6 +1626,10 @@ ngx_mpegts_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_OK;
     }
 
+    if (s->pause) {
+        return NGX_OK;
+    }
+
     ngx_memzero(&frame, sizeof(frame));
 
     frame.hdr = *h;

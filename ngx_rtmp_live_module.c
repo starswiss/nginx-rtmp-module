@@ -669,8 +669,21 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
         return NGX_ERROR;
     }
 
-    if (!lacf->live || in == NULL  || in->buf == NULL || s->pause) {
+    if (!lacf->live || in == NULL  || in->buf == NULL || s->pause == 1) {
         return NGX_OK;
+    }
+
+    codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
+
+    if (s->pause == 2) {
+        if ((codec_ctx && codec_ctx->video_codec_id == 0) ||
+            (h->type == NGX_RTMP_MSG_VIDEO &&
+            ngx_rtmp_get_video_frame_type(in) == NGX_RTMP_VIDEO_KEY_FRAME))
+        {
+            s->pause = 0;
+        } else {
+            return NGX_OK;
+        }
     }
 
     if (h->type == NGX_RTMP_MSG_VIDEO) {
@@ -759,8 +772,6 @@ ngx_rtmp_live_av(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
 */
     avframe = ngx_rtmp_shared_alloc_frame(cscf->chunk_size, in, 0);
     avframe->hdr = ch;
-
-    codec_ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
 
     if (codec_ctx) {
 
