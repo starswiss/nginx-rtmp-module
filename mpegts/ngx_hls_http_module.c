@@ -1228,6 +1228,10 @@ ngx_hls_http_postconfiguration(ngx_conf_t *cf)
 
     cmcf = ngx_rtmp_core_main_conf;
 
+    if (!cmcf) {
+        return NGX_OK;
+    }
+
     h = ngx_array_push(&cmcf->events[NGX_MPEGTS_MSG_M3U8]);
     *h = ngx_hls_http_m3u8;
 
