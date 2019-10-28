@@ -682,6 +682,10 @@ ngx_rtmp_oclp_init_process(ngx_cycle_t *cycle)
         return NGX_OK;
     }
 
+    if (ngx_rtmp_core_main_conf == NULL) {
+        return NGX_OK;
+    }
+
     ctx = (ngx_rtmp_conf_ctx_t *) ngx_get_conf(cycle->conf_ctx,
                                                ngx_rtmp_module);
     omcf = (ngx_rtmp_oclp_main_conf_t *)
