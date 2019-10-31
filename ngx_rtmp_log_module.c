@@ -7,6 +7,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include "ngx_rtmp_cmd_module.h"
+#include "ngx_rtmp_codec_module.h"
 
 
 static ngx_rtmp_publish_pt  next_publish;
@@ -88,7 +89,9 @@ typedef struct {
 typedef struct {
     unsigned                    play:1;
     unsigned                    publish:1;
+    ngx_uint_t                  last_bytes;
     u_char                      name[NGX_RTMP_MAX_NAME];
+    u_char                      stream[NGX_RTMP_MAX_NAME];
     u_char                      args[NGX_RTMP_MAX_ARGS];
     ngx_array_t                 timers; /* ngx_rtmp_log_timer_ctx_t */
 } ngx_rtmp_log_ctx_t;
@@ -254,6 +257,25 @@ ngx_rtmp_log_var_msec_getdata(ngx_rtmp_session_t *s, u_char *buf,
     return ngx_sprintf(buf, "%T.%03M", tp->sec, tp->msec);
 }
 
+static size_t
+ngx_rtmp_log_var_sec_getlen(ngx_rtmp_session_t *s,
+    ngx_rtmp_log_op_t *op)
+{
+    return NGX_TIME_T_LEN + 4;
+}
+
+
+static u_char *
+ngx_rtmp_log_var_sec_getdata(ngx_rtmp_session_t *s, u_char *buf,
+    ngx_rtmp_log_op_t *op)
+{
+    ngx_time_t  *tp;
+
+    tp = ngx_timeofday();
+
+    return ngx_sprintf(buf, "%T", tp->sec);
+}
+
 
 static size_t
 ngx_rtmp_log_var_session_string_getlen(ngx_rtmp_session_t *s,
@@ -356,6 +378,63 @@ ngx_rtmp_log_var_session_uint32_getdata(ngx_rtmp_session_t *s, u_char *buf,
     return ngx_sprintf(buf, "%uD", *v);
 }
 
+static u_char *
+ngx_rtmp_log_var_session_video_flag(ngx_rtmp_session_t *s, u_char *buf,
+    ngx_rtmp_log_op_t *op)
+{
+    ngx_rtmp_codec_ctx_t   *ctx;
+    ngx_int_t               flag;
+
+    flag = 0;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
+    if (ctx) {
+        flag = (ctx->video_codec_id > 0);
+    }
+
+    return ngx_sprintf(buf, "%d", flag);
+}
+
+static u_char *
+ngx_rtmp_log_var_session_audio_flag(ngx_rtmp_session_t *s, u_char *buf,
+    ngx_rtmp_log_op_t *op)
+{
+    ngx_rtmp_codec_ctx_t   *ctx;
+    ngx_int_t               flag;
+
+    flag = 0;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_codec_module);
+    if (ctx) {
+        flag = (ctx->audio_codec_id > 0);
+    }
+
+    return ngx_sprintf(buf, "%d", flag);
+}
+
+static u_char *
+ngx_rtmp_log_var_session_bitrate_getdata(ngx_rtmp_session_t *s, u_char *buf,
+    ngx_rtmp_log_op_t *op)
+{
+    ngx_rtmp_log_ctx_t   *ctx;
+    uint32_t              bitrate;
+
+    ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_log_module);
+    if (!ctx) {
+        return buf;
+    }
+
+    bitrate = 0;
+    if (s->publishing) {
+        bitrate = 8 * (s->in_bytes - ctx->last_bytes);
+        ctx->last_bytes = s->in_bytes;
+    } else {
+        bitrate = 8 * (s->out_bytes - ctx->last_bytes);
+        ctx->last_bytes = s->out_bytes;
+    }
+
+    return ngx_sprintf(buf, "%D", bitrate);
+}
 
 static size_t
 ngx_rtmp_log_var_time_local_getlen(ngx_rtmp_session_t *s,
@@ -487,6 +566,11 @@ static ngx_rtmp_log_var_t ngx_rtmp_log_vars[] = {
       ngx_rtmp_log_var_context_cstring_getdata,
       offsetof(ngx_rtmp_log_ctx_t, name) },
 
+    { ngx_string("stream"),
+      ngx_rtmp_log_var_context_cstring_getlen,
+      ngx_rtmp_log_var_context_cstring_getdata,
+      offsetof(ngx_rtmp_log_ctx_t, stream) },
+
     { ngx_string("args"),
       ngx_rtmp_log_var_context_cstring_getlen,
       ngx_rtmp_log_var_context_cstring_getdata,
@@ -512,6 +596,11 @@ static ngx_rtmp_log_var_t ngx_rtmp_log_vars[] = {
       ngx_rtmp_log_var_msec_getdata,
       0 },
 
+    { ngx_string("ntp"),
+      ngx_rtmp_log_var_sec_getlen,
+      ngx_rtmp_log_var_sec_getdata,
+      0 },
+
     { ngx_string("session_time"),
       ngx_rtmp_log_var_session_time_getlen,
       ngx_rtmp_log_var_session_time_getdata,
@@ -520,6 +609,21 @@ static ngx_rtmp_log_var_t ngx_rtmp_log_vars[] = {
     { ngx_string("session_readable_time"),
       ngx_rtmp_log_var_session_readable_time_getlen,
       ngx_rtmp_log_var_session_readable_time_getdata,
+      0 },
+
+    { ngx_string("bitrate"),
+      ngx_rtmp_log_var_session_uint32_getlen,
+      ngx_rtmp_log_var_session_bitrate_getdata,
+      0 },
+
+    { ngx_string("be_video"),
+      ngx_rtmp_log_var_session_uint32_getlen,
+      ngx_rtmp_log_var_session_video_flag,
+      0 },
+
+    { ngx_string("be_audio"),
+      ngx_rtmp_log_var_session_uint32_getlen,
+      ngx_rtmp_log_var_session_audio_flag,
       0 },
 
     { ngx_null_string, NULL, NULL, 0 }
@@ -948,6 +1052,7 @@ ngx_rtmp_log_set_names(ngx_rtmp_session_t *s, u_char *name, u_char *args)
         ngx_rtmp_set_ctx(s, ctx, ngx_rtmp_log_module);
     }
 
+    ngx_memcpy(ctx->stream, s->stream.data, s->stream.len);
     ngx_memcpy(ctx->name, name, NGX_RTMP_MAX_NAME);
     ngx_memcpy(ctx->args, args, NGX_RTMP_MAX_ARGS);
 
