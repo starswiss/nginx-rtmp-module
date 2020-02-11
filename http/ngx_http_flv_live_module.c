@@ -131,7 +131,7 @@ ngx_http_flv_live_send_header(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    switch (hflcf->audio | (hflcf->video < 1)) {
+    switch (hflcf->audio | (hflcf->video << 1)) {
         case 1: // audio only
             b->start = b->pos = ngx_flv_live_audio_header;
             b->end = b->last = ngx_flv_live_audio_header +
