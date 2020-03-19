@@ -81,11 +81,11 @@ yum install -y gcc gcc-c++ openssl openssl-devel pcre-devel
 ### 安装
 
 ```shell
-git clone https://github.com/im-pingo/nginx-client-module.git
-git clone https://github.com/im-pingo/nginx-multiport-module.git
-git clone https://github.com/im-pingo/nginx-toolkit-module.git
-git clone https://github.com/im-pingo/nginx-rtmp-module.git
-git clone https://github.com/nginx/nginx.git
+git clone https://github.com/starswiss/nginx-client-module.git
+git clone https://github.com/starswiss/nginx-multiport-module.git
+git clone https://github.com/starswiss/nginx-toolkit-module.git
+git clone https://github.com/starswiss/nginx-rtmp-module.git
+git clone https://github.com/starswiss/nginx.git
 cd nginx
 ./auto/configure --add-module=../nginx-client-module   \
     --add-module=../nginx-multiport-module             \
